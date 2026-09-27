@@ -1,0 +1,32 @@
+{
+  "_readme": [
+    "What bootstrap installs, per layer. Add a line here, run `aos update` (or bootstrap.ps1 -Layer base).",
+    "The two agent CLIs are not listed: both use their vendor's own installer, which auto-updates.",
+    "  Claude Code: https://claude.ai/install.ps1 -> ~\\.local\\bin\\claude.exe",
+    "  Codex CLI:   https://chatgpt.com/codex/install.ps1 -> %LOCALAPPDATA%\\Programs\\OpenAI\\Codex\\bin\\codex.exe",
+    "  (winget's OpenAI.Codex was tried on 2026-09-27: without Developer Mode it cannot create the `codex` alias.)",
+    "The ChatGPT/Codex desktop app comes from the Microsoft Store (9PLM9XGG6VKS) and updates there."
+  ],
+  "base": [
+    { "id": "Git.Git",                    "why": "git, plus Git Bash, which gives Claude Code its Bash tool" },
+    { "id": "GitHub.cli",                 "why": "gh: PRs, issues and Actions from both agents, without an MCP server" },
+    { "id": "Microsoft.PowerShell",       "installerType": "wix", "why": "PowerShell 7 (pwsh), MSI edition: the default MSIX edition can't see tools in AppData (codex, npm globals)" },
+    { "id": "OpenJS.NodeJS.LTS",          "why": "npm/npx: plugins, cross-vendor bridge, ccusage" },
+    { "id": "Python.Python.3.13",         "why": "Python for scripts and the knowledge-base tools (py launcher)" },
+    { "id": "astral-sh.uv",               "why": "uv/uvx: Python envs and tools without polluting the global Python" },
+    { "id": "BurntSushi.ripgrep.MSVC",    "why": "rg: the search tool both agents reach for first" },
+    { "id": "sharkdp.fd",                 "why": "fd: fast file finding" },
+    { "id": "jqlang.jq",                  "why": "jq: JSON on the command line (CLI --json outputs)" },
+    { "id": "junegunn.fzf",               "why": "fzf: fuzzy picking in the terminal" },
+    { "id": "dandavison.delta",           "why": "delta: readable diffs when reviewing agent work" },
+    { "id": "Microsoft.VisualStudioCode", "why": "editor for reviewing diffs; hosts the Claude Code and Codex extensions" },
+    { "id": "Obsidian.Obsidian",          "why": "the knowledge-base reading surface" }
+  ],
+  "npm": [
+    { "name": "ccusage",                  "why": "local usage/limit reports and the Claude Code status line" }
+  ],
+  "vscode": [
+    { "id": "anthropic.claude-code",      "why": "Claude Code inside VS Code" },
+    { "id": "openai.chatgpt",             "why": "Codex inside VS Code" }
+  ]
+}

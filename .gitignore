@@ -1,0 +1,9 @@
+# (reference clones live outside the repo: %LOCALAPPDATA%\agentic-os\refs)
+
+# app-managed skills (the Claude desktop app syncs account skills into a synced\ folder)
+agents-home/skills/synced/
+
+# local state that must never be committed
+.env
+*.aos-bak
+HANDOFF.md

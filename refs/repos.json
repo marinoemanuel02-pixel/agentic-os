@@ -1,0 +1,24 @@
+{
+  "_readme": [
+    "The essential repos for a Claude + GPT workflow, checked 2026-09-27. `aos refs` clones them shallow into %LOCALAPPDATA%\\agentic-os\\refs\\<shelf>\\<owner>\\<name> (outside OneDrive) and pulls on every `aos update`.",
+    "use: installed = already wired in through a plugin (clone is for reading) | mine = read and take parts, never install wholesale | read = principles and official reference | catalog = where the next addition comes from | watch = candidate future layer",
+    "Rule from the old agent-refs ledger: a repo that produced nothing after a real read is a skip, whatever its star count."
+  ],
+  "repos": [
+    { "slug": "openai/codex-plugin-cc",                "shelf": "bridges",    "use": "installed", "why": "Official: Codex review/rescue/transfer from inside Claude Code." },
+    { "slug": "sendbird/cc-plugin-codex",              "shelf": "bridges",    "use": "installed", "why": "Mirror direction: Claude review/rescue from inside Codex, via the official claude CLI." },
+    { "slug": "obra/superpowers",                      "shelf": "workflow",   "use": "installed", "why": "Brainstorm > plan > TDD > verify as skills; runs in both agents. Your 2026-07-25 A/B test said adopt." },
+    { "slug": "anthropics/skills",                     "shelf": "official",   "use": "read",      "why": "Agent Skills spec, template and skill-creator: the reference for writing skills." },
+    { "slug": "openai/skills",                         "shelf": "official",   "use": "read",      "why": "OpenAI's Codex skills catalog; same SKILL.md format." },
+    { "slug": "modelcontextprotocol/servers",          "shelf": "official",   "use": "read",      "why": "Reference MCP servers; read one before writing your own." },
+    { "slug": "anthropics/claude-cookbooks",           "shelf": "official",   "use": "read",      "clone": false, "why": "Agent SDK and API recipes. ~365 MB of notebooks, so link only." },
+    { "slug": "affaan-m/everything-claude-code",       "shelf": "mine",       "use": "mine",      "why": "Largest cross-agent config pack (agents, skills, hooks, rules). Too heavy to install; take single skills or hooks." },
+    { "slug": "VoltAgent/awesome-claude-code-subagents", "shelf": "mine",     "use": "mine",      "why": "100+ subagent definitions. Take 3-5 that fill a real gap." },
+    { "slug": "multica-ai/andrej-karpathy-skills",     "shelf": "principles", "use": "read",      "why": "Four agent-coding principles in one file; already folded into agents-home/AGENTS.md." },
+    { "slug": "humanlayer/12-factor-agents",           "shelf": "principles", "use": "read",      "why": "Design principles for reliable agents. Highest signal per byte." },
+    { "slug": "VoltAgent/awesome-agent-skills",        "shelf": "catalogs",   "use": "catalog",   "why": "Curated cross-agent skills list (Claude Code, Codex, ...)." },
+    { "slug": "hesreallyhim/awesome-claude-code",      "shelf": "catalogs",   "use": "catalog",   "why": "Commands, hooks, workflows index." },
+    { "slug": "andyrewlee/awesome-agent-orchestrators", "shelf": "catalogs",  "use": "catalog",   "why": "Index of multi-agent cockpits and orchestrators." },
+    { "slug": "getpaseo/paseo",                        "shelf": "watch",      "use": "watch",     "why": "Candidate cockpit: one desktop + phone app for Claude Code and Codex, spawns the official CLIs." }
+  ]
+}

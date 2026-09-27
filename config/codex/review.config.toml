@@ -1,0 +1,5 @@
+# codex --profile review : read-only reviewer that never asks (used by the second-opinion skill).
+# Codex 0.134+ layers ~/.codex/<name>.config.toml over config.toml; keys are top-level here.
+sandbox_mode = "read-only"
+approval_policy = "never"
+model_reasoning_effort = "high"
