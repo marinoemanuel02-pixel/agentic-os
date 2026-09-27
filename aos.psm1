@@ -139,9 +139,35 @@ function Write-AosText([string]$Path, [string]$Text, [switch]$Bom) {
     [System.IO.File]::WriteAllText($Path, $Text, $enc)
 }
 
+function Get-AosBackupRoot {
+    # Where aos parks whatever it replaces. AOS_BACKUPS redirects it (the test suite uses a temp dir).
+    if ($env:AOS_BACKUPS) { return $env:AOS_BACKUPS }
+    return (Join-Path $HOME '.aos-backups')
+}
+
+function New-AosBackupPath([string]$Label = '') {
+    # A fresh, not-yet-existing path under the backup root. Moving into an existing folder nests
+    # inside it silently, so a same-second collision gets a numeric suffix instead.
+    $root = Get-AosBackupRoot
+    New-Item -ItemType Directory -Force -Path $root | Out-Null
+    $base = Join-Path $root ((Get-Date -Format 'yyyyMMdd-HHmmss') + $Label)
+    $path = $base
+    $n = 1
+    while (Test-Path -LiteralPath $path) { $n++; $path = "$base-$n" }
+    return $path
+}
+
+function Move-AosItem([string]$Source, [string]$Destination) {
+    # True only when the destination exists AND the source is gone; any error means false. An
+    # existing destination is refused: Move-Item would silently nest the source inside it.
+    if (-not (Test-Path -LiteralPath $Source)) { return $false }
+    if (Test-Path -LiteralPath $Destination) { return $false }
+    try { Move-Item -LiteralPath $Source -Destination $Destination -ErrorAction Stop } catch { return $false }
+    return ((Test-Path -LiteralPath $Destination) -and -not (Test-Path -LiteralPath $Source))
+}
+
 function Backup-AosFile([string]$Path) {
-    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $dest = Join-Path $HOME ".aos-backups\$stamp"
+    $dest = New-AosBackupPath
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
     Copy-Item -LiteralPath $Path -Destination $dest -Force
     return (Join-Path $dest (Split-Path -Leaf $Path))
@@ -197,10 +223,14 @@ function Set-AosJunction {
         elseif ($item.PSIsContainer) {
             $children = @(Get-ChildItem -LiteralPath $Link -Force)
             if ($children.Count -gt 0) {
-                $backup = Join-Path $HOME (".aos-backups\" + (Get-Date -Format 'yyyyMMdd-HHmmss') + "\" + $item.Name)
-                if ($DryRun) { Write-AosDry "would move existing $Link to $backup, then link it"; return }
-                New-Item -ItemType Directory -Force -Path (Split-Path -Parent $backup) | Out-Null
-                Move-Item -LiteralPath $Link -Destination $backup
+                if ($DryRun) { Write-AosDry "would move existing $Link to the backups, then link it"; return }
+                $holder = New-AosBackupPath
+                New-Item -ItemType Directory -Force -Path $holder | Out-Null
+                $backup = Join-Path $holder $item.Name
+                if (-not (Move-AosItem -Source $Link -Destination $backup)) {
+                    Write-AosWarn "could not move the existing $Link out of the way (files in use?); not linked"
+                    return
+                }
                 Write-AosWarn "moved the existing $Link to $backup - merge anything you need into $Target"
             }
             else {
@@ -350,6 +380,8 @@ function Install-AosBase([switch]$DryRun) {
         }
     }
     else { Write-AosWarn 'VS Code not on PATH yet; extensions skipped (re-run later)' }
+
+    Install-AosPester -DryRun:$DryRun
 }
 
 function Use-AosLocalBin {
@@ -549,14 +581,17 @@ function Sync-AosClaudeSkills {
         $oldSynced = Join-Path $oldTarget 'synced'
         $staged = $null
         if (Test-Path -LiteralPath $oldSynced) {
-            $staged = Join-Path $HOME ('.aos-backups\' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-synced-migration')
-            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $staged) | Out-Null
-            Move-Item -LiteralPath $oldSynced -Destination $staged -ErrorAction Stop
+            $staged = New-AosBackupPath '-synced-migration'
+            if (-not (Move-AosItem -Source $oldSynced -Destination $staged)) {
+                throw "could not stage $oldSynced (files in use?); nothing was changed - close the Claude app and run aos sync again"
+            }
         }
         [System.IO.Directory]::Delete($dir, $false)
         New-Item -ItemType Directory -Force -Path $dir | Out-Null
         if ($staged) {
-            Move-Item -LiteralPath $staged -Destination (Join-Path $dir 'synced') -ErrorAction Stop
+            if (-not (Move-AosItem -Source $staged -Destination (Join-Path $dir 'synced'))) {
+                throw "could not move the staged synced skills from $staged into $dir\synced; they are safe in $staged"
+            }
             Write-AosOk "moved the Claude app's synced skills from $oldTarget back to $dir\synced"
         }
         Write-AosOk "$dir is a real folder again"
@@ -570,10 +605,9 @@ function Sync-AosClaudeSkills {
     if (Test-Path -LiteralPath $stray) {
         if ($DryRun) { Write-AosDry "would move the stray $stray to ~/.aos-backups" }
         else {
-            $dest = Join-Path $HOME ('.aos-backups\' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-stray-synced')
-            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
-            Move-Item -LiteralPath $stray -Destination $dest
-            Write-AosWarn "moved a stray copy of the Claude app's synced skills out of the repo to $dest (restart the Claude app so it stops)"
+            $dest = New-AosBackupPath '-stray-synced'
+            if (Move-AosItem -Source $stray -Destination $dest) { Write-AosWarn "moved a stray copy of the Claude app's synced skills out of the repo to $dest (restart the Claude app so it stops)" }
+            else { Write-AosWarn "could not move the stray $stray (files in use?); left in place, will retry on the next sync" }
         }
     }
     foreach ($s in @(Get-ChildItem -LiteralPath $repoSkills -Directory -ErrorAction SilentlyContinue)) {
@@ -884,11 +918,64 @@ function Update-Aos([switch]$DryRun) {
     Sync-AosBrain -DryRun:$DryRun
 }
 
+function Install-AosPester([switch]$DryRun) {
+    # Pester 5 for BOTH shells: Windows PowerShell 5.1 ships only Pester 3.4. PowerShell 7's
+    # PSResourceGet installs its own copy and saves one into the 5.1 module folder (the inbox
+    # PowerShellGet 1.0 of 5.1 can't install it cleanly).
+    Write-AosStep 'Pester 5 (test framework, for aos test)'
+    if (-not (Test-AosCommand pwsh)) { Write-AosWarn 'pwsh missing; Pester skipped'; return }
+    $docs = [Environment]::GetFolderPath('MyDocuments')
+    $targets = @(
+        @{ Shell = 'pwsh'; Dir = (Join-Path $docs 'PowerShell\Modules') },
+        @{ Shell = 'powershell'; Dir = (Join-Path $docs 'WindowsPowerShell\Modules') }
+    )
+    foreach ($t in $targets) {
+        $has = & $t.Shell -NoProfile -Command "[bool](Get-Module -ListAvailable -Name Pester | Where-Object { `$_.Version -ge [version]'5.5.0' })"
+        if ("$has".Trim() -eq 'True') { Write-AosOk "Pester 5 for $($t.Shell)"; continue }
+        if ($DryRun) { Write-AosDry "save Pester 5 into $($t.Dir)"; continue }
+        New-Item -ItemType Directory -Force -Path $t.Dir | Out-Null
+        pwsh -NoProfile -Command "Save-PSResource -Name Pester -Version '[5.5.0,6.0)' -Path '$($t.Dir.Replace("'", "''"))' -TrustRepository -Quiet"
+        if ($LASTEXITCODE -eq 0) { Write-AosOk "Pester 5 saved for $($t.Shell)" } else { Write-AosWarn "Pester install for $($t.Shell) failed (exit $LASTEXITCODE)" }
+    }
+}
+
+function Invoke-AosTest {
+    # Static checks, then the Pester suite under BOTH Windows PowerShell 5.1 and PowerShell 7.
+    # Fails loudly on parse errors, non-ASCII bytes, missing Pester 5, zero tests or any failure.
+    Update-AosPath
+    $root = $script:Root
+    $failed = $false
+    Write-AosStep 'Static checks'
+    foreach ($f in @('aos.psm1', 'bootstrap.ps1', 'tests\Run-Tests.ps1')) {
+        $path = Join-Path $root $f
+        $tokens = $null
+        $errors = $null
+        [void][System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors)
+        if ($errors.Count) { $failed = $true; foreach ($err in $errors) { Write-AosWarn "${f}:$($err.Extent.StartLineNumber) $($err.Message)" } }
+        else { Write-AosOk "$f parses" }
+        $bad = @([System.IO.File]::ReadAllBytes($path) | Where-Object { $_ -gt 127 }).Count
+        if ($bad) { $failed = $true; Write-AosWarn "$f has $bad non-ASCII bytes" } else { Write-AosOk "$f is ASCII" }
+    }
+    $runner = Join-Path $root 'tests\Run-Tests.ps1'
+    foreach ($shell in @('powershell', 'pwsh')) {
+        Write-AosStep "Pester suite under $shell"
+        if (-not (Test-AosCommand $shell)) { Write-AosWarn "$shell not found"; $failed = $true; continue }
+        & $shell -NoProfile -ExecutionPolicy Bypass -File $runner | Out-Host
+        if ($LASTEXITCODE -ne 0) { $failed = $true; Write-AosWarn "${shell}: suite failed (exit $LASTEXITCODE)" }
+        else { Write-AosOk "${shell}: all tests passed" }
+    }
+    if ($failed) { Write-AosWarn 'aos test: FAILED'; $global:LASTEXITCODE = 1 }
+    else { Write-AosOk 'aos test: all green'; $global:LASTEXITCODE = 0 }
+}
+
 function Show-AosUsage {
+    # Uses the installed ccusage only: no npx download-and-run on every call.
+    Update-AosPath
+    if (-not (Test-AosCommand ccusage)) { Write-AosWarn 'ccusage is not installed (aos install base)'; return }
     Write-AosStep 'Claude Code: current 5-hour block (local logs)'
-    if (Test-AosCommand ccusage) { ccusage blocks --active } else { npx -y ccusage@latest blocks --active }
+    ccusage blocks --active
     Write-AosStep 'Codex: recent days (local logs)'
-    npx -y '@ccusage/codex@latest' daily
+    ccusage codex daily
     Write-AosInfo 'These are estimates from local logs. The authoritative limits: /usage in Claude Code, /status in Codex.'
 }
 
@@ -978,6 +1065,7 @@ aos - agentic-os control
   aos sync                   re-apply shared AGENTS.md, skills links, settings, Codex block, MCP
   aos update                 upgrade everything (winget, Claude Code, plugins, npm tools, refs), then sync
   aos usage                  local usage history for Claude Code and Codex
+  aos test                   parse/ASCII checks + the Pester suite under PowerShell 5.1 and 7
   aos new <name>             new project in Desktop\1-Projects: AGENTS.md, CLAUDE.md (@AGENTS.md), .gitignore, git init
   aos refs                   clone/pull the reference repos in refs/repos.json (into %LOCALAPPDATA%\agentic-os\refs)
   aos secret set|get|list|remove <name>    Windows secret store (PowerShell 7)
@@ -1000,6 +1088,7 @@ function aos {
         'sync'    { Sync-AosBrain -DryRun:$DryRun }
         'update'  { Update-Aos -DryRun:$DryRun }
         'usage'   { Show-AosUsage }
+        'test'    { Invoke-AosTest }
         'new'     { New-AosProject -Path $a1 }
         'refs'    { Sync-AosRefs -DryRun:$DryRun }
         'secret'  { Invoke-AosSecret -Action $a1 -Name $a2 }
