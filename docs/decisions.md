@@ -26,6 +26,9 @@ don't rewrite the old one: the record of what was rejected is the part that ages
   the user's own is left alone, and links to skills that left the repo are removed.
 - **GitHub login uses the device-code flow.** This connection has short outage windows (9 of 20
   requests failed in one minute, 0 of 20 in the next), and `gh` aborts on its first failed poll.
+- **Codex plugins are detected with `codex plugin list`.** Plugins from OpenAI's remote catalog
+  (superpowers) never appear in `config.toml`, so `aos status` reported Superpowers missing while
+  Codex had it enabled and loaded (confirmed by asking GPT-6-Astra after the app restart).
 
 ## 2026-09-27 - Fixes found while installing
 

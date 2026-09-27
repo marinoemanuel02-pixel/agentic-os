@@ -267,9 +267,17 @@ function Get-AosCodexConfigText {
 }
 
 function Get-AosCodexPlugins {
-    # Enabled plugin ids from ~/.codex/config.toml: a [plugins."id@marketplace"] table with
-    # enabled = true. A cached or disabled plugin does not count (Codex keeps both around).
+    # Enabled Codex plugin ids. `codex plugin list` is authoritative: plugins from a remote catalog
+    # (superpowers@openai-curated-remote) never appear in config.toml. The config.toml tables
+    # ([plugins."id"] with enabled = true) are the fallback when the CLI is unavailable.
     $ids = New-Object 'System.Collections.Generic.List[string]'
+    if (Test-AosCommand codex) {
+        $r = Invoke-AosCapture 'codex plugin list'
+        if ($r.Code -eq 0) {
+            foreach ($m in [regex]::Matches($r.Text, '(?m)^\s*(\S+@\S+)\s+installed, enabled\b')) { $ids.Add($m.Groups[1].Value) }
+            return , ($ids.ToArray())
+        }
+    }
     $sections = [regex]::Matches((Get-AosCodexConfigText), '(?ms)^\[plugins\."([^"]+)"\][ \t]*\r?$(.*?)(?=^\[|\z)')
     foreach ($m in $sections) {
         if ($m.Groups[2].Value -match '(?m)^[ \t]*enabled[ \t]*=[ \t]*true\b') { $ids.Add($m.Groups[1].Value) }
