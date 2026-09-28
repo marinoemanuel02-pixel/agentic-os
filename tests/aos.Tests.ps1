@@ -1242,4 +1242,75 @@ Describe 'Round 3: aos remote dispatch' {
     }
 }
 
+# Failure scenarios from Codex's review of the round-3 code (tests by Claude, seen failing first).
+Describe 'Round 3 review fixes' {
+    BeforeEach {
+        $savedSecrets = $env:AOS_SECRETS
+        $savedNpmPrefix = [Environment]::GetEnvironmentVariable('NPM_CONFIG_PREFIX')
+        $secretsDir = Join-Path $caseRoot 'isolated secrets'
+        $env:AOS_SECRETS = $secretsDir
+        Mock Write-AosWarn -ModuleName aos { }
+    }
+    AfterEach {
+        $env:AOS_SECRETS = $savedSecrets
+        [Environment]::SetEnvironmentVariable('NPM_CONFIG_PREFIX', $savedNpmPrefix)
+    }
+
+    It 'returns null with a warning, not an error, for a secret file it cannot decrypt' {
+        # Valid hex that is not a DPAPI blob: ConvertTo-SecureString reports a non-terminating error.
+        Write-TestFile (Join-Path $secretsDir 'foreign.secret') ('deadbeef' * 32)
+        InModuleScope aos {
+            $ErrorActionPreference = 'Continue'   # the user's default; the runner's Stop would hide the bug
+            $actual = Get-AosSecret -Name 'foreign' 2>$null
+            ($null -eq $actual) | Should -BeTrue
+        }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -Exactly
+    }
+
+    It 'leaves another writer''s temporary file alone' {
+        Write-TestFile (Join-Path $secretsDir 'shared-key.secret.tmp') 'another writer'
+        InModuleScope aos {
+            Set-AosSecret -Name 'shared-key' -Value (ConvertTo-SecureString 'synthetic value' -AsPlainText -Force) | Should -BeTrue
+            Get-AosSecret -Name 'shared-key' | Should -BeExactly 'synthetic value'
+        }
+        [System.IO.File]::ReadAllText((Join-Path $secretsDir 'shared-key.secret.tmp')) | Should -BeExactly 'another writer'
+    }
+
+    It 'installs npm tools with an explicit prefix' {
+        $npmPrefix = Join-Path $caseRoot 'npm globals'
+        Mock Get-AosNpmPrefix -ModuleName aos { $npmPrefix }
+        Mock Use-AosNpmPrefix -ModuleName aos { }
+        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'npm' }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = '' } } -ParameterFilter { $CommandLine -like 'npm install -g *' }
+        InModuleScope aos { Install-AosNpmTools -Packages @(@{ name = 'fixture-tool'; why = 'test' }) }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter {
+            $CommandLine -like 'npm install -g fixture-tool *' -and $CommandLine.Contains('--prefix') -and $CommandLine.Contains($npmPrefix)
+        }
+    }
+
+    It 'warns when NPM_CONFIG_PREFIX overrides the user npm config' {
+        [Environment]::SetEnvironmentVariable('NPM_CONFIG_PREFIX', (Join-Path $caseRoot 'elsewhere'))
+        Mock Get-AosNpmPrefix -ModuleName aos { Join-Path $caseRoot 'npm globals' }
+        Mock Edit-AosUserPath -ModuleName aos { }
+        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'npm' }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = (Join-Path $caseRoot 'npm globals') } } -ParameterFilter { $CommandLine -eq 'npm config get prefix' }
+        InModuleScope aos { Use-AosNpmPrefix }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Text -match 'NPM_CONFIG_PREFIX' }
+    }
+
+    It 'does not start Claude when the folder cannot be entered' {
+        if (Get-Command claude -ErrorAction SilentlyContinue) {
+            Mock claude -ModuleName aos { throw 'claude must not start outside the requested folder' }
+        }
+        $here = (Get-Location).ProviderPath
+        InModuleScope aos -Parameters @{ Folder = (Join-Path $caseRoot 'vanished') } {
+            param($Folder)
+            $ErrorActionPreference = 'Continue'   # the user's default; Push-Location's error is non-terminating
+            { Invoke-AosClaudeRemote -Dir $Folder 2>$null } | Should -Throw
+        }
+        if (Get-Command claude -ErrorAction SilentlyContinue) { Should -Invoke claude -ModuleName aos -Times 0 -Exactly }
+        (Get-Location).ProviderPath | Should -Be $here
+    }
+}
+
 }

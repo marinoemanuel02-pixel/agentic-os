@@ -398,6 +398,8 @@ function Get-AosNpmPrefix {
 
 function Use-AosNpmPrefix([switch]$DryRun) {
     if (-not (Test-AosCommand npm)) { Write-AosWarn 'npm missing; global npm tools skipped (aos install base)'; return }
+    $override = [Environment]::GetEnvironmentVariable('NPM_CONFIG_PREFIX')
+    if ($override) { Write-AosWarn "NPM_CONFIG_PREFIX=$override overrides ~\.npmrc for your own npm -g installs (aos passes --prefix)" }
     $want = Get-AosNpmPrefix
     $lines = @((Invoke-AosCapture 'npm config get prefix').Text -split "`r?`n" | Where-Object { $_.Trim() })
     $have = ''
@@ -420,7 +422,8 @@ function Install-AosNpmTools([object[]]$Packages, [switch]$DryRun) {
         # Only a copy in our prefix counts: one found elsewhere on PATH can be private to a packaged app.
         if (Test-Path -LiteralPath (Join-Path $prefix "$name.cmd")) { Write-AosOk $name; continue }
         if ($DryRun) { Write-AosDry "npm install -g $name   ($($n['why']))"; continue }
-        $r = Invoke-AosCapture "npm install -g $name"
+        # An explicit prefix: a failed config write or an NPM_CONFIG_PREFIX override can't redirect it.
+        $r = Invoke-AosCapture "npm install -g $name --prefix `"$prefix`""
         if ($r.Code -eq 0) { Write-AosOk "$name installed in $prefix" } else { Write-AosWarn "npm install -g $name failed (exit $($r.Code))" }
     }
     Update-AosPath
@@ -971,7 +974,7 @@ function Update-Aos([switch]$DryRun) {
         Use-AosNpmPrefix -DryRun:$DryRun
         foreach ($n in $pkgs['npm']) {
             if ($DryRun) { Write-AosDry "npm install -g $($n['name'])@latest"; continue }
-            npm install -g "$($n['name'])@latest" | Out-Host
+            npm install -g "$($n['name'])@latest" --prefix (Get-AosNpmPrefix) | Out-Host
         }
         if (Test-AosCcBridge) {
             if ($DryRun) { Write-AosDry 'npx -y cc-plugin-codex@latest install' } else { npx -y cc-plugin-codex@latest install | Out-Host }
@@ -1097,7 +1100,7 @@ function Set-AosSecret([string]$Name, [System.Security.SecureString]$Value) {
     if (-not (Test-AosSecretName $Name)) { Write-AosWarn "not a valid secret name: '$Name' (letters, digits, _ . - ; up to 64)"; return $false }
     $dir = Get-AosSecretsDir
     $path = Join-Path $dir "$Name.secret"
-    $tmp = "$path.tmp"
+    $tmp = "$path.$([guid]::NewGuid().ToString('N')).tmp"   # per write: two setters never share one
     try {
         [System.IO.Directory]::CreateDirectory($dir) | Out-Null
         [System.IO.File]::WriteAllText($tmp, (ConvertFrom-SecureString -SecureString $Value))
@@ -1118,7 +1121,7 @@ function Get-AosSecret([string]$Name) {
     if (-not (Test-AosSecretName $Name)) { Write-AosWarn "not a valid secret name: '$Name'"; return $null }
     $path = Join-Path (Get-AosSecretsDir) "$Name.secret"
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { Write-AosWarn "no secret named $Name (aos secret set $Name)"; return $null }
-    try { $secure = ConvertTo-SecureString ([System.IO.File]::ReadAllText($path).Trim()) }
+    try { $secure = ConvertTo-SecureString ([System.IO.File]::ReadAllText($path).Trim()) -ErrorAction Stop }
     catch { Write-AosWarn "cannot decrypt ${Name}: it was stored by another Windows user or machine"; return $null }
     $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
     try { return [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
@@ -1157,7 +1160,7 @@ function Invoke-AosSecret([string]$Action, [string]$Name) {
 }
 
 function Invoke-AosClaudeRemote([string]$Dir) {
-    Push-Location -LiteralPath $Dir
+    Push-Location -LiteralPath $Dir -ErrorAction Stop   # never start Claude in the caller's folder instead
     try { claude remote-control --capacity 2 } finally { Pop-Location }
 }
 
