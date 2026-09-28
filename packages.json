@@ -22,6 +22,9 @@
     { "id": "Microsoft.VisualStudioCode", "why": "editor for reviewing diffs; hosts the Claude Code and Codex extensions" },
     { "id": "Obsidian.Obsidian",          "why": "the knowledge-base reading surface" }
   ],
+  "local": [
+    { "id": "Ollama.Ollama",              "why": "local model runtime (CUDA on the GTX 1660 Ti); models live in ~\\.ollama" }
+  ],
   "npm": [
     { "name": "ccusage",                  "why": "local usage/limit reports and the Claude Code status line" }
   ],

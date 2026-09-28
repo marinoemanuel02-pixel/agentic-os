@@ -20,7 +20,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('all', 'base', 'engines', 'brain', 'bridges', 'refs')]
+    [ValidateSet('all', 'base', 'engines', 'brain', 'bridges', 'refs', 'local')]
     [string[]]$Layer = @('all'),
     [switch]$DryRun
 )

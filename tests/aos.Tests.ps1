@@ -1313,4 +1313,108 @@ Describe 'Round 3 review fixes' {
     }
 }
 
+Describe 'Local model layer' {
+    BeforeEach {
+        $stateDir = Join-Path $caseRoot 'state'
+        Mock Get-AosStateDir -ModuleName aos { $stateDir }
+        Mock Get-AosLocalConfig -ModuleName aos {
+            [ordered]@{ default = 'openbmb/minicpm5-2b:q8_0'; optional = @('qwen3.5:4b'); ollama_url = 'http://127.0.0.1:11434'; min_tokens_per_s = 15 }
+        }
+        Mock Install-AosWingetPackage -ModuleName aos { }
+        Mock Install-AosNarTools -ModuleName aos { }
+        Mock Write-AosWarn -ModuleName aos { }
+        Mock Write-AosOk -ModuleName aos { }
+        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'ollama' }
+        Mock Invoke-AosCapture -ModuleName aos {
+            @{ Code = 0; Text = "NAME                        ID     SIZE      MODIFIED`nopenbmb/minicpm5-2b:q8_0    abc    2.7 GB    1 day ago" }
+        } -ParameterFilter { $CommandLine -eq 'ollama list' }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = 'success' } } -ParameterFilter { $CommandLine -like 'ollama pull *' }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = 'OK' } } -ParameterFilter { $CommandLine -like 'ollama run *' }
+        Mock Invoke-AosCapture -ModuleName aos {
+            @{ Code = 0; Text = "NAME                        ID     SIZE      PROCESSOR    CONTEXT    UNTIL`nopenbmb/minicpm5-2b:q8_0    abc    3.9 GB    100% GPU     4096       4 minutes from now" }
+        } -ParameterFilter { $CommandLine -eq 'ollama ps' }
+    }
+
+    It 'matches Ollama tags exactly, treating a bare name as :latest' {
+        InModuleScope aos {
+            $list = "NAME ID SIZE`nqwen3.5:4b x 3.4 GB`nllama3.2:latest y 2.0 GB"
+            Test-AosOllamaModel -List $list -Tag 'qwen3.5:4b' | Should -BeTrue
+            Test-AosOllamaModel -List $list -Tag 'QWEN3.5:4B' | Should -BeTrue
+            Test-AosOllamaModel -List $list -Tag 'llama3.2' | Should -BeTrue
+            Test-AosOllamaModel -List $list -Tag 'qwen3.5' | Should -BeFalse
+            Test-AosOllamaModel -List $list -Tag 'qwen3.5:4b-q8_0' | Should -BeFalse
+        }
+    }
+
+    It 'reads the GPU share from ollama ps' {
+        InModuleScope aos {
+            $ps = "NAME ID SIZE PROCESSOR`na:1 x 3 GB 100% GPU 4096 now`nb:1 y 9 GB 48%/52% CPU/GPU 4096 now"
+            Test-AosOllamaGpu -PsText $ps -Tag 'a:1' | Should -BeExactly 'gpu'
+            Test-AosOllamaGpu -PsText $ps -Tag 'b:1' | Should -BeExactly 'split'
+            Test-AosOllamaGpu -PsText $ps -Tag 'c:1' | Should -BeExactly 'absent'
+        }
+    }
+
+    It 'pulls only the configured models that are missing, checks the GPU and writes the local state file' {
+        InModuleScope aos { Install-AosLocal }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -eq 'ollama pull qwen3.5:4b' }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -eq 'ollama pull openbmb/minicpm5-2b:q8_0' }
+        Should -Invoke Write-AosOk -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'entirely on the GPU' }
+        $state = Get-Content -Raw (Join-Path $stateDir 'local.json') | ConvertFrom-Json
+        $state.default | Should -BeExactly 'openbmb/minicpm5-2b:q8_0'
+        $state.ollama_url | Should -BeExactly 'http://127.0.0.1:11434'
+        $state.min_tokens_per_s | Should -Be 15
+        Should -Invoke Install-AosNarTools -ModuleName aos -Times 1 -Exactly
+    }
+
+    It 'warns when the default model does not fit the GPU' {
+        Mock Invoke-AosCapture -ModuleName aos {
+            @{ Code = 0; Text = "NAME ID SIZE PROCESSOR`nopenbmb/minicpm5-2b:q8_0 abc 7.9 GB 35%/65% CPU/GPU 4096 now" }
+        } -ParameterFilter { $CommandLine -eq 'ollama ps' }
+        InModuleScope aos { Install-AosLocal }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'partly on the CPU' }
+    }
+
+    It 'pulls, runs and writes nothing in DryRun' {
+        InModuleScope aos { Install-AosLocal -DryRun }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'ollama pull *' -or $CommandLine -like 'ollama run *' }
+        Test-Path -LiteralPath (Join-Path $stateDir 'local.json') | Should -BeFalse
+        Should -Invoke Install-AosWingetPackage -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Id -eq 'Ollama.Ollama' -and $DryRun }
+    }
+
+    It 'warns and runs nothing when ollama is not on PATH' {
+        Mock Test-AosCommand -ModuleName aos { $false } -ParameterFilter { $Name -eq 'ollama' }
+        InModuleScope aos { Install-AosLocal }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'ollama' }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly
+    }
+
+    It 'leaves the local state file untouched when it already says the same thing' {
+        InModuleScope aos { Sync-AosLocalState }
+        $before = (Get-Item -LiteralPath (Join-Path $stateDir 'local.json')).LastWriteTimeUtc
+        Start-Sleep -Milliseconds 50
+        InModuleScope aos { Sync-AosLocalState }
+        (Get-Item -LiteralPath (Join-Path $stateDir 'local.json')).LastWriteTimeUtc | Should -Be $before
+    }
+}
+
+Describe 'Codex local profile' {
+    It 'generates a local profile from config/local.json' {
+        Mock Get-AosLocalConfig -ModuleName aos { [ordered]@{ default = 'openbmb/minicpm5-2b:q8_0' } }
+        InModuleScope aos {
+            $p = @(Get-AosCodexProfiles | Where-Object { $_.Name -eq 'local' })
+            $p.Count | Should -Be 1
+            $p[0].Target | Should -BeExactly (Join-Path $HOME '.codex\local.config.toml')
+            $p[0].Text | Should -Match '(?m)^model_provider = "ollama"$'
+            $p[0].Text | Should -Match '(?m)^model = "openbmb/minicpm5-2b:q8_0"$'
+            $p[0].Text | Should -Match '^# GENERATED by agentic-os'
+        }
+    }
+
+    It 'generates no local profile without a local config' {
+        Mock Get-AosLocalConfig -ModuleName aos { $null }
+        InModuleScope aos { @(Get-AosCodexProfiles | Where-Object { $_.Name -eq 'local' }).Count | Should -Be 0 }
+    }
+}
+
 }
