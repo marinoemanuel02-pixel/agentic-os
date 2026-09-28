@@ -15,8 +15,8 @@ vendor-maintained bridges. The reasons for each choice are in [docs/decisions.md
 | **engines** | Claude Code CLI + Claude Desktop · Codex CLI + ChatGPT/Codex desktop app | native installer / winget / Store |
 | **brain** | one `AGENTS.md` and one `skills/` folder read by both agents, merged Claude settings, Codex profiles, MCP servers in both | `agents-home/`, `config/` |
 | **bridges** | Claude calls Codex (`/codex:*`), Codex calls Claude (`$cc:*`), superpowers in both | plugins |
-| **refs** | shallow clones of the repos worth reading | `refs/repos.json` -> `%LOCALAPPDATA%\agentic-os\refs` |
-| **aos** | `aos status / sync / update / usage / new / secret` | `aos.psm1` |
+| **refs** | shallow clones of the repos worth reading | `refs/repos.json` -> `~\.aos\refs` |
+| **aos** | `aos status / sync / update / usage / new / secret / remote` | `aos.psm1` |
 
 How the pieces connect:
 
@@ -63,10 +63,31 @@ settings are merged, never replaced, and backups go to `~/.aos-backups/`.
 | See what's installed and linked | `aos status` |
 | See usage | `/usage` in Claude Code, `/status` in Codex, `aos usage` for local history |
 | Update everything | `aos update` (weekly is plenty) |
-| Store an API key | `aos secret set <name>` (Windows secret store, never a plaintext file) |
+| Store an API key | `aos secret set <name>` (encrypted to your Windows login in `~\.aos\secrets`, never a plaintext file); scripts read it with `aos secret get <name>` |
+| Work from your phone | see [From your phone](#from-your-phone) |
 | Check the setup's own code | `aos test` (parse, ASCII, Pester under PowerShell 5.1 and 7; CI runs it on every push) |
 
 Which agent to use for what, and how to stretch two entry plans: [docs/routing.md](docs/routing.md).
+
+Tools, clones and keys live under your home folder, not AppData: both desktop apps are MSIX
+packages, and a folder they (or the agents in them) create under AppData can stay private to that app.
+
+## From your phone
+
+Install the **Claude** and **ChatGPT** apps on the phone and sign in with the same accounts as on
+the PC. Phone sessions run on the PC, with your files, tools, `aos` and both bridges; the phone
+sends prompts and approvals.
+
+| You want to | Do | Needs |
+|---|---|---|
+| Follow or steer a session started on the PC | Claude app > Code. Sessions started in the Claude desktop app appear there (Remote Control is on for new sessions: Settings > Claude Code) | PC awake, Claude app running |
+| Start Claude sessions on the PC from the phone | On the PC: `aos remote` (Desktop hub) or `aos remote <project>`, and leave that window open. Then Claude app > Code | PC awake; at most 2 sessions at once |
+| Use Codex on the PC from the phone | Once: Codex app > Settings > Connections > Control this PC > Set up, and scan the QR code with the ChatGPT app. Then ChatGPT app > Codex | PC awake, online and unlocked |
+| Work while the PC is off | Claude app > Code (cloud session) or ChatGPT app > Codex (cloud task), on a GitHub repo | Push first: they see only what was pushed |
+
+Keep the PC reachable (your Windows settings, once): keep it plugged in; Settings > System >
+Power > sleep: Never when plugged in; Control Panel > Power Options > "Choose what closing the lid
+does" > Plugged in: Do nothing. The Claude app only holds the PC awake while a session is working.
 
 ## Changing it
 
@@ -115,7 +136,7 @@ agentic-os/
     codex/*.config.toml  Codex profiles (review, deep, quick) -> ~/.codex/<name>.config.toml
     mcp.json             MCP servers registered in both agents
   templates/project/     what aos new creates (in Desktop\1-Projects; override with $env:AOS_PROJECTS)
-  refs/repos.json        essential repos (clones go to %LOCALAPPDATA%\agentic-os\refs, outside OneDrive;
+  refs/repos.json        essential repos (clones go to ~\.aos\refs, outside OneDrive and AppData;
                          override with $env:AOS_REFS)
   docs/routing.md        who does what, limits playbook
   docs/decisions.md      why it is built this way, with sources

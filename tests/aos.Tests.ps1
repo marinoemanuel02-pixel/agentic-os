@@ -720,4 +720,526 @@ Describe 'aos' {
     }
 }
 
+Describe 'Round 3: standalone Codex installation' {
+    BeforeEach {
+        # Assert the new seam before mocking it: never fall through to the old installer.
+        InModuleScope aos {
+            Get-Command Get-AosCodexStandaloneBin -ErrorAction SilentlyContinue |
+                Should -Not -BeNullOrEmpty -Because 'the standalone installation needs an isolated path seam'
+            Get-Command Invoke-AosCodexInstaller -ErrorAction SilentlyContinue |
+                Should -Not -BeNullOrEmpty -Because 'the official installer must be mockable'
+        }
+        $standaloneBin = Join-Path $caseRoot 'standalone with spaces\current\bin'
+        Mock Get-AosCodexStandaloneBin -ModuleName aos { $standaloneBin }
+        Mock Invoke-AosCodexInstaller -ModuleName aos { }
+        Mock Edit-AosUserPath -ModuleName aos { }
+        Mock Use-AosLocalBin -ModuleName aos { }
+        Mock Test-Path -ModuleName aos { $false } -ParameterFilter {
+            $LiteralPath -eq (Join-Path $HOME '.local\bin\claude.exe') -or
+            $LiteralPath -eq (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\OpenAI.Codex_Microsoft.Winget.Source_8wekyb3d8bbwe')
+        }
+        Mock Write-AosWarn -ModuleName aos { }
+        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -in @('claude', 'codex') }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = 'test version' } } -ParameterFilter {
+            $CommandLine -in @('claude --version', 'codex --version')
+        }
+        # The old implementation invokes these directly. Never run the real CLIs.
+        foreach ($cli in @('claude', 'codex')) {
+            if (Get-Command $cli -ErrorAction SilentlyContinue) {
+                Mock $cli -ModuleName aos { 'test version' }
+            }
+        }
+        foreach ($shell in @('pwsh', 'powershell')) {
+            if (Get-Command $shell -ErrorAction SilentlyContinue) {
+                Mock $shell -ModuleName aos { throw 'Unexpected child shell in an engine test.' }
+            }
+        }
+    }
+
+    It 'keeps an existing standalone executable and adds its literal home PATH entry' {
+        Write-TestFile (Join-Path $standaloneBin 'codex.exe') ''
+        InModuleScope aos { Install-AosEngines }
+        Should -Invoke Invoke-AosCodexInstaller -ModuleName aos -Times 0 -Exactly
+        Should -Invoke Edit-AosUserPath -ModuleName aos -Times 1 -Exactly -ParameterFilter {
+            @($Add | Where-Object { $_ -ceq '%USERPROFILE%\.codex\packages\standalone\current\bin' }).Count -eq 1 -and -not $DryRun
+        }
+    }
+
+    It 'installs the missing standalone executable even when desktop Codex is on PATH' {
+        Mock Invoke-AosCodexInstaller -ModuleName aos {
+            New-Item -ItemType Directory -Path $standaloneBin -Force | Out-Null
+            [System.IO.File]::WriteAllText((Join-Path $standaloneBin 'codex.exe'), '')
+        }
+        InModuleScope aos { Install-AosEngines }
+        Should -Invoke Invoke-AosCodexInstaller -ModuleName aos -Times 1 -Exactly
+        Test-Path -LiteralPath (Join-Path $standaloneBin 'codex.exe') | Should -BeTrue
+    }
+
+    It 'does not install a missing standalone executable in DryRun and previews PATH editing' {
+        InModuleScope aos { Install-AosEngines -DryRun }
+        Should -Invoke Invoke-AosCodexInstaller -ModuleName aos -Times 0 -Exactly
+        Should -Invoke Edit-AosUserPath -ModuleName aos -Times 1 -ParameterFilter { $DryRun }
+        Should -Invoke Edit-AosUserPath -ModuleName aos -Times 0 -Exactly -ParameterFilter { -not $DryRun }
+        Test-Path -LiteralPath $standaloneBin | Should -BeFalse
+    }
+
+    It 'warns with the standalone path without throwing when the installer creates nothing' {
+        InModuleScope aos { Install-AosEngines }
+        Should -Invoke Invoke-AosCodexInstaller -ModuleName aos -Times 1 -Exactly
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter {
+            $Text -like ('*' + $standaloneBin + '*')
+        }
+    }
+}
+
+Describe 'Round 3: Use-AosNpmPrefix' {
+    BeforeEach {
+        InModuleScope aos {
+            Get-Command Get-AosNpmPrefix -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
+            Get-Command Use-AosNpmPrefix -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
+        }
+        $npmPrefix = Join-Path $caseRoot 'npm globals'
+        Mock Get-AosNpmPrefix -ModuleName aos { $npmPrefix }
+        Mock Edit-AosUserPath -ModuleName aos { }
+        Mock Write-AosWarn -ModuleName aos { }
+        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'npm' }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = (Join-Path $caseRoot 'old-prefix') } } -ParameterFilter {
+            $CommandLine -eq 'npm config get prefix'
+        }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = '' } } -ParameterFilter {
+            $CommandLine -like 'npm config set prefix *'
+        }
+    }
+
+    It 'sets a different prefix to the wanted path and adds the literal home PATH entry' {
+        InModuleScope aos { Use-AosNpmPrefix }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter {
+            $CommandLine -eq 'npm config get prefix'
+        }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter {
+            $CommandLine.StartsWith('npm config set prefix ') -and $CommandLine.Contains($npmPrefix)
+        }
+        Should -Invoke Edit-AosUserPath -ModuleName aos -Times 1 -Exactly -ParameterFilter {
+            @($Add).Count -eq 1 -and $Add[0] -ceq '%USERPROFILE%\.npm-global' -and -not $DryRun
+        }
+    }
+
+    It 'does not set an equal prefix for <Variant>' -ForEach @(
+        @{ Variant = 'exact spelling' }, @{ Variant = 'different case' }, @{ Variant = 'trailing backslash' }
+    ) {
+        $currentPrefix = $npmPrefix
+        if ($Variant -eq 'different case') { $currentPrefix = $npmPrefix.ToUpperInvariant() }
+        if ($Variant -eq 'trailing backslash') { $currentPrefix = $npmPrefix + '\' }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = $currentPrefix } } -ParameterFilter {
+            $CommandLine -eq 'npm config get prefix'
+        }
+        InModuleScope aos { Use-AosNpmPrefix }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -eq 'npm config get prefix' }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'npm config set prefix *' }
+        Should -Invoke Edit-AosUserPath -ModuleName aos -Times 1 -Exactly -ParameterFilter {
+            @($Add).Count -eq 1 -and $Add[0] -ceq '%USERPROFILE%\.npm-global' -and -not $DryRun
+        }
+    }
+
+    It 'does not set a different prefix in DryRun and passes DryRun to PATH editing' {
+        InModuleScope aos { Use-AosNpmPrefix -DryRun }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'npm config set prefix *' }
+        Should -Invoke Edit-AosUserPath -ModuleName aos -Times 1 -Exactly -ParameterFilter {
+            @($Add).Count -eq 1 -and $Add[0] -ceq '%USERPROFILE%\.npm-global' -and $DryRun
+        }
+        Should -Invoke Edit-AosUserPath -ModuleName aos -Times 0 -Exactly -ParameterFilter { -not $DryRun }
+    }
+
+    It 'warns and does not read config or edit PATH when npm is missing' {
+        Mock Test-AosCommand -ModuleName aos { $false } -ParameterFilter { $Name -eq 'npm' }
+        InModuleScope aos { Use-AosNpmPrefix }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'npm' }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly
+        Should -Invoke Edit-AosUserPath -ModuleName aos -Times 0 -Exactly
+    }
+}
+
+Describe 'Round 3: Install-AosNpmTools' {
+    BeforeEach {
+        InModuleScope aos {
+            foreach ($name in @('Get-AosNpmPrefix', 'Use-AosNpmPrefix', 'Install-AosNpmTools')) {
+                Get-Command $name -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty -Because "$name is part of the npm tools contract"
+            }
+        }
+        $npmPrefix = Join-Path $caseRoot 'npm globals'
+        $npmCalls = New-Object 'System.Collections.Generic.List[string]'
+        Mock Get-AosNpmPrefix -ModuleName aos { $npmPrefix }
+        Mock Use-AosNpmPrefix -ModuleName aos { $npmCalls.Add('prefix') }
+        Mock Edit-AosUserPath -ModuleName aos { throw 'Install-AosNpmTools should use the mocked prefix helper.' }
+        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -in @('npm', 'fixture-tool', 'second-tool') }
+        Mock Invoke-AosCapture -ModuleName aos {
+            $npmCalls.Add($CommandLine)
+            @{ Code = 0; Text = '' }
+        } -ParameterFilter { $CommandLine -match '^npm install -g (fixture-tool|second-tool)(\s|$)' }
+    }
+
+    It 'sets up the prefix first and installs each missing package despite unrelated PATH copies' {
+        InModuleScope aos {
+            Install-AosNpmTools -Packages @(
+                @{ name = 'fixture-tool'; why = 'test one' }, @{ name = 'second-tool'; why = 'test two' }
+            )
+        }
+        $npmCalls[0] | Should -BeExactly 'prefix'
+        Should -Invoke Use-AosNpmPrefix -ModuleName aos -Times 1 -Exactly -ParameterFilter { -not $DryRun }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -match '^npm install -g fixture-tool(\s|$)' }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -match '^npm install -g second-tool(\s|$)' }
+    }
+
+    It 'does not install when the package command exists in the wanted prefix' {
+        Write-TestFile (Join-Path $npmPrefix 'fixture-tool.cmd') ''
+        Mock Test-AosCommand -ModuleName aos { $false } -ParameterFilter { $Name -eq 'fixture-tool' }
+        InModuleScope aos { Install-AosNpmTools -Packages @(@{ name = 'fixture-tool'; why = 'test' }) }
+        Should -Invoke Use-AosNpmPrefix -ModuleName aos -Times 1 -Exactly
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly
+    }
+
+    It 'does not install a missing package in DryRun and previews prefix setup' {
+        InModuleScope aos { Install-AosNpmTools -Packages @(@{ name = 'fixture-tool'; why = 'test' }) -DryRun }
+        Should -Invoke Use-AosNpmPrefix -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
+        Should -Invoke Use-AosNpmPrefix -ModuleName aos -Times 0 -Exactly -ParameterFilter { -not $DryRun }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly
+    }
+}
+
+Describe 'Round 3: reference clone directory' {
+    BeforeEach { $savedRefs = $env:AOS_REFS }
+    AfterEach { $env:AOS_REFS = $savedRefs }
+
+    It 'defaults to the home refs directory and honors an explicit override' {
+        $env:AOS_REFS = $null
+        InModuleScope aos { Get-AosRefsDir | Should -BeExactly (Join-Path $HOME '.aos\refs') }
+        $env:AOS_REFS = Join-Path $caseRoot 'custom refs'
+        InModuleScope aos { Get-AosRefsDir | Should -BeExactly $env:AOS_REFS }
+    }
+}
+
+Describe 'Round 3: secret name validation' {
+    It 'rejects invalid name <Label>' -ForEach @(
+        @{ Label = 'empty'; Name = '' }, @{ Label = 'CON'; Name = 'CON' },
+        @{ Label = 'nul'; Name = 'nul' }, @{ Label = 'PRN'; Name = 'PRN' },
+        @{ Label = 'aux extension'; Name = 'aux.x' }, @{ Label = 'traversal'; Name = '../x' },
+        @{ Label = 'space'; Name = 'a b' }, @{ Label = 'dot first'; Name = '.hidden' },
+        @{ Label = 'dash first'; Name = '-x' }, @{ Label = '65 characters'; Name = ('a' * 65) }
+        foreach ($number in 0..9) {
+            @{ Label = "Com$number"; Name = "Com$number" }
+            @{ Label = "LPT$number.key"; Name = "LPT$number.key" }
+        }
+    ) {
+        InModuleScope aos -Parameters @{ Name = $Name } {
+            param($Name)
+            Get-Command Test-AosSecretName -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
+            $actual = Test-AosSecretName $Name
+            ($actual -is [bool]) | Should -BeTrue
+            $actual | Should -BeFalse
+        }
+    }
+
+    It 'accepts valid name <Label>' -ForEach @(
+        @{ Label = 'environment key'; Name = 'OPENAI_API_KEY' }, @{ Label = 'dot and dash'; Name = 'z.ai-key' },
+        @{ Label = 'one character'; Name = 'a' }, @{ Label = '64 characters'; Name = ('a' * 64) },
+        @{ Label = 'device prefix only'; Name = 'CONSOLE' }, @{ Label = 'long COM prefix'; Name = 'COM10x' },
+        @{ Label = 'digit first'; Name = '0_key' }
+    ) {
+        InModuleScope aos -Parameters @{ Name = $Name } {
+            param($Name)
+            Get-Command Test-AosSecretName -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
+            $actual = Test-AosSecretName $Name
+            ($actual -is [bool]) | Should -BeTrue
+            $actual | Should -BeTrue
+        }
+    }
+}
+
+Describe 'Round 3: DPAPI secret files' {
+    BeforeEach {
+        $savedSecrets = $env:AOS_SECRETS
+        $secretsDir = Join-Path $caseRoot 'isolated secrets'
+        $env:AOS_SECRETS = $secretsDir
+        Mock Write-AosWarn -ModuleName aos { }
+        # Refuse to exercise file operations if a partial fix ignores the test override.
+        InModuleScope aos {
+            if (Get-Command Get-AosSecretsDir -ErrorAction SilentlyContinue) {
+                Get-AosSecretsDir | Should -BeExactly $env:AOS_SECRETS
+            }
+        }
+        # Block the old vault and child-shell paths even during a partial implementation.
+        InModuleScope aos {
+            if (Get-Command Initialize-AosSecretStore -ErrorAction SilentlyContinue) {
+                Mock Initialize-AosSecretStore { throw 'The real SecretStore must never be initialized by a test.' }
+            }
+        }
+        foreach ($shell in @('pwsh', 'powershell')) {
+            if (Get-Command $shell -ErrorAction SilentlyContinue) {
+                Mock $shell -ModuleName aos { throw 'Secret commands must stay in the current shell.' }
+            }
+        }
+    }
+    AfterEach { $env:AOS_SECRETS = $savedSecrets }
+
+    It 'uses AOS_SECRETS when set and otherwise returns the home secrets directory' {
+        InModuleScope aos {
+            Get-AosSecretsDir | Should -BeExactly $env:AOS_SECRETS
+            $env:AOS_SECRETS = $null
+            Get-AosSecretsDir | Should -BeExactly (Join-Path $HOME '.aos\secrets')
+        }
+    }
+
+    It 'rejects an invalid set without writing anything for <Label>' -ForEach @(
+        @{ Label = 'empty'; Name = '' }, @{ Label = 'device'; Name = 'LPT9.key' },
+        @{ Label = 'traversal'; Name = '../outside' }, @{ Label = 'too long'; Name = ('a' * 65) }
+    ) {
+        $before = Get-TestTreeState $caseRoot
+        InModuleScope aos -Parameters @{ Name = $Name } {
+            param($Name)
+            $value = ConvertTo-SecureString 'synthetic invalid fixture' -AsPlainText -Force
+            $actual = Set-AosSecret -Name $Name -Value $value
+            ($actual -is [bool]) | Should -BeTrue
+            $actual | Should -BeFalse
+        }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1
+        (Get-TestTreeState $caseRoot) | Should -BeExactly $before
+    }
+
+    It 'creates the directory and writes current-user DPAPI ciphertext that round-trips' {
+        InModuleScope aos {
+            $plain = 'synthetic DPAPI fixture, not a credential'
+            $actual = Set-AosSecret -Name 'z.ai-key' -Value (ConvertTo-SecureString $plain -AsPlainText -Force)
+            ($actual -is [bool]) | Should -BeTrue
+            $actual | Should -BeTrue
+            $file = Join-Path $env:AOS_SECRETS 'z.ai-key.secret'
+            Test-Path -LiteralPath $file -PathType Leaf | Should -BeTrue
+            $ciphertext = [System.IO.File]::ReadAllText($file)
+            $ciphertext | Should -Not -Match ([regex]::Escape($plain))
+            # Decrypt independently of Get-AosSecret: the file must be DPAPI, not an encoding.
+            $secure = ConvertTo-SecureString $ciphertext
+            $credential = New-Object System.Management.Automation.PSCredential('fixture', $secure)
+            $credential.GetNetworkCredential().Password | Should -BeExactly $plain
+            Get-AosSecret -Name 'z.ai-key' | Should -BeExactly $plain
+        }
+    }
+
+    It 'replaces an existing secret and leaves no temporary file behind' {
+        InModuleScope aos {
+            Set-AosSecret -Name 'replace-key' -Value (ConvertTo-SecureString 'synthetic first value' -AsPlainText -Force) | Should -BeTrue
+            Set-AosSecret -Name 'replace-key' -Value (ConvertTo-SecureString 'synthetic replacement' -AsPlainText -Force) | Should -BeTrue
+            Get-AosSecret -Name 'replace-key' | Should -BeExactly 'synthetic replacement'
+            $files = @(Get-ChildItem -LiteralPath $env:AOS_SECRETS -Force -Recurse -File)
+            @($files | Where-Object { $_.Name -like '*.tmp' }).Count | Should -Be 0
+            $files.Count | Should -Be 1
+            $files[0].Name | Should -BeExactly 'replace-key.secret'
+            [System.IO.File]::ReadAllText($files[0].FullName) | Should -Not -Match 'synthetic replacement'
+        }
+    }
+
+    It 'warns and returns null without throwing for <Label>' -ForEach @(
+        @{ Label = 'missing secret'; Name = 'missing-key' }, @{ Label = 'invalid secret'; Name = '../outside' },
+        @{ Label = 'empty name'; Name = '' }
+    ) {
+        InModuleScope aos -Parameters @{ Name = $Name } {
+            param($Name)
+            $actual = Get-AosSecret -Name $Name
+            ($null -eq $actual) | Should -BeTrue
+        }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1
+        Test-Path -LiteralPath $secretsDir | Should -BeFalse
+    }
+
+    It 'returns sorted secret names without extensions and ignores other files' {
+        Write-TestFile (Join-Path $secretsDir 'z-last.secret') 'fixture'
+        Write-TestFile (Join-Path $secretsDir 'a-first.secret') 'fixture'
+        Write-TestFile (Join-Path $secretsDir 'middle.key.secret') 'fixture'
+        Write-TestFile (Join-Path $secretsDir 'ignore.txt') 'fixture'
+        InModuleScope aos {
+            $names = @(Get-AosSecretNames)
+            $names.Count | Should -Be 3
+            ($names -join '|') | Should -BeExactly 'a-first|middle.key|z-last'
+        }
+    }
+
+    It 'returns no names for a <State> directory' -ForEach @(
+        @{ State = 'missing' }, @{ State = 'empty' }
+    ) {
+        if ($State -eq 'empty') { New-TestFolder $secretsDir | Out-Null }
+        InModuleScope aos { @(Get-AosSecretNames).Count | Should -Be 0 }
+    }
+
+    It 'removes only the named secret and returns true' {
+        Write-TestFile (Join-Path $secretsDir 'remove-me.secret') 'fixture'
+        Write-TestFile (Join-Path $secretsDir 'keep-me.secret') 'keep fixture'
+        InModuleScope aos {
+            $actual = Remove-AosSecret -Name 'remove-me'
+            ($actual -is [bool]) | Should -BeTrue
+            $actual | Should -BeTrue
+        }
+        Test-Path -LiteralPath (Join-Path $secretsDir 'remove-me.secret') | Should -BeFalse
+        [System.IO.File]::ReadAllText((Join-Path $secretsDir 'keep-me.secret')) | Should -BeExactly 'keep fixture'
+    }
+
+    It 'warns and returns false when removing a missing secret' {
+        InModuleScope aos {
+            $actual = Remove-AosSecret -Name 'missing-key'
+            ($actual -is [bool]) | Should -BeTrue
+            $actual | Should -BeFalse
+        }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1
+        Test-Path -LiteralPath $secretsDir | Should -BeFalse
+    }
+
+    It 'sets with a secure prompt and gets plaintext in this shell without launching another shell' {
+        # On 5.1, make the old forwarding path available so the child-shell guard catches it.
+        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -in @('pwsh', 'powershell') }
+        Mock Read-Host -ModuleName aos { ConvertTo-SecureString 'synthetic prompt value' -AsPlainText -Force }
+        InModuleScope aos {
+            Invoke-AosSecret 'set' 'prompt-key'
+            Test-Path -LiteralPath (Join-Path $env:AOS_SECRETS 'prompt-key.secret') | Should -BeTrue
+            Invoke-AosSecret 'get' 'prompt-key' | Should -BeExactly 'synthetic prompt value'
+        }
+        Should -Invoke Read-Host -ModuleName aos -Times 1 -Exactly -ParameterFilter { $AsSecureString }
+        Should -Invoke Read-Host -ModuleName aos -Times 0 -Exactly -ParameterFilter { -not $AsSecureString }
+        foreach ($shell in @('pwsh', 'powershell')) {
+            if (Get-Command $shell -ErrorAction SilentlyContinue) {
+                Should -Invoke $shell -ModuleName aos -Times 0 -Exactly
+            }
+        }
+    }
+
+    It 'reads this shell DPAPI file from the other PowerShell version' {
+        $otherName = 'powershell'
+        if ($PSVersionTable.PSVersion.Major -lt 6) { $otherName = 'pwsh' }
+        $otherShell = Get-Command $otherName -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $otherShell) {
+            Set-ItResult -Skipped -Because "$otherName is not installed; cannot check cross-version DPAPI."
+            return
+        }
+        InModuleScope aos {
+            Set-AosSecret -Name 'cross-version' -Value (ConvertTo-SecureString 'synthetic cross-version value' -AsPlainText -Force) | Should -BeTrue
+        }
+        $modulePath = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\aos.psm1')).Replace("'", "''")
+        $escapedDir = $secretsDir.Replace("'", "''")
+        # EncodedCommand preserves quoting under both native argument-passing conventions.
+        # Only a synthetic value is used; the child inherits no profile and reads this fixture.
+        $childCode = @"
+`$ErrorActionPreference = 'Stop'
+`$env:AOS_SECRETS = '$escapedDir'
+Import-Module '$modulePath' -Force -DisableNameChecking
+& (Get-Module aos) {
+    if ((Get-AosSecretsDir) -cne `$env:AOS_SECRETS) { throw 'Secret directory escaped the test fixture.' }
+    Get-AosSecret -Name 'cross-version'
+}
+"@
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childCode))
+        $output = & $otherShell.Source -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded 2>&1
+        $LASTEXITCODE | Should -Be 0
+        ($output | Out-String).Trim() | Should -BeExactly 'synthetic cross-version value'
+    }
+}
+
+Describe 'Round 3: Start-AosRemote' {
+    BeforeEach {
+        $savedProjects = $env:AOS_PROJECTS
+        $env:AOS_PROJECTS = Join-Path $caseRoot 'projects'
+        InModuleScope aos {
+            Get-Command Invoke-AosClaudeRemote -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
+            Get-Command Start-AosRemote -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
+        }
+        Mock Invoke-AosClaudeRemote -ModuleName aos { }
+        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'claude' }
+        Mock Write-AosWarn -ModuleName aos { }
+    }
+    AfterEach { $env:AOS_PROJECTS = $savedProjects }
+
+    It 'starts in the Desktop folder when Dir is omitted' {
+        $desktop = [Environment]::GetFolderPath('Desktop')
+        InModuleScope aos { Start-AosRemote }
+        Should -Invoke Invoke-AosClaudeRemote -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Dir -eq $desktop }
+    }
+
+    It 'starts in an existing absolute folder with its full path' {
+        $folder = New-TestFolder (Join-Path $caseRoot 'absolute folder')
+        InModuleScope aos -Parameters @{ Folder = $folder } {
+            param($Folder)
+            Start-AosRemote -Dir $Folder
+        }
+        Should -Invoke Invoke-AosClaudeRemote -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Dir -eq $folder }
+    }
+
+    It 'resolves a relative folder against the current location' {
+        $folder = New-TestFolder (Join-Path $caseRoot 'relative folder')
+        Push-Location $caseRoot
+        try { InModuleScope aos { Start-AosRemote -Dir '.\relative folder' } }
+        finally { Pop-Location }
+        Should -Invoke Invoke-AosClaudeRemote -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Dir -eq $folder }
+    }
+
+    It 'resolves a bare project name under AOS_PROJECTS when absent here' {
+        $folder = New-TestFolder (Join-Path $env:AOS_PROJECTS 'phone-project')
+        Push-Location $caseRoot
+        try { InModuleScope aos { Start-AosRemote -Dir 'phone-project' } }
+        finally { Pop-Location }
+        Should -Invoke Invoke-AosClaudeRemote -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Dir -eq $folder }
+    }
+
+    It 'prefers an existing local folder over a same-named project' {
+        $folder = New-TestFolder (Join-Path $caseRoot 'same-name')
+        New-TestFolder (Join-Path $env:AOS_PROJECTS 'same-name') | Out-Null
+        Push-Location $caseRoot
+        try { InModuleScope aos { Start-AosRemote -Dir 'same-name' } }
+        finally { Pop-Location }
+        Should -Invoke Invoke-AosClaudeRemote -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Dir -eq $folder }
+    }
+
+    It 'warns without launching Claude for a missing folder' {
+        InModuleScope aos -Parameters @{ Folder = (Join-Path $caseRoot 'missing') } {
+            param($Folder)
+            Start-AosRemote -Dir $Folder
+        }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1
+        Should -Invoke Invoke-AosClaudeRemote -ModuleName aos -Times 0 -Exactly
+    }
+
+    It 'warns without launching when Claude is missing' {
+        Mock Test-AosCommand -ModuleName aos { $false } -ParameterFilter { $Name -eq 'claude' }
+        InModuleScope aos -Parameters @{ Folder = $caseRoot } {
+            param($Folder)
+            Start-AosRemote -Dir $Folder
+        }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'claude' }
+        Should -Invoke Invoke-AosClaudeRemote -ModuleName aos -Times 0 -Exactly
+    }
+
+    It 'does not launch Claude in DryRun' {
+        InModuleScope aos -Parameters @{ Folder = $caseRoot } {
+            param($Folder)
+            Start-AosRemote -Dir $Folder -DryRun
+        }
+        Should -Invoke Invoke-AosClaudeRemote -ModuleName aos -Times 0 -Exactly
+    }
+}
+
+Describe 'Round 3: aos remote dispatch' {
+    It 'dispatches remote without a directory to Start-AosRemote' {
+        InModuleScope aos { Get-Command Start-AosRemote -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty }
+        Mock Start-AosRemote -ModuleName aos { }
+        aos remote
+        Should -Invoke Start-AosRemote -ModuleName aos -Times 1 -Exactly -ParameterFilter { -not $Dir -and -not $DryRun }
+    }
+
+    It 'passes the remote directory and DryRun through to Start-AosRemote' {
+        InModuleScope aos { Get-Command Start-AosRemote -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty }
+        Mock Start-AosRemote -ModuleName aos { }
+        aos remote 'phone-project' -DryRun
+        Should -Invoke Start-AosRemote -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Dir -eq 'phone-project' -and $DryRun }
+    }
+
+    It 'lists aos remote in help' {
+        $output = aos help *>&1 | Out-String
+        $output | Should -Match '(?m)^\s+aos remote\b'
+    }
+}
+
 }

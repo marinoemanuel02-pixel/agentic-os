@@ -3,6 +3,49 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-09-28 - Shared state lives under the home folder; phone access
+
+- **The Claude desktop app redirects new AppData files into its own package.** It is an MSIX
+  package, and a new file or folder that it or anything it launches creates under `AppData` lands
+  in `AppData\Local\Packages\Claude_...\LocalCache`, visible only to that app's processes. Found
+  there after a setup run from Claude shells: the Codex installer's PATH folder, the npm globals
+  (`ccusage`), the reference clones and a Codex worktree. In a process started outside the package
+  (through WMI), `codex` and `ccusage` were not found while `aos status` inside the app was all
+  green. Existing AppData files, the home folder, Documents, Temp, the registry PATH and winget
+  installs were not affected here (it depends on each package's declarations; the Codex app is MSIX too).
+- **Correction to 2026-09-27 ("PowerShell 7 is the MSI edition").** The Store pwsh did not fail to
+  see those folders because it is MSIX: they only ever existed in the Claude app's private view.
+  The MSI pin stays for the same mechanism: whatever the Store pwsh installs under AppData would
+  stay private to it.
+- **So shared state moved to the home folder.** The user PATH also names
+  `~\.codex\packages\standalone\current\bin` (the Codex installer's own junction target; `aos
+  status` warns if that layout disappears), npm globals use the prefix `~\.npm-global`, reference
+  clones live in `~\.aos\refs`, and the agents' contract says never to put tools, clones or
+  worktrees under AppData. `aos install engines` now checks for the standalone Codex CLI itself:
+  the Codex app's bundled `codex.exe` on its own PATH used to count as installed.
+- **`aos secret` uses DPAPI files instead of SecretStore.** SecretManagement and SecretStore keep
+  their vault registry and data under `%LOCALAPPDATA%`, so each app would have had its own, empty
+  vault. Now each key is a DPAPI blob (encrypted to your Windows login) in `~\.aos\secrets`: the
+  same store from every app and terminal and both PowerShell versions, with no Gallery modules.
+  Commands inside Codex's sandbox run as separate Windows users and cannot decrypt them, which is
+  intended: a command that needs a key runs as you. Credential Manager was the alternative
+  (OS-managed, visible in Control Panel), not taken because it needs P/Invoke that Pester can't
+  exercise. Astra's plan review preferred DPAPI files and added: reject Windows device names (CON,
+  NUL, COM1, ...) as key names, and replace files atomically.
+- **Phone access.** Claude: the Claude app connects new sessions to Remote Control, so they show up
+  in the Claude mobile app, and `aos remote` runs `claude remote-control --capacity 2` so the phone
+  can also start sessions on this PC (2, not the default 32: same-dir sessions share files, and the
+  plans allow 2 agents per vendor; Astra's finding). Codex: the Codex app's Settings > Connections >
+  Control this PC, paired with the ChatGPT Android app (the PC must stay awake, online and
+  unlocked). Astra caught that the first plan offered only Codex cloud, which cannot see this PC,
+  its unpushed work or its keys. `codex remote-control` (a CLI daemon) is experimental and unused.
+  Cloud sessions stay for when the PC is off; they see only what was pushed.
+- **`claude remote-control --help` never exits** (2.1.283): it prints the help and keeps running.
+  Don't call it from scripts; it stalled Astra's review until it was stopped.
+- **Codex's Windows sandbox runs commands as two local users** (`CodexSandboxOffline`,
+  `CodexSandboxOnline`), gave them read access to `OneDrive`, `~\.codex` and `~\.claude` and write
+  access to this repo, and denies them `.git`. That is its design; nothing to undo.
+
 ## 2026-09-27 - Finishing the setup together with GPT-6-Astra
 
 - **Bridges proven both ways.** Claude -> Codex: `codex:setup` reports ready (codex-cli 0.157.1,

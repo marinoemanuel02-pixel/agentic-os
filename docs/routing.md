@@ -48,9 +48,10 @@ Defaults, not laws: say "claude only" or "codex only" and they yield.
 |---|---|
 | Thinking aloud, away from the desk | ChatGPT Voice (plain conversation, no repo) |
 | Repo work at the desk | Claude Code (terminal or Claude Desktop's Code tab) and the Codex app |
-| From the phone, into a running local session | `claude --remote-control "<name>"` on the PC, then the Claude app > Code |
+| From the phone, Claude on this PC | Claude app > Code: sessions from the Claude desktop app (Remote Control is on for new sessions), or new ones while `aos remote` runs on the PC |
+| From the phone, Codex on this PC | ChatGPT app > Codex, after pairing once in the Codex app (Settings > Connections > Control this PC) |
+| From the phone, PC off | Claude Code cloud session or Codex cloud task on a GitHub repo (sees only what was pushed) |
 | From the phone, message-style | Claude Code Channels (Telegram/Discord) into a running session |
-| From the phone, Codex | ChatGPT app > Codex (cloud tasks on GitHub repos) |
 | Scheduled or recurring | Claude Code routines / Desktop scheduled tasks; Codex automations |
 | Research to keep | either chat app's research mode, results saved into the KB `inbox/` |
 

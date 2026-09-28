@@ -27,12 +27,18 @@ function Test-AosCommand([string]$Name) {
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Get-AosCodexStandaloneBin {
+    # The official Codex installer keeps the active release behind this junction in HOME. Its own PATH
+    # folder under %LOCALAPPDATA% can be private to a packaged app (MSIX), so aos also puts this on PATH.
+    return (Join-Path $HOME '.codex\packages\standalone\current\bin')
+}
+
 function Update-AosPath {
     # Pick up PATH entries installers just wrote to the registry, keeping this session's own.
     $seen = New-Object 'System.Collections.Generic.HashSet[string]' -ArgumentList ([StringComparer]::OrdinalIgnoreCase)
     $parts = New-Object 'System.Collections.Generic.List[string]'
     # Plus the two agents' own install folders, in case this terminal predates their PATH entries.
-    $agentBins = @((Join-Path $HOME '.local\bin'), (Join-Path $env:LOCALAPPDATA 'Programs\OpenAI\Codex\bin')) |
+    $agentBins = @((Join-Path $HOME '.local\bin'), (Get-AosCodexStandaloneBin), (Join-Path $env:LOCALAPPDATA 'Programs\OpenAI\Codex\bin')) |
         Where-Object { Test-Path -LiteralPath $_ }
     $sources = @($env:Path,
         [Environment]::GetEnvironmentVariable('Path', 'Machine'),
@@ -368,15 +374,8 @@ function Install-AosBase([switch]$DryRun) {
     }
     else { Write-AosWarn 'git is not on PATH yet (open a new terminal, then re-run)' }
 
-    Write-AosStep 'npm global tools'
-    foreach ($n in $pkgs['npm']) {
-        if (Test-AosCommand $n['name']) { Write-AosOk $n['name']; continue }
-        if (-not (Test-AosCommand npm)) { Write-AosWarn "npm missing; skipped $($n['name'])"; continue }
-        if ($DryRun) { Write-AosDry "npm install -g $($n['name'])   ($($n['why']))"; continue }
-        npm install -g $n['name'] | Out-Host
-        Update-AosPath
-        if (Test-AosCommand $n['name']) { Write-AosOk "$($n['name']) installed" } else { Write-AosWarn "$($n['name']) not found after install" }
-    }
+    Write-AosStep 'npm global tools (prefix ~\.npm-global)'
+    Install-AosNpmTools -Packages $pkgs['npm'] -DryRun:$DryRun
 
     Write-AosStep 'VS Code extensions'
     if (Test-AosCommand code) {
@@ -392,10 +391,49 @@ function Install-AosBase([switch]$DryRun) {
     Install-AosPester -DryRun:$DryRun
 }
 
+function Get-AosNpmPrefix {
+    # Global npm tools live in HOME: a new %APPDATA%\npm created from inside a packaged app stays private to it.
+    return (Join-Path $HOME '.npm-global')
+}
+
+function Use-AosNpmPrefix([switch]$DryRun) {
+    if (-not (Test-AosCommand npm)) { Write-AosWarn 'npm missing; global npm tools skipped (aos install base)'; return }
+    $want = Get-AosNpmPrefix
+    $lines = @((Invoke-AosCapture 'npm config get prefix').Text -split "`r?`n" | Where-Object { $_.Trim() })
+    $have = ''
+    if ($lines.Count -gt 0) { $have = $lines[-1].Trim() }
+    if ($have.TrimEnd('\') -ieq $want.TrimEnd('\')) { Write-AosOk "npm prefix = $want" }
+    elseif ($DryRun) { Write-AosDry "npm config set prefix `"$want`"   (now: $have)" }
+    else {
+        $r = Invoke-AosCapture "npm config set prefix `"$want`""
+        if ($r.Code -eq 0) { Write-AosOk "npm prefix = $want (was $have)" } else { Write-AosWarn "npm config set prefix failed: $($r.Text)" }
+    }
+    Edit-AosUserPath -Add '%USERPROFILE%\.npm-global' -DryRun:$DryRun
+}
+
+function Install-AosNpmTools([object[]]$Packages, [switch]$DryRun) {
+    Use-AosNpmPrefix -DryRun:$DryRun
+    if (-not (Test-AosCommand npm)) { return }
+    $prefix = Get-AosNpmPrefix
+    foreach ($n in $Packages) {
+        $name = $n['name']
+        # Only a copy in our prefix counts: one found elsewhere on PATH can be private to a packaged app.
+        if (Test-Path -LiteralPath (Join-Path $prefix "$name.cmd")) { Write-AosOk $name; continue }
+        if ($DryRun) { Write-AosDry "npm install -g $name   ($($n['why']))"; continue }
+        $r = Invoke-AosCapture "npm install -g $name"
+        if ($r.Code -eq 0) { Write-AosOk "$name installed in $prefix" } else { Write-AosWarn "npm install -g $name failed (exit $($r.Code))" }
+    }
+    Update-AosPath
+}
+
 function Use-AosLocalBin {
     # Make an installed-but-not-yet-on-PATH claude.exe usable in this session.
     $localBin = Join-Path $HOME '.local\bin'
     if ((Test-Path -LiteralPath (Join-Path $localBin 'claude.exe')) -and -not (Test-AosCommand claude)) { $env:Path = "$localBin;$env:Path" }
+}
+
+function Invoke-AosCodexInstaller {
+    powershell -NoProfile -ExecutionPolicy Bypass -Command 'irm https://chatgpt.com/codex/install.ps1 | iex' | Out-Host
 }
 
 function Install-AosEngines([switch]$DryRun) {
@@ -416,19 +454,25 @@ function Install-AosEngines([switch]$DryRun) {
     # A winget Codex install (no codex.exe alias without Developer Mode) leaves its folder on PATH after removal.
     $stale = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\OpenAI.Codex_Microsoft.Winget.Source_8wekyb3d8bbwe'
     if (-not (Test-Path -LiteralPath $stale)) { $pathRemove += $stale }
-    Edit-AosUserPath -Add $pathAdd -Remove $pathRemove -DryRun:$DryRun
-    if (-not $DryRun -and -not (Test-AosCommand claude)) { Write-AosWarn 'claude not found after install; open a new terminal and run: claude --version' }
 
     Write-AosStep 'Codex CLI (official installer from releases.openai.com; updates itself; shares ~/.codex with the app)'
-    if (Test-AosCommand codex) { Write-AosOk ('codex ' + (codex --version)) }
+    # Look for the standalone CLI itself: the Codex app's bundled codex.exe can be on PATH without it.
+    $codexBin = Get-AosCodexStandaloneBin
+    $codexExe = Join-Path $codexBin 'codex.exe'
+    if (Test-Path -LiteralPath $codexExe) { Write-AosOk "codex CLI in $codexBin" }
     elseif ($DryRun) { Write-AosDry 'irm https://chatgpt.com/codex/install.ps1 | iex   (in a child process)' }
     else {
-        powershell -NoProfile -ExecutionPolicy Bypass -Command 'irm https://chatgpt.com/codex/install.ps1 | iex' | Out-Host
-        Update-AosPath
-        $bin = Join-Path $env:LOCALAPPDATA 'Programs\OpenAI\Codex\bin'
-        if (-not (Test-AosCommand codex) -and (Test-Path -LiteralPath (Join-Path $bin 'codex.exe'))) { $env:Path = "$bin;$env:Path" }
-        if (Test-AosCommand codex) { Write-AosOk ('codex ' + (codex --version)) }
-        else { Write-AosWarn 'codex not found after install; open a new terminal and run: codex --version' }
+        Invoke-AosCodexInstaller
+        if (Test-Path -LiteralPath $codexExe) { Write-AosOk "codex CLI in $codexBin" }
+        else { Write-AosWarn "codex.exe not found in $codexBin after the installer ran (did its layout change?)" }
+    }
+    # The installer's own PATH folder (%LOCALAPPDATA%\Programs\OpenAI\Codex\bin) can be private to a
+    # packaged app when the installer ran inside one; this entry works from every terminal and app.
+    if (Test-Path -LiteralPath $codexExe) { $pathAdd += '%USERPROFILE%\.codex\packages\standalone\current\bin' }
+    Edit-AosUserPath -Add $pathAdd -Remove $pathRemove -DryRun:$DryRun
+    if (-not $DryRun) {
+        if (-not (Test-AosCommand claude)) { Write-AosWarn 'claude not found after install; open a new terminal and run: claude --version' }
+        if (-not (Test-AosCommand codex)) { Write-AosWarn 'codex not found after install; open a new terminal and run: codex --version' }
     }
 }
 
@@ -704,9 +748,10 @@ function Install-AosBridges([switch]$DryRun) {
 }
 
 function Get-AosRefsDir {
-    # Clones live outside the repo: the repo sits in OneDrive, and clones are re-creatable.
+    # Clones live outside the repo (OneDrive; clones are re-creatable) and outside AppData (a folder a
+    # packaged app creates there can stay private to it).
     if ($env:AOS_REFS) { return $env:AOS_REFS }
-    return (Join-Path $env:LOCALAPPDATA 'agentic-os\refs')
+    return (Join-Path $HOME '.aos\refs')
 }
 
 function Get-AosProjectsDir {
@@ -749,6 +794,8 @@ function Show-AosNextSteps {
     Write-AosInfo '7. Optional: Settings > Apps > Advanced app settings > App execution aliases: turn off python.exe/python3.exe.'
     Write-AosInfo '8. Windows PowerShell 5.1 blocks profile scripts by default. Use pwsh, or run yourself:'
     Write-AosInfo '   Set-ExecutionPolicy -Scope CurrentUser RemoteSigned'
+    Write-AosInfo '9. Phone: install the Claude and ChatGPT apps, then README "From your phone" (aos remote;'
+    Write-AosInfo '   Codex app > Settings > Connections > Control this PC).'
     Write-AosInfo 'Then: aos status'
 }
 
@@ -789,8 +836,14 @@ function Get-AosStatus {
         }
         else { Write-AosWarn ('{0,-8} missing' -f $t) }
     }
+    if (-not (Test-Path -LiteralPath (Join-Path (Get-AosCodexStandaloneBin) 'codex.exe'))) {
+        Write-AosWarn "standalone Codex CLI not found in $(Get-AosCodexStandaloneBin) (aos install engines)"
+    }
+    foreach ($n in (Get-AosPackages)['npm']) {
+        if (-not (Test-Path -LiteralPath (Join-Path (Get-AosNpmPrefix) "$($n['name']).cmd"))) { Write-AosWarn "$($n['name']) is not in $(Get-AosNpmPrefix) (aos install base)" }
+    }
     $ps7 = Get-Command pwsh -ErrorAction SilentlyContinue
-    if ($ps7 -and $ps7.Source -like '*\WindowsApps\*') { Write-AosWarn 'pwsh is the packaged (MSIX) edition: it cannot see codex/npm tools in AppData. Reinstall: winget install --id Microsoft.PowerShell -e --installer-type wix' }
+    if ($ps7 -and $ps7.Source -like '*\WindowsApps\*') { Write-AosWarn 'pwsh is the Store (MSIX) edition: what it installs under AppData stays private to it. Reinstall: winget install --id Microsoft.PowerShell -e --installer-type wix' }
     $py = Get-Command python -ErrorAction SilentlyContinue
     if ($py -and $py.Source -like '*\WindowsApps\*') { Write-AosWarn 'python is the Microsoft Store stub; use py, or turn off the python.exe App execution alias' }
 
@@ -843,11 +896,14 @@ function Get-AosStatus {
     Write-AosStep 'MCP servers'
     $manifest = Read-AosJson (Join-Path $root 'config\mcp.json')
     $claudeList = ''; $codexList = ''
+    $haveCodex = Test-AosCommand codex
     if (Test-AosCommand claude) { $claudeList = (Invoke-AosCapture 'claude mcp list').Text }
-    if (Test-AosCommand codex) { $codexList = (Invoke-AosCapture 'codex mcp list').Text }
+    if ($haveCodex) { $codexList = (Invoke-AosCapture 'codex mcp list').Text }
+    else { Write-AosWarn 'codex is not on PATH here: its MCP and plugin checks are skipped' }
     foreach ($name in @($manifest['servers'].Keys)) {
         $pattern = '(?im)^\W*' + [regex]::Escape($name) + '\b'
         if ($claudeList -match $pattern) { Write-AosOk "claude: $name" } else { Write-AosWarn "claude: $name not registered (aos sync)" }
+        if (-not $haveCodex) { continue }
         if ($codexList -match $pattern) { Write-AosOk "codex: $name" } else { Write-AosWarn "codex: $name not registered (aos sync)" }
     }
 
@@ -858,7 +914,7 @@ function Get-AosStatus {
     }
     if (Test-AosCcBridge) { Write-AosOk 'codex plugin: cc-plugin-codex' } else { Write-AosWarn 'codex plugin: cc-plugin-codex not detected (aos install bridges, then $cc:setup in Codex)' }
     if (@(Get-AosCodexPlugins | Where-Object { $_ -like 'superpowers@*' }).Count -gt 0) { Write-AosOk 'codex plugin: superpowers' }
-    else { Write-AosWarn 'codex plugin: superpowers not enabled (aos install bridges)' }
+    elseif ($haveCodex) { Write-AosWarn 'codex plugin: superpowers not enabled (aos install bridges)' }
 
     Write-AosStep 'Hygiene'
     $docs = [Environment]::GetFolderPath('MyDocuments')
@@ -908,10 +964,11 @@ function Update-Aos([switch]$DryRun) {
 
     Write-AosStep 'Codex CLI'
     if ($DryRun) { Write-AosDry 'irm https://chatgpt.com/codex/install.ps1 | iex   (re-run installs the latest release)' }
-    else { powershell -NoProfile -ExecutionPolicy Bypass -Command 'irm https://chatgpt.com/codex/install.ps1 | iex' | Out-Host }
+    else { Invoke-AosCodexInstaller }
 
     Write-AosStep 'Codex-side bridge and npm tools'
     if (Test-AosCommand npm) {
+        Use-AosNpmPrefix -DryRun:$DryRun
         foreach ($n in $pkgs['npm']) {
             if ($DryRun) { Write-AosDry "npm install -g $($n['name'])@latest"; continue }
             npm install -g "$($n['name'])@latest" | Out-Host
@@ -1019,46 +1076,105 @@ function New-AosProject([string]$Path) {
     Write-AosInfo 'Next: fill in the Commands section of AGENTS.md, then open the folder in Claude Code or Codex.'
 }
 
-function Initialize-AosSecretStore {
-    foreach ($m in @('Microsoft.PowerShell.SecretManagement', 'Microsoft.PowerShell.SecretStore')) {
-        if (Get-Module -ListAvailable -Name $m) { continue }
-        Write-AosInfo "installing $m from the PowerShell Gallery (published by Microsoft)"
-        if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
-            Install-PSResource -Name $m -Scope CurrentUser -TrustRepository -Quiet
-        }
-        else { Install-Module -Name $m -Scope CurrentUser -Repository PSGallery -Force }
+# Secrets: one DPAPI-encrypted file per key in ~\.aos\secrets. Only your Windows account on this
+# machine can decrypt them (not Codex's sandbox users), and every app and terminal sees the same
+# store: SecretStore kept its vault under %LOCALAPPDATA%, which a packaged app can make private.
+# This protects against the real past failure (keys in plaintext files and backups), not against
+# malware running as you.
+
+function Get-AosSecretsDir {
+    if ($env:AOS_SECRETS) { return $env:AOS_SECRETS }
+    return (Join-Path $HOME '.aos\secrets')
+}
+
+function Test-AosSecretName([string]$Name) {
+    # The name becomes a file name: no paths, and no Windows device names (CON, NUL, COM1, ...).
+    if ($Name -notmatch '^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$') { return $false }
+    return ($Name.Split('.')[0] -notmatch '^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])$')
+}
+
+function Set-AosSecret([string]$Name, [System.Security.SecureString]$Value) {
+    if (-not (Test-AosSecretName $Name)) { Write-AosWarn "not a valid secret name: '$Name' (letters, digits, _ . - ; up to 64)"; return $false }
+    $dir = Get-AosSecretsDir
+    $path = Join-Path $dir "$Name.secret"
+    $tmp = "$path.tmp"
+    try {
+        [System.IO.Directory]::CreateDirectory($dir) | Out-Null
+        [System.IO.File]::WriteAllText($tmp, (ConvertFrom-SecureString -SecureString $Value))
+        # Swap the new file in whole, so a failed write never leaves half a key behind.
+        # [NullString]::Value: a plain $null reaches a .NET string parameter as "" (an invalid backup path).
+        if (Test-Path -LiteralPath $path) { [System.IO.File]::Replace($tmp, $path, [NullString]::Value) }
+        else { [System.IO.File]::Move($tmp, $path) }
     }
-    Import-Module Microsoft.PowerShell.SecretManagement
-    if (-not (Get-SecretVault -Name aos -ErrorAction SilentlyContinue)) {
-        Register-SecretVault -Name aos -ModuleName Microsoft.PowerShell.SecretStore -DefaultVault
-        # Encrypted per-user store without a password prompt, so scripts can read keys unattended.
-        # It protects against the real past failure (keys in plaintext files and backups), not
-        # against malware running as you.
-        Set-SecretStoreConfiguration -Scope CurrentUser -Authentication None -Interaction None -Confirm:$false
-        Write-AosOk 'created the aos vault'
+    catch {
+        if (Test-Path -LiteralPath $tmp) { [System.IO.File]::Delete($tmp) }
+        Write-AosWarn "could not store ${Name}: $($_.Exception.Message)"
+        return $false
     }
+    return $true
+}
+
+function Get-AosSecret([string]$Name) {
+    if (-not (Test-AosSecretName $Name)) { Write-AosWarn "not a valid secret name: '$Name'"; return $null }
+    $path = Join-Path (Get-AosSecretsDir) "$Name.secret"
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { Write-AosWarn "no secret named $Name (aos secret set $Name)"; return $null }
+    try { $secure = ConvertTo-SecureString ([System.IO.File]::ReadAllText($path).Trim()) }
+    catch { Write-AosWarn "cannot decrypt ${Name}: it was stored by another Windows user or machine"; return $null }
+    $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try { return [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+    finally { [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+}
+
+function Get-AosSecretNames {
+    $dir = Get-AosSecretsDir
+    if (-not (Test-Path -LiteralPath $dir -PathType Container)) { return }
+    Get-ChildItem -LiteralPath $dir -File | Where-Object { $_.Name -like '*.secret' } |
+        ForEach-Object { $_.Name.Substring(0, $_.Name.Length - '.secret'.Length) } | Sort-Object
+}
+
+function Remove-AosSecret([string]$Name) {
+    if (-not (Test-AosSecretName $Name)) { Write-AosWarn "not a valid secret name: '$Name'"; return $false }
+    $path = Join-Path (Get-AosSecretsDir) "$Name.secret"
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { Write-AosWarn "no secret named $Name"; return $false }
+    [System.IO.File]::Delete($path)
+    return $true
 }
 
 function Invoke-AosSecret([string]$Action, [string]$Name) {
-    if ($PSVersionTable.PSVersion.Major -lt 7) {
-        if (-not (Test-AosCommand pwsh)) { Write-AosWarn 'aos secret needs PowerShell 7 (install the base layer)'; return }
-        $module = (Join-Path $script:Root 'aos.psm1').Replace("'", "''")
-        pwsh -NoProfile -Command "Import-Module '$module' -DisableNameChecking; aos secret '$Action' '$Name'"
-        return
-    }
     if (@('set', 'get', 'list', 'remove') -notcontains $Action) { Write-AosWarn 'usage: aos secret set|get|list|remove <name>'; return }
     if ($Action -ne 'list' -and -not $Name) { Write-AosWarn "usage: aos secret $Action <name>"; return }
-    Initialize-AosSecretStore
     switch ($Action) {
         'set' {
+            if (-not (Test-AosSecretName $Name)) { Write-AosWarn "not a valid secret name: '$Name' (letters, digits, _ . - ; up to 64)"; return }
             $value = Read-Host "Value for '$Name' (input hidden)" -AsSecureString
-            Set-Secret -Name $Name -SecureStringSecret $value -Vault aos
-            Write-AosOk "stored $Name"
+            if ($value.Length -eq 0) { Write-AosWarn 'empty value; nothing stored'; return }
+            if (Set-AosSecret -Name $Name -Value $value) { Write-AosOk "stored $Name in $(Get-AosSecretsDir)" }
         }
-        'get'    { Get-Secret -Name $Name -Vault aos -AsPlainText }
-        'list'   { Get-SecretInfo -Vault aos | Select-Object -ExpandProperty Name }
-        'remove' { Remove-Secret -Name $Name -Vault aos; Write-AosOk "removed $Name" }
+        'get'    { Get-AosSecret -Name $Name }
+        'list'   { Get-AosSecretNames }
+        'remove' { if (Remove-AosSecret -Name $Name) { Write-AosOk "removed $Name" } }
     }
+}
+
+function Invoke-AosClaudeRemote([string]$Dir) {
+    Push-Location -LiteralPath $Dir
+    try { claude remote-control --capacity 2 } finally { Pop-Location }
+}
+
+function Start-AosRemote([string]$Dir, [switch]$DryRun) {
+    # Claude Code Remote Control as a server: the Claude mobile app (Code) can start and steer sessions
+    # in this folder while the window stays open. Two at a time: same-folder sessions share files.
+    if (-not (Test-AosCommand claude)) { Write-AosWarn 'claude missing (aos install engines)'; return }
+    $projects = Get-AosProjectsDir
+    if (-not $Dir) { $path = [Environment]::GetFolderPath('Desktop') }
+    elseif (Test-Path -LiteralPath $Dir -PathType Container) { $path = (Resolve-Path -LiteralPath $Dir).ProviderPath }
+    elseif (-not [System.IO.Path]::IsPathRooted($Dir) -and (Test-Path -LiteralPath (Join-Path $projects $Dir) -PathType Container)) { $path = Join-Path $projects $Dir }
+    else { Write-AosWarn "no folder '$Dir' here or in $projects"; return }
+    Write-AosStep "Remote Control in $path"
+    Write-AosInfo 'On the phone: Claude app > Code. Leave this window open (Ctrl+C stops it); at most 2 sessions.'
+    Write-AosInfo 'First time in this folder? Run claude here once and accept the workspace trust prompt.'
+    if ($DryRun) { Write-AosDry "claude remote-control --capacity 2   (in $path)"; return }
+    Invoke-AosClaudeRemote -Dir $path
 }
 
 #endregion
@@ -1075,8 +1191,9 @@ aos - agentic-os control
   aos usage                  local usage history for Claude Code and Codex
   aos test                   parse/ASCII checks + the Pester suite under PowerShell 5.1 and 7
   aos new <name>             new project in Desktop\1-Projects: AGENTS.md, CLAUDE.md (@AGENTS.md), .gitignore, git init
-  aos refs                   clone/pull the reference repos in refs/repos.json (into %LOCALAPPDATA%\agentic-os\refs)
-  aos secret set|get|list|remove <name>    Windows secret store (PowerShell 7)
+  aos refs                   clone/pull the reference repos in refs/repos.json (into ~\.aos\refs)
+  aos secret set|get|list|remove <name>    keys encrypted to your Windows login (~\.aos\secrets)
+  aos remote [folder]        let the Claude phone app start sessions here (default: Desktop); keep it open
   aos where                  path of this repo
 '@
 }
@@ -1100,6 +1217,7 @@ function aos {
         'new'     { New-AosProject -Path $a1 }
         'refs'    { Sync-AosRefs -DryRun:$DryRun }
         'secret'  { Invoke-AosSecret -Action $a1 -Name $a2 }
+        'remote'  { Start-AosRemote -Dir $a1 -DryRun:$DryRun }
         'where'   { $script:Root }
         default   { Show-AosHelp }
     }

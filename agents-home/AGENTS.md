@@ -16,6 +16,9 @@ request, on both subscriptions.
 - Home base is the Desktop (`C:\Users\marin\OneDrive\Desktop`, synced by OneDrive): `agentic-os\`
   is this setup, active projects live in `1-Projects\` (`aos new <name>` creates them there).
   Keep heavy caches out of it where you can (clones, model files, large media); OneDrive uploads everything.
+- The Claude and Codex desktop apps are MSIX packages: a new file or folder that they, or anything
+  they launch, create under `AppData` can stay private to that app. Put tools, clones and worktrees
+  under the home folder (`~\.local\bin`, `~\.npm-global`, `~\.aos`), never under AppData.
 - `D:` holds archives and backups (`legacy\`, `PC backup ...`). Open them only when a task needs
   them; write there only when asked.
 - No local models (6 GB VRAM). All model work is cloud.

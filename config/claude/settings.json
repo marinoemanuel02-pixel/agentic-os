@@ -22,6 +22,7 @@
       "Read(~/.ssh/**)",
       "Read(~/.codex/auth.json)",
       "Read(~/.claude/.credentials.json)",
+      "Read(~/.aos/secrets/**)",
       "PowerShell(aos secret get *)",
       "PowerShell(Get-Secret *)"
     ]
