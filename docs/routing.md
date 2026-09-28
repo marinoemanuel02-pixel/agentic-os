@@ -14,7 +14,7 @@ Defaults, not laws: say "claude only" or "codex only" and they yield.
 | Tests, mechanical refactors, renames | Codex (`--profile quick` for trivial ones) | cheap, checkable work |
 | Review of anything risky | the other vendor | independence is the point |
 | Long or background runs | Codex app worktree or Codex cloud | runs while you do other things |
-| Private, offline or quick throwaway work; scoring a choice | the local model (`codex --profile local`, `nar` tools) | free, private, works offline; much weaker |
+| Scoring a choice among known options; private or offline quick checks | the local model (`nar` tools, `ollama run`) | free, private, works offline; much weaker |
 
 ## The patterns that pay for the second subscription
 

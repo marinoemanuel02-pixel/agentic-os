@@ -21,10 +21,9 @@ request, on both subscriptions.
   under the home folder (`~\.local\bin`, `~\.npm-global`, `~\.aos`), never under AppData.
 - `D:` holds archives and backups (`legacy\`, `PC backup ...`). Open them only when a task needs
   them; write there only when asked.
-- Local model: Ollama on this laptop (`aos install local`; the tag is in agentic-os `config/local.json`;
-  `codex --profile local`). Private and offline, much weaker than the cloud models. The `nar` MCP tools
-  score options in one pass of it: use them for choices among known alternatives, then report the real
-  outcome with `nar_feedback`.
+- Local model: Ollama on this laptop (`aos install local`; the tag is in agentic-os `config/local.json`).
+  Private and offline, much weaker than the cloud models. The `nar` MCP tools score options in one pass
+  of it: use them for choices among known alternatives, then report the real outcome with `nar_feedback`.
 
 ## How to work
 
