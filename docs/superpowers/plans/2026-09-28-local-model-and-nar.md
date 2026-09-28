@@ -4,9 +4,9 @@
 
 **Goal:** An `aos install local` layer that runs a local model through Ollama, and a new `nar-tools` repo whose `nar` MCP tools score options in one forward pass of that model, learn calibration from outcomes without regressing, and gate local model upgrades - registered in Claude Code and Codex.
 
-**Architecture:** agentic-os gains a `local` layer (Ollama via winget, model tags in `config/local.json`, generated `~\.aos\local.json` and Codex `local` profile) plus MCP placeholders so `nar` registers from a venv under `~\.aos`. `nar-tools` (Python, uv) is a small package: an Ollama client, single-pass letter scoring, temperature calibration, append-only storage, the promotion gate, a service layer, a FastMCP stdio server, and the bake-off. Build steps 1 and 2 of the spec; the gateway, Paseo and OpenCode (steps 3-5) get their own plans. One deliberate move from the spec's step 1: OpenCode's Ollama provider config and its `nar` registration go to the step-4 plan, where OpenCode is installed and the config can be verified.
+**Architecture:** agentic-os gains a `local` layer (Ollama via winget, model tags in `config/local.json`, generated `~\.aos\local.json` and Codex `local` profile) plus MCP placeholders so `nar` registers from a venv under `~\.aos`. `nar-tools` (Python, uv) is a small package: an Ollama client, single-pass letter scoring, temperature calibration per model and task type, append-only storage with OS file locks, the promotion gate, a service layer, a FastMCP stdio server, and the bake-off. Build steps 1 and 2 of the spec; the gateway, Paseo and OpenCode (steps 3-5) get their own plans. One deliberate move from the spec's step 1: OpenCode's Ollama provider config and its `nar` registration go to the step-4 plan, where OpenCode is installed and the config can be verified.
 
-**Tech Stack:** PowerShell 5.1 + 7 and Pester 5 (agentic-os); Python 3.13, uv, `mcp` (FastMCP) 1.x, `httpx`, pytest (nar-tools); Ollama 0.12.11 or newer.
+**Tech Stack:** PowerShell 5.1 + 7 and Pester 5 (agentic-os); Python 3.13, uv, `mcp` 1.x (FastMCP; v2 renamed it `MCPServer`, a later migration), pydantic `Strict` (bundled with mcp), `httpx`, pytest (nar-tools); Ollama 0.12.11 or newer.
 
 **Spec:** `docs/superpowers/specs/2026-09-28-local-stack-design.md`
 
@@ -16,21 +16,28 @@
 - Tests first: every new test is run and seen failing before its code exists (agentic-os rule 3).
 - Tests use `$TestDrive`, `$env:AOS_BACKUPS`, `tmp_path` and fakes - never the real profile, registry, network, npm config or a live Ollama. Live checks happen only in Task 13.
 - Idempotent: a second `aos sync` / `aos install local` changes nothing.
-- Nothing is installed or cloned under AppData from inside the desktop apps: state in `~\.aos`, models in `~\.ollama`, the nar venv in `~\.aos\venvs\nar-tools`.
+- Nothing is installed or cloned under AppData from inside the desktop apps: state in `~\.aos`, models in `~\.ollama`, the nar venv in `~\.aos\venvs\nar-tools`; uv never downloads a Python (`UV_PYTHON_DOWNLOADS=never`, the venv uses the system Python 3.13).
 - Local model tags live only in `config/local.json` and change only through `aos local adopt` (the eval gate). Cloud models stay unnamed.
 - No absolute paths in either repo; `{{home}}` / `{{projects}}` placeholders resolve at run time.
 - No secrets in files.
 - `nar` data (task text) stays in `NAR_HOME` (default `~\.aos\nar`), never in OneDrive or git.
+- Calibration is kept per model AND task type: a new model starts uncalibrated (temperature 1) and never inherits another model's temperature or outcomes.
+- Cross-process locks are OS file locks (`msvcrt.locking` on Windows): the OS releases them if a holder dies; they are never taken over on a timer.
 - At most 20 options per `nar_choose` (Ollama returns at most 20 alternatives per position).
-- Promotion rule: a refitted calibrator replaces the current one only if Brier score AND expected calibration error on the held-out calls are both no worse. Model rule: gated metrics (tool-call success, `nar_choose` accuracy, calibration error) no worse than the current default; hard limits: fully on the 6 GB GPU and at least 15 tokens/s.
+- `aos nar` arguments use long options (`--option`): PowerShell reads `-o` as its own `-OutVariable`/`-OutBuffer` (verified in 5.1 and 7).
+- Promotion rule: a refitted calibrator replaces the current one only if Brier score AND expected calibration error on the held-out calls are both no worse. Model rule: gated metrics (tool-call success, `nar_choose` accuracy, calibration error with the calibration each model would really use) no worse than a successfully measured current default; hard limits: fully on the 6 GB GPU and at least `min_tokens_per_s` (15) tokens/s.
 
 ## Review Focus
 
 1. Ollama not running, or the model not pulled, when an agent calls a nar tool -> a structured `{"unavailable": true, "reason": ...}` result, never an exception (test in Task 10).
-2. The model's first token is not an option letter (it starts thinking, writes prose, answers in lowercase) -> equal probabilities with `letter_signal: false`, never a crash or a confident wrong pick (test in Task 5).
-3. Bad inputs: fewer than 2 or more than 20 options, empty or duplicate options, a `task_type` with path characters, more than 50 items to classify -> an error result and nothing logged (tests in Task 9).
-4. Feedback for an unknown `call_id`, an out-of-range index, a boolean, or text matching no option -> an error and nothing appended (tests in Task 9).
-5. Claude, Codex and OpenCode each run their own `nar-mcp` process; two refits at once -> the refit lock admits one, lines stay whole (tests in Task 7; `gate.refit` holds the lock).
+2. The model's generated first token is not an option letter (it starts thinking, writes prose, answers in lowercase or with a letter outside the options), even when letters appear among the alternatives -> equal probabilities with `letter_signal: false`, never a confident pick from a low-probability alternative (tests in Task 5).
+3. Bad inputs: fewer than 2 or more than 20 options, empty or duplicate options, a `task_type` with path characters, more than 50 items to classify, a boolean as feedback outcome through MCP -> an error result and nothing logged (tests in Tasks 9 and 10).
+4. Feedback for an unknown `call_id`, an out-of-range index, or text matching no option -> an error and nothing appended (tests in Task 9).
+5. Claude, Codex and OpenCode each run their own `nar-mcp` process: concurrent appends keep every line whole; a live refit holder is never evicted; a crashed holder's lock is released by the OS (multi-process tests in Task 7).
+
+## Plan review (Codex, before any code)
+
+All 14 findings accepted: clipped NLL broke the temperature search (Task 6, log-softmax); the generated token was ignored (Tasks 4-5); a failed baseline could authorize adoption (Task 11); the lock could evict a live holder (Task 7, OS locks); calibration leaked across models and the eval used T=1 (Tasks 7-9, 11); uv could download Python into AppData (Tasks 3, 12); `-o` breaks `aos nar` (Tasks 12-13); `aos sync` skipped the local state (Task 12); gate tests could not tell AND from OR (Tasks 8, 11); MCP feedback rejected integers and accepted booleans (Task 10); invalid tool calls scored as success (Task 11); a torn line swallowed the next record (Task 7); rollback overwrote version history (Task 7); GPU share, reliability and the speed floor were never reported or used (Tasks 1, 9, 11).
 
 ## File Structure
 
@@ -38,14 +45,14 @@ agentic-os (branch `local-stack`):
 - `config/local.json` (new): default/optional/candidate model tags, Ollama URL, speed floor.
 - `packages.json` (modify): new `local` list with `Ollama.Ollama`.
 - `config/mcp.json` (modify): `nar` server with `{{home}}` placeholders and `requires`.
-- `aos.psm1` (modify): local layer, local state, Codex `local` profile, MCP placeholders and `Add-AosMcpServer`, nar venv, `aos nar`, `aos local adopt`, status lines.
+- `aos.psm1` (modify): local layer, local state, GPU check, Codex `local` profile, MCP placeholders and `Add-AosMcpServer`, nar venv, `aos nar`, `aos local adopt`, status lines, `Sync-AosBrain` wiring.
 - `bootstrap.ps1` (modify): `local` in the layer list.
 - `tests/aos.Tests.ps1` (modify): Describe blocks for each aos task.
 - `agents-home/AGENTS.md`, `README.md`, `docs/decisions.md`, `docs/routing.md` (modify, Task 14).
 
 nar-tools (new repo `Desktop\1-Projects\nar-tools`):
 - `pyproject.toml`, `uv.lock`, `AGENTS.md`, `CLAUDE.md`, `.gitignore`, `.gitattributes`, `.github/workflows/ci.yml`
-- `src/nar_tools/__init__.py`, `ollama.py` (HTTP client), `scoring.py` (letters -> log-probs), `calibration.py` (temperature, Brier, ECE), `store.py` (JSONL, calibrators, lock), `gate.py` (the promotion rule), `service.py` (what the tools do), `server.py` (FastMCP), `evaluate.py` (bake-off), `cli.py` (`nar`)
+- `src/nar_tools/__init__.py`, `ollama.py` (HTTP client), `scoring.py` (letters -> log-probs), `calibration.py` (temperature, Brier, ECE), `store.py` (JSONL, calibrators, OS locks), `gate.py` (the promotion rule), `service.py` (what the tools do), `server.py` (FastMCP), `evaluate.py` (bake-off), `cli.py` (`nar`)
 - `src/nar_tools/evals/choose.jsonl`, `tools.jsonl`, `toolset.json`
 - `tests/test_*.py`, one per module.
 
@@ -59,13 +66,13 @@ Tasks 1, 2 and 12 (agentic-os): Codex writes the Pester tests (at least the ones
 
 **Files:**
 - Create: `config/local.json`
-- Modify: `packages.json` (add `local` list), `aos.psm1` (new functions after `Get-AosProjectsDir`; `$script:Layers`; `Install-AosLayer` switch; `Get-AosStatus`), `bootstrap.ps1` (ValidateSet)
+- Modify: `packages.json` (add `local` list), `aos.psm1` (new functions after `Get-AosProjectsDir`; `$script:Layers`; `Install-AosLayer` switch; `Get-AosStatus`; help), `bootstrap.ps1` (ValidateSet)
 - Test: `tests/aos.Tests.ps1` (new `Describe 'Local model layer'` inside the outer Describe)
 
 **Interfaces:**
-- Produces: `Get-AosLocalConfigPath`, `Get-AosLocalConfig` (ordered dictionary or `$null`), `Get-AosStateDir` (`~\.aos`), `Test-AosOllamaModel -List <ollama list text> -Tag <tag>` (bool), `Sync-AosLocalState [-DryRun]` (writes `~\.aos\local.json` with `default` and `ollama_url`), `Install-AosLocal [-DryRun]`.
+- Produces: `Get-AosLocalConfigPath`, `Get-AosLocalConfig` (ordered dictionary or `$null`), `Get-AosStateDir` (`~\.aos`), `Test-AosOllamaModel -List <ollama list text> -Tag <tag>` (bool), `Test-AosOllamaGpu -PsText <ollama ps text> -Tag <tag>` (`'gpu'`, `'split'` or `'absent'`), `Sync-AosLocalState [-DryRun]` (writes `~\.aos\local.json`: `default`, `ollama_url`, `min_tokens_per_s`), `Install-AosLocal [-DryRun]`, and a stub `Install-AosNarTools` (real in Task 12).
 
-- [ ] **Step 1: Write the failing tests** (append inside the outer `Describe 'aos isolated suite'`, before its closing brace)
+- [ ] **Step 1: Write the failing tests** (append inside the outer `Describe 'aos isolated suite'`, before its closing brace), and add the stub `function Install-AosNarTools([switch]$DryRun) { }` to `aos.psm1` so the mock has a target.
 
 ```powershell
 Describe 'Local model layer' {
@@ -73,16 +80,21 @@ Describe 'Local model layer' {
         $stateDir = Join-Path $caseRoot 'state'
         Mock Get-AosStateDir -ModuleName aos { $stateDir }
         Mock Get-AosLocalConfig -ModuleName aos {
-            [ordered]@{ default = 'openbmb/minicpm5-2b:q8_0'; optional = @('qwen3.5:4b'); ollama_url = 'http://127.0.0.1:11434' }
+            [ordered]@{ default = 'openbmb/minicpm5-2b:q8_0'; optional = @('qwen3.5:4b'); ollama_url = 'http://127.0.0.1:11434'; min_tokens_per_s = 15 }
         }
         Mock Install-AosWingetPackage -ModuleName aos { }
         Mock Install-AosNarTools -ModuleName aos { }
         Mock Write-AosWarn -ModuleName aos { }
+        Mock Write-AosOk -ModuleName aos { }
         Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'ollama' }
         Mock Invoke-AosCapture -ModuleName aos {
             @{ Code = 0; Text = "NAME                        ID     SIZE      MODIFIED`nopenbmb/minicpm5-2b:q8_0    abc    2.7 GB    1 day ago" }
         } -ParameterFilter { $CommandLine -eq 'ollama list' }
         Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = 'success' } } -ParameterFilter { $CommandLine -like 'ollama pull *' }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = 'OK' } } -ParameterFilter { $CommandLine -like 'ollama run *' }
+        Mock Invoke-AosCapture -ModuleName aos {
+            @{ Code = 0; Text = "NAME                        ID     SIZE      PROCESSOR    CONTEXT    UNTIL`nopenbmb/minicpm5-2b:q8_0    abc    3.9 GB    100% GPU     4096       4 minutes from now" }
+        } -ParameterFilter { $CommandLine -eq 'ollama ps' }
     }
 
     It 'matches Ollama tags exactly, treating a bare name as :latest' {
@@ -96,24 +108,43 @@ Describe 'Local model layer' {
         }
     }
 
-    It 'pulls only the configured models that are missing and writes the local state file' {
+    It 'reads the GPU share from ollama ps' {
+        InModuleScope aos {
+            $ps = "NAME ID SIZE PROCESSOR`na:1 x 3 GB 100% GPU 4096 now`nb:1 y 9 GB 48%/52% CPU/GPU 4096 now"
+            Test-AosOllamaGpu -PsText $ps -Tag 'a:1' | Should -BeExactly 'gpu'
+            Test-AosOllamaGpu -PsText $ps -Tag 'b:1' | Should -BeExactly 'split'
+            Test-AosOllamaGpu -PsText $ps -Tag 'c:1' | Should -BeExactly 'absent'
+        }
+    }
+
+    It 'pulls only the configured models that are missing, checks the GPU and writes the local state file' {
         InModuleScope aos { Install-AosLocal }
         Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -eq 'ollama pull qwen3.5:4b' }
         Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -eq 'ollama pull openbmb/minicpm5-2b:q8_0' }
+        Should -Invoke Write-AosOk -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'entirely on the GPU' }
         $state = Get-Content -Raw (Join-Path $stateDir 'local.json') | ConvertFrom-Json
         $state.default | Should -BeExactly 'openbmb/minicpm5-2b:q8_0'
         $state.ollama_url | Should -BeExactly 'http://127.0.0.1:11434'
+        $state.min_tokens_per_s | Should -Be 15
         Should -Invoke Install-AosNarTools -ModuleName aos -Times 1 -Exactly
     }
 
-    It 'pulls nothing and writes nothing in DryRun' {
+    It 'warns when the default model does not fit the GPU' {
+        Mock Invoke-AosCapture -ModuleName aos {
+            @{ Code = 0; Text = "NAME ID SIZE PROCESSOR`nopenbmb/minicpm5-2b:q8_0 abc 7.9 GB 35%/65% CPU/GPU 4096 now" }
+        } -ParameterFilter { $CommandLine -eq 'ollama ps' }
+        InModuleScope aos { Install-AosLocal }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'partly on the CPU' }
+    }
+
+    It 'pulls, runs and writes nothing in DryRun' {
         InModuleScope aos { Install-AosLocal -DryRun }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'ollama pull *' }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'ollama pull *' -or $CommandLine -like 'ollama run *' }
         Test-Path -LiteralPath (Join-Path $stateDir 'local.json') | Should -BeFalse
         Should -Invoke Install-AosWingetPackage -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Id -eq 'Ollama.Ollama' -and $DryRun }
     }
 
-    It 'warns and pulls nothing when ollama is not on PATH' {
+    It 'warns and runs nothing when ollama is not on PATH' {
         Mock Test-AosCommand -ModuleName aos { $false } -ParameterFilter { $Name -eq 'ollama' }
         InModuleScope aos { Install-AosLocal }
         Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'ollama' }
@@ -130,16 +161,10 @@ Describe 'Local model layer' {
 }
 ```
 
-`Install-AosNarTools` is mocked here and implemented in Task 12; add a stub now so the mock has a target:
-
-```powershell
-function Install-AosNarTools([switch]$DryRun) { }
-```
-
 - [ ] **Step 2: Run the tests, see them fail**
 
 Run: `pwsh -NoProfile -ExecutionPolicy Bypass -File tests\Run-Tests.ps1`
-Expected: the 5 new tests FAIL (`Get-AosStateDir` / `Install-AosLocal` not found); the existing 124 pass.
+Expected: the 7 new tests FAIL (functions not found); the existing 124 pass.
 
 - [ ] **Step 3: Implement**
 
@@ -161,7 +186,7 @@ Expected: the 5 new tests FAIL (`Get-AosStateDir` / `Install-AosLocal` not found
 }
 ```
 
-`packages.json`: add after `"base": [...]`:
+`packages.json`, after the `base` list:
 
 ```json
   "local": [
@@ -169,7 +194,7 @@ Expected: the 5 new tests FAIL (`Get-AosStateDir` / `Install-AosLocal` not found
   ],
 ```
 
-`aos.psm1`: `$script:Layers = @('base', 'engines', 'brain', 'bridges', 'refs', 'local')`; in `Install-AosLayer`'s switch add `'local'   { Install-AosLocal -DryRun:$DryRun }`; add after `Get-AosProjectsDir`:
+`aos.psm1`: `$script:Layers = @('base', 'engines', 'brain', 'bridges', 'refs', 'local')`; in `Install-AosLayer`'s switch add `'local'   { Install-AosLocal -DryRun:$DryRun }`; in `Show-AosHelp` the install line lists `base | engines | brain | bridges | refs | local | all`; add after `Get-AosProjectsDir`:
 
 ```powershell
 function Get-AosLocalConfigPath { return (Join-Path $script:Root 'config\local.json') }
@@ -182,28 +207,45 @@ function Get-AosLocalConfig {
 
 function Get-AosStateDir { return (Join-Path $HOME '.aos') }
 
+function Get-AosOllamaName([string]$Tag) {
+    # Ollama shows a bare name with :latest.
+    if ($Tag -notmatch ':') { return "${Tag}:latest" }
+    return $Tag
+}
+
 function Test-AosOllamaModel([string]$List, [string]$Tag) {
-    # `ollama list` prints one model per line, NAME first; a bare name means :latest.
-    $want = $Tag
-    if ($want -notmatch ':') { $want = "${want}:latest" }
+    $want = Get-AosOllamaName $Tag
     foreach ($line in ($List -split "`r?`n")) {
-        $name = ($line.Trim() -split '\s+')[0]
-        if ($name -ieq $want) { return $true }
+        if ((($line.Trim() -split '\s+')[0]) -ieq $want) { return $true }
     }
     return $false
 }
 
+function Test-AosOllamaGpu([string]$PsText, [string]$Tag) {
+    # `ollama ps` PROCESSOR column: "100% GPU" when the model fits the GPU, "35%/65% CPU/GPU" when split.
+    $want = Get-AosOllamaName $Tag
+    foreach ($line in ($PsText -split "`r?`n")) {
+        if ((($line.Trim() -split '\s+')[0]) -ieq $want) {
+            if ($line -match '\b100% GPU\b') { return 'gpu' }
+            return 'split'
+        }
+    }
+    return 'absent'
+}
+
 function Sync-AosLocalState([switch]$DryRun) {
-    # ~\.aos\local.json tells nar which model is the local default. Compared by value, not text:
-    # PowerShell 5.1 and 7 format JSON differently, and either may run aos.
+    # ~\.aos\local.json tells nar the local default, the Ollama URL and the speed floor. Compared by
+    # value, not text: Windows PowerShell 5.1 and PowerShell 7 format JSON differently.
     $cfg = Get-AosLocalConfig
     if (-not $cfg) { return }
     $target = Join-Path (Get-AosStateDir) 'local.json'
+    $want = [ordered]@{ default = $cfg['default']; ollama_url = $cfg['ollama_url']; min_tokens_per_s = $cfg['min_tokens_per_s'] }
     $have = Read-AosJson $target
-    if ($have -and ($have['default'] -eq $cfg['default']) -and ($have['ollama_url'] -eq $cfg['ollama_url'])) { Write-AosOk "$target up to date"; return }
+    $same = [bool]$have
+    if ($have) { foreach ($k in @($want.Keys)) { if ([string]$have[$k] -ne [string]$want[$k]) { $same = $false } } }
+    if ($same) { Write-AosOk "$target up to date"; return }
     if ($DryRun) { Write-AosDry "would write $target"; return }
-    $state = [ordered]@{ default = $cfg['default']; ollama_url = $cfg['ollama_url'] }
-    Write-AosText -Path $target -Text ((ConvertTo-Json -InputObject $state -Depth 5) + "`n")
+    Write-AosText -Path $target -Text ((ConvertTo-Json -InputObject $want -Depth 5) + "`n")
     Write-AosOk "wrote $target"
 }
 
@@ -226,12 +268,21 @@ function Install-AosLocal([switch]$DryRun) {
         $r = Invoke-AosCapture "ollama pull $tag"
         if ($r.Code -eq 0) { Write-AosOk "pulled $tag" } else { Write-AosWarn "ollama pull $tag failed (exit $($r.Code))" }
     }
+    $default = [string]$cfg['default']
+    if (-not $DryRun -and (Test-AosOllamaModel -List (Invoke-AosCapture 'ollama list').Text -Tag $default)) {
+        $null = Invoke-AosCapture "ollama run $default `"Reply with OK`""   # load it once, then ask where it runs
+        switch (Test-AosOllamaGpu -PsText (Invoke-AosCapture 'ollama ps').Text -Tag $default) {
+            'gpu'   { Write-AosOk "$default runs entirely on the GPU" }
+            'split' { Write-AosWarn "$default does not fit the GPU and runs partly on the CPU (slower)" }
+            default { Write-AosWarn "$default did not load (see ollama ps)" }
+        }
+    }
     Sync-AosLocalState -DryRun:$DryRun
     Install-AosNarTools -DryRun:$DryRun
 }
 ```
 
-`Get-AosStatus`: after the Tools section add:
+`Get-AosStatus`, after the Tools section:
 
 ```powershell
     $local = Get-AosLocalConfig
@@ -241,26 +292,30 @@ function Install-AosLocal([switch]$DryRun) {
         else {
             $r = Invoke-AosCapture 'ollama list'
             if ($r.Code -ne 0) { Write-AosWarn 'ollama is installed but not running (start the Ollama app)' }
-            elseif (Test-AosOllamaModel -List $r.Text -Tag $local['default']) { Write-AosOk "default model $($local['default'])" }
-            else { Write-AosWarn "default model $($local['default']) not pulled (aos install local)" }
+            elseif (-not (Test-AosOllamaModel -List $r.Text -Tag $local['default'])) { Write-AosWarn "default model $($local['default']) not pulled (aos install local)" }
+            else {
+                switch (Test-AosOllamaGpu -PsText (Invoke-AosCapture 'ollama ps').Text -Tag $local['default']) {
+                    'gpu'   { Write-AosOk "default model $($local['default']) (loaded, 100% GPU)" }
+                    'split' { Write-AosWarn "default model $($local['default']) is loaded split across CPU and GPU" }
+                    default { Write-AosOk "default model $($local['default']) (not loaded right now)" }
+                }
+            }
         }
     }
 ```
 
 `bootstrap.ps1`: `[ValidateSet('all','base','engines','brain','bridges','refs','local')]`.
 
-`Show-AosHelp`: the install line reads `base | engines | brain | bridges | refs | local | all`.
-
 - [ ] **Step 4: Run the tests, see them pass**
 
 Run: `pwsh -NoProfile -ExecutionPolicy Bypass -Command "Import-Module .\aos.psm1 -Force -DisableNameChecking; aos test; exit $LASTEXITCODE"`
-Expected: static checks ok; all tests pass in both shells (124 + 5).
+Expected: static checks ok; all tests pass in both shells.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add config/local.json packages.json aos.psm1 bootstrap.ps1 tests/aos.Tests.ps1
-git commit -m "aos: local layer (Ollama, models from config/local.json, ~/.aos/local.json)"
+git commit -m "aos: local layer (Ollama, models from config/local.json, GPU check, ~/.aos/local.json)"
 ```
 
 ---
@@ -298,7 +353,7 @@ Describe 'Codex local profile' {
 }
 ```
 
-- [ ] **Step 2: Run, see them fail** (`tests\Run-Tests.ps1`; expected: 2 new FAIL)
+- [ ] **Step 2: Run, see them fail** (`tests\Run-Tests.ps1`; 2 new FAIL)
 
 - [ ] **Step 3: Implement** - at the end of `Get-AosCodexProfiles`, before `return $list`:
 
@@ -318,12 +373,7 @@ Describe 'Codex local profile' {
 
 - [ ] **Step 4: Run, see them pass** (`aos test`; both shells green)
 
-- [ ] **Step 5: Commit**
-
-```bash
-git add aos.psm1 tests/aos.Tests.ps1
-git commit -m "aos: generate the Codex local profile from config/local.json"
-```
+- [ ] **Step 5: Commit** (`git add aos.psm1 tests/aos.Tests.ps1; git commit -m "aos: generate the Codex local profile from config/local.json"`)
 
 ---
 
@@ -335,11 +385,9 @@ git commit -m "aos: generate the Codex local profile from config/local.json"
 - Modify: `AGENTS.md` (fill the template)
 
 **Interfaces:**
-- Produces: importable package `nar_tools` with `__version__`; console scripts `nar` (`nar_tools.cli:main`) and `nar-mcp` (`nar_tools.server:main`) declared now, implemented in Tasks 10-11.
+- Produces: package `nar_tools` with `__version__`; console scripts `nar` (`nar_tools.cli:main`) and `nar-mcp` (`nar_tools.server:main`), implemented in Tasks 10-11.
 
-- [ ] **Step 1: Create the project**
-
-Run (pwsh): `aos new nar-tools` - expect `created AGENTS.md`, `CLAUDE.md`, `.gitignore`, `.gitattributes`, `git init` in `Desktop\1-Projects\nar-tools`.
+- [ ] **Step 1: Create the project** - `aos new nar-tools` (expect `created AGENTS.md`, `CLAUDE.md`, `.gitignore`, `.gitattributes`, `git init` in `Desktop\1-Projects\nar-tools`).
 
 - [ ] **Step 2: Write the failing smoke test** `tests/test_smoke.py`
 
@@ -389,6 +437,19 @@ testpaths = ["tests"]
 __version__ = "0.1.0"
 ```
 
+`tests/conftest.py`:
+
+```python
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def isolated_state(tmp_path, monkeypatch):
+    """No test reads or writes the user's real ~/.aos: local state and NAR_HOME point into tmp_path."""
+    monkeypatch.setenv("AOS_LOCAL_STATE", str(tmp_path / "aos-local.json"))
+    monkeypatch.setenv("NAR_HOME", str(tmp_path / "nar-home"))
+```
+
 `.github/workflows/ci.yml`:
 
 ```yaml
@@ -416,14 +477,15 @@ The global contract (`~/.agents/AGENTS.md`) already applies; only add what is sp
 ## What this is
 
 The `nar` MCP tools: calibrated, single-forward-pass (non-autoregressive) scoring of options with the
-local model (Ollama); a learning loop that refits calibration from outcome feedback and promotes a new
-calibrator only if it is no worse on held-out calls; and `nar eval`, the bake-off that gates local model
-upgrades. Design: agentic-os `docs/superpowers/specs/2026-09-28-local-stack-design.md`.
+local model (Ollama); a learning loop that refits calibration per model and task type from outcome
+feedback and promotes a new calibrator only if it is no worse on held-out calls; and `nar eval`, the
+bake-off that gates local model upgrades. Design: agentic-os
+`docs/superpowers/specs/2026-09-28-local-stack-design.md`.
 
 ## Commands
 
-Keep the dev venv out of OneDrive (once per shell):
-`$env:UV_PROJECT_ENVIRONMENT = "$HOME\.aos\venvs\nar-tools-dev"`
+Keep the dev venv out of OneDrive and never let uv download a Python into AppData (once per shell):
+`$env:UV_PROJECT_ENVIRONMENT = "$HOME\.aos\venvs\nar-tools-dev"; $env:UV_PYTHON_DOWNLOADS = "never"`
 
 - Install: `uv sync`
 - Test: `uv run pytest -q`
@@ -438,25 +500,21 @@ Keep the dev venv out of OneDrive (once per shell):
 
 - Python 3.13, standard library first; runtime dependencies only `mcp` and `httpx`.
 - Data lives in `NAR_HOME` (default `~\.aos\nar`), never in the repo or OneDrive.
+- Calibration is per model and task type. Cross-process locks are OS file locks (`store.file_lock`).
 - The promotion rule in `gate.py` is the product: a candidate replaces the current calibrator only if
   Brier score and ECE on the held-out calls are both no worse.
 
 ## Risky areas (get a second opinion from the other vendor before changing)
 
-- `gate.py` and `calibration.py` (the non-regressive rule); `store.py` locking.
+- `gate.py` and `calibration.py` (the non-regressive rule); `store.py` locking and appends.
 ```
 
 - [ ] **Step 4: Run it**
 
-Run: `$env:UV_PROJECT_ENVIRONMENT = "$HOME\.aos\venvs\nar-tools-dev"; uv sync; uv run pytest -q`
-Expected: `1 passed`; `uv.lock` created.
+Run: `$env:UV_PROJECT_ENVIRONMENT = "$HOME\.aos\venvs\nar-tools-dev"; $env:UV_PYTHON_DOWNLOADS = "never"; uv sync; uv run pytest -q`
+Expected: `1 passed`; `uv.lock` created; `uv sync` used the system Python 3.13 (no download).
 
-- [ ] **Step 5: Commit**
-
-```bash
-git add -A
-git commit -m "nar-tools: project scaffold, uv, CI"
-```
+- [ ] **Step 5: Commit** (`git add -A; git commit -m "nar-tools: project scaffold, uv, CI"`)
 
 ---
 
@@ -467,7 +525,7 @@ git commit -m "nar-tools: project scaffold, uv, CI"
 - Test: `tests/test_ollama.py`
 
 **Interfaces:**
-- Produces: `class OllamaUnavailable(RuntimeError)`; `@dataclass(frozen=True) TokenLogprob(token: str, logprob: float)`; `local_state(path: Path | None = None) -> dict`; `class OllamaClient(base_url=None, timeout=120.0, transport=None)` with `next_token_logprobs(model: str, messages: list[dict], top: int = 20) -> list[TokenLogprob]`, `chat(model, messages, tools=None, num_predict=None) -> dict`, `loaded_models() -> list[dict]`, `unload(model) -> None`.
+- Produces: `class OllamaUnavailable(RuntimeError)`; `@dataclass(frozen=True) TokenLogprob(token: str, logprob: float)`; `@dataclass(frozen=True) FirstToken(token: str, logprob: float, top: tuple[TokenLogprob, ...])`; `local_state(path: Path | None = None) -> dict`; `class OllamaClient(base_url=None, timeout=120.0, transport=None)` with `first_token(model: str, messages: list[dict], top: int = 20) -> FirstToken`, `chat(model, messages, tools=None, num_predict=None) -> dict`, `loaded_models() -> list[dict]`, `unload(model) -> None`.
 
 - [ ] **Step 1: Write the failing tests** `tests/test_ollama.py`
 
@@ -477,14 +535,14 @@ import json
 import httpx
 import pytest
 
-from nar_tools.ollama import OllamaClient, OllamaUnavailable, TokenLogprob, local_state
+from nar_tools.ollama import FirstToken, OllamaClient, OllamaUnavailable, TokenLogprob, local_state
 
 
 def client_with(handler):
     return OllamaClient(base_url="http://ollama.test", transport=httpx.MockTransport(handler))
 
 
-def test_next_token_logprobs_asks_for_one_token_with_top_20():
+def test_first_token_keeps_the_generated_token_and_the_alternatives():
     seen = {}
 
     def handler(request):
@@ -494,8 +552,8 @@ def test_next_token_logprobs_asks_for_one_token_with_top_20():
             "logprobs": [{"token": "B", "logprob": -0.1,
                           "top_logprobs": [{"token": "B", "logprob": -0.1}, {"token": "A", "logprob": -2.5}]}]})
 
-    top = client_with(handler).next_token_logprobs("m", [{"role": "user", "content": "q"}])
-    assert top == [TokenLogprob("B", -0.1), TokenLogprob("A", -2.5)]
+    first = client_with(handler).first_token("m", [{"role": "user", "content": "q"}])
+    assert first == FirstToken("B", -0.1, (TokenLogprob("B", -0.1), TokenLogprob("A", -2.5)))
     assert seen["options"]["num_predict"] == 1 and seen["options"]["temperature"] == 0
     assert seen["logprobs"] is True and seen["top_logprobs"] == 20
     assert seen["think"] is False and seen["stream"] is False
@@ -506,7 +564,7 @@ def test_unreachable_ollama_raises_unavailable():
         raise httpx.ConnectError("refused", request=request)
 
     with pytest.raises(OllamaUnavailable, match="cannot reach Ollama"):
-        client_with(handler).next_token_logprobs("m", [])
+        client_with(handler).first_token("m", [])
 
 
 def test_missing_logprobs_explains_the_version_floor():
@@ -514,7 +572,7 @@ def test_missing_logprobs_explains_the_version_floor():
         return httpx.Response(200, json={"message": {"content": "B"}})
 
     with pytest.raises(OllamaUnavailable, match="0.12.11"):
-        client_with(handler).next_token_logprobs("m", [])
+        client_with(handler).first_token("m", [])
 
 
 def test_retries_without_think_when_the_model_rejects_it():
@@ -528,7 +586,7 @@ def test_retries_without_think_when_the_model_rejects_it():
         return httpx.Response(200, json={"logprobs": [{"token": "A", "logprob": -0.2,
                                                        "top_logprobs": [{"token": "A", "logprob": -0.2}]}]})
 
-    assert client_with(handler).next_token_logprobs("m", []) == [TokenLogprob("A", -0.2)]
+    assert client_with(handler).first_token("m", []).token == "A"
     assert len(bodies) == 2 and "think" not in bodies[1]
 
 
@@ -550,15 +608,12 @@ def test_local_state_reads_the_file_and_tolerates_absence(tmp_path):
     assert local_state(p)["default"] == "x:1"
 ```
 
-- [ ] **Step 2: Run, see them fail**
-
-Run: `uv run pytest tests/test_ollama.py -q`
-Expected: FAIL, `ModuleNotFoundError: nar_tools.ollama`.
+- [ ] **Step 2: Run, see them fail** (`uv run pytest tests/test_ollama.py -q` -> `ModuleNotFoundError`)
 
 - [ ] **Step 3: Implement** `src/nar_tools/ollama.py`
 
 ```python
-"""Minimal Ollama client: one-step log-probabilities, chat with tools, loaded models."""
+"""Minimal Ollama client: the first generated token with its alternatives, chat with tools, loaded models."""
 from __future__ import annotations
 
 import json
@@ -581,8 +636,16 @@ class TokenLogprob:
     logprob: float
 
 
+@dataclass(frozen=True)
+class FirstToken:
+    """The token the model actually generated first, and the most likely alternatives at that position."""
+    token: str
+    logprob: float
+    top: tuple[TokenLogprob, ...]
+
+
 def local_state(path: Path | None = None) -> dict:
-    """~/.aos/local.json, written by `aos install local` and `aos sync`: default model, Ollama URL."""
+    """~/.aos/local.json, written by `aos install local` and `aos sync`: default model, URL, speed floor."""
     p = path or Path(os.environ.get("AOS_LOCAL_STATE") or (Path.home() / ".aos" / "local.json"))
     try:
         return json.loads(p.read_text(encoding="utf-8"))
@@ -616,15 +679,17 @@ class OllamaClient:
                 return self._request("POST", "/api/chat", {k: v for k, v in body.items() if k != "think"})
             raise
 
-    def next_token_logprobs(self, model: str, messages: list[dict], top: int = 20) -> list[TokenLogprob]:
-        """One forward pass: the most likely first tokens of the reply, with log-probabilities."""
+    def first_token(self, model: str, messages: list[dict], top: int = 20) -> FirstToken:
+        """One forward pass: the generated first token of the reply and its top alternatives."""
         body = {"model": model, "messages": messages, "stream": False, "think": False,
                 "logprobs": True, "top_logprobs": top,
                 "options": {"num_predict": 1, "temperature": 0, "seed": 0}}
         entries = self._chat(body).get("logprobs") or []
         if not entries:
             raise OllamaUnavailable(f"{model} returned no logprobs (needs Ollama 0.12.11 or newer)")
-        return [TokenLogprob(str(t["token"]), float(t["logprob"])) for t in entries[0].get("top_logprobs") or []]
+        e = entries[0]
+        alternatives = tuple(TokenLogprob(str(t["token"]), float(t["logprob"])) for t in e.get("top_logprobs") or [])
+        return FirstToken(str(e.get("token", "")), float(e.get("logprob", 0.0)), alternatives)
 
     def chat(self, model: str, messages: list[dict], tools: list[dict] | None = None,
              num_predict: int | None = None) -> dict:
@@ -644,9 +709,9 @@ class OllamaClient:
         self._request("POST", "/api/generate", {"model": model, "keep_alive": 0})
 ```
 
-- [ ] **Step 4: Run, see them pass** (`uv run pytest tests/test_ollama.py -q` -> 6 passed)
+- [ ] **Step 4: Run, see them pass** (6 passed)
 
-- [ ] **Step 5: Commit** (`git add src/nar_tools/ollama.py tests/test_ollama.py; git commit -m "nar: Ollama client with one-step logprobs"`)
+- [ ] **Step 5: Commit** (`git commit -m "nar: Ollama client (first token with alternatives)"`)
 
 ---
 
@@ -657,8 +722,8 @@ class OllamaClient:
 - Test: `tests/test_scoring.py`
 
 **Interfaces:**
-- Consumes: `TokenLogprob` (Task 4).
-- Produces: `LETTERS = "ABCDEFGHIJKLMNOPQRST"`, `MAX_OPTIONS = 20`, `build_messages(question: str, options: list[str]) -> list[dict]`, `letter_logprobs(top: list[TokenLogprob], n_options: int) -> tuple[list[float], bool]`.
+- Consumes: `FirstToken`, `TokenLogprob` (Task 4).
+- Produces: `LETTERS = "ABCDEFGHIJKLMNOPQRST"`, `MAX_OPTIONS = 20`, `build_messages(question: str, options: list[str]) -> list[dict]`, `letter_logprobs(first: FirstToken, n_options: int) -> tuple[list[float], bool]`.
 
 - [ ] **Step 1: Write the failing tests** `tests/test_scoring.py`
 
@@ -667,8 +732,13 @@ import math
 
 import pytest
 
-from nar_tools.ollama import TokenLogprob
+from nar_tools.ollama import FirstToken, TokenLogprob
 from nar_tools.scoring import LETTERS, build_messages, letter_logprobs
+
+
+def first(token, *alternatives):
+    top = tuple(TokenLogprob(t, lp) for t, lp in alternatives)
+    return FirstToken(token, top[0].logprob if top else -0.1, top)
 
 
 def test_build_messages_letters_each_option():
@@ -679,39 +749,41 @@ def test_build_messages_letters_each_option():
 
 
 def test_variants_of_a_letter_add_up():
-    top = [TokenLogprob("A", math.log(0.5)), TokenLogprob(" A", math.log(0.2)), TokenLogprob("B", math.log(0.3))]
-    lps, signal = letter_logprobs(top, 2)
+    lps, signal = letter_logprobs(first("A", ("A", math.log(0.5)), (" A", math.log(0.2)), ("B", math.log(0.3))), 2)
     assert signal is True
     assert math.isclose(math.exp(lps[0]), 0.7, rel_tol=1e-9)
     assert math.isclose(math.exp(lps[1]), 0.3, rel_tol=1e-9)
 
 
 def test_decorated_letters_count_and_lowercase_does_not():
-    top = [TokenLogprob("**C", math.log(0.4)), TokenLogprob("(B", math.log(0.3)), TokenLogprob("a", math.log(0.2))]
-    lps, _ = letter_logprobs(top, 3)
+    lps, _ = letter_logprobs(first("**C", ("**C", math.log(0.4)), ("(B", math.log(0.3)), ("a", math.log(0.2))), 3)
     assert math.isclose(math.exp(lps[2]), 0.4) and math.isclose(math.exp(lps[1]), 0.3)
     assert lps[0] < math.log(0.2)          # "a" is not option A: A only gets the floor
 
 
-def test_letters_beyond_the_options_are_ignored():
-    lps, signal = letter_logprobs([TokenLogprob("C", -0.1), TokenLogprob("A", -3.0)], 2)
-    assert signal is True
-    assert lps[0] == -3.0 and lps[1] < -3.0
+def test_a_generated_non_letter_means_no_signal_even_with_letter_alternatives():
+    lps, signal = letter_logprobs(first("<think>", ("<think>", -0.01), ("A", -8.0), ("B", -9.0)), 4)
+    assert signal is False and lps == [0.0, 0.0, 0.0, 0.0]
 
 
-def test_no_letter_gives_equal_floors_and_no_signal():
-    lps, signal = letter_logprobs([TokenLogprob("<think>", -0.05), TokenLogprob("The", -3.2)], 4)
-    assert signal is False
-    assert len(set(lps)) == 1 and math.isclose(lps[0], -3.2 - math.log(2.0))
+def test_a_generated_letter_outside_the_options_means_no_signal():
+    lps, signal = letter_logprobs(first("C", ("C", -0.1), ("A", -3.0)), 2)
+    assert signal is False and lps == [0.0, 0.0]
+
+
+def test_missing_letters_get_a_floor_below_every_alternative():
+    lps, signal = letter_logprobs(first("B", ("B", -0.2), ("The", -3.2)), 3)
+    assert signal is True and lps[1] == -0.2
+    assert lps[0] == lps[2] == -3.2 - math.log(2.0)
 
 
 @pytest.mark.parametrize("n", [0, 1, len(LETTERS) + 1])
 def test_option_count_limits(n):
     with pytest.raises(ValueError):
-        letter_logprobs([], n)
+        letter_logprobs(first("A", ("A", -0.1)), n)
 ```
 
-- [ ] **Step 2: Run, see them fail** (`uv run pytest tests/test_scoring.py -q` -> ModuleNotFoundError)
+- [ ] **Step 2: Run, see them fail**
 
 - [ ] **Step 3: Implement** `src/nar_tools/scoring.py`
 
@@ -721,7 +793,7 @@ from __future__ import annotations
 
 import math
 
-from nar_tools.ollama import TokenLogprob
+from nar_tools.ollama import FirstToken, TokenLogprob
 
 LETTERS = "ABCDEFGHIJKLMNOPQRST"   # at most 20 options: Ollama returns at most 20 alternatives
 MAX_OPTIONS = len(LETTERS)
@@ -741,29 +813,35 @@ def _logaddexp(a: float, b: float) -> float:
     return m + math.log(math.exp(a - m) + math.exp(b - m))
 
 
-def letter_logprobs(top: list[TokenLogprob], n_options: int) -> tuple[list[float], bool]:
-    """Log-probability of each option's letter as the first token, and whether any letter was seen.
+def letter_logprobs(first: FirstToken, n_options: int) -> tuple[list[float], bool]:
+    """Log-probability of each option's letter as the first token, and whether the answer was a letter.
 
-    "A", " A", "**A" and "(A" all count for A (their probabilities add up); lowercase does not.
-    A letter missing from the candidates gets a floor below the least likely candidate, so every
-    option keeps a small, equal share instead of zero.
+    If the token the model actually generated is not one of the option letters (it began thinking,
+    wrote prose, or named a letter outside the options) there is no signal: every option gets the same
+    score, however the alternatives look. Otherwise "A", " A", "**A" and "(A" all count for A (their
+    probabilities add up), lowercase does not, and a letter missing from the alternatives gets a floor
+    below the least likely alternative.
     """
     if not 2 <= n_options <= MAX_OPTIONS:
         raise ValueError(f"need 2 to {MAX_OPTIONS} options, got {n_options}")
     valid = LETTERS[:n_options]
+    chosen = first.token.strip(_STRIP)
+    if not (len(chosen) == 1 and chosen in valid):
+        return [0.0] * n_options, False
+    candidates = list(first.top) or [TokenLogprob(first.token, first.logprob)]
     found: dict[int, float] = {}
-    for t in top:
+    for t in candidates:
         key = t.token.strip(_STRIP)
         if len(key) == 1 and key in valid:
             i = valid.index(key)
             found[i] = _logaddexp(found[i], t.logprob) if i in found else t.logprob
-    floor = min((t.logprob for t in top), default=0.0) - math.log(2.0)
-    return [found.get(i, floor) for i in range(n_options)], bool(found)
+    floor = min(t.logprob for t in candidates) - math.log(2.0)
+    return [found.get(i, floor) for i in range(n_options)], True
 ```
 
-- [ ] **Step 4: Run, see them pass** (8 passed)
+- [ ] **Step 4: Run, see them pass** (10 passed)
 
-- [ ] **Step 5: Commit** (`git commit -m "nar: letter scoring from one step's logprobs"`)
+- [ ] **Step 5: Commit** (`git commit -m "nar: letter scoring that trusts only a generated letter"`)
 
 ---
 
@@ -774,7 +852,7 @@ def letter_logprobs(top: list[TokenLogprob], n_options: int) -> tuple[list[float
 - Test: `tests/test_calibration.py`
 
 **Interfaces:**
-- Produces: `@dataclass(frozen=True) Sample(logprobs: tuple[float, ...], outcome: int)`, `softmax(xs) -> list[float]`, `calibrate(logprobs, temperature: float) -> list[float]`, `nll(samples, temperature) -> float`, `fit_temperature(samples, lo=0.05, hi=20.0, iterations=100) -> float`, `brier(samples, temperature) -> float`, `ece(samples, temperature, bins=10) -> float`.
+- Produces: `@dataclass(frozen=True) Sample(logprobs: tuple[float, ...], outcome: int)`, `softmax(xs)`, `log_softmax(xs)`, `calibrate(logprobs, temperature) -> list[float]`, `nll(samples, temperature) -> float`, `fit_temperature(samples, lo=0.05, hi=20.0, iterations=100) -> float`, `brier(samples, temperature) -> float`, `ece(samples, temperature, bins=10) -> float`.
 
 - [ ] **Step 1: Write the failing tests** `tests/test_calibration.py`
 
@@ -786,10 +864,8 @@ import pytest
 from nar_tools.calibration import Sample, brier, calibrate, ece, fit_temperature, nll
 
 
-def overconfident_samples():
-    # The scorer always says 95% for A (log-odds 3), but A is right only 73 times out of 100.
-    raw = (0.0, -3.0)
-    return [Sample(raw, 0)] * 73 + [Sample(raw, 1)] * 27
+def samples(raw, right_a, right_b):
+    return [Sample(raw, 0)] * right_a + [Sample(raw, 1)] * right_b
 
 
 def test_temperature_one_is_the_raw_distribution():
@@ -803,12 +879,17 @@ def test_high_temperature_flattens_and_low_sharpens():
 
 
 def test_fit_recovers_the_right_temperature():
-    # 1 / (1 + e^(-3/T)) = 0.73  ->  T = 3 / ln(0.73 / 0.27), about 3.016
-    assert math.isclose(fit_temperature(overconfident_samples()), 3 / math.log(0.73 / 0.27), rel_tol=1e-3)
+    # Says 95% A (log-odds 3); A is right 73 of 100: 1 / (1 + e^(-3/T)) = 0.73 -> T = 3 / ln(73/27)
+    assert math.isclose(fit_temperature(samples((0.0, -3.0), 73, 27)), 3 / math.log(73 / 27), rel_tol=1e-3)
+
+
+def test_fit_is_right_for_very_confident_scores_too():
+    # Regression: with log-odds 10, clipped probabilities made the search run to T = 0.05.
+    assert math.isclose(fit_temperature(samples((0.0, -10.0), 73, 27)), 10 / math.log(73 / 27), rel_tol=1e-3)
 
 
 def test_fitted_temperature_lowers_nll_brier_and_ece():
-    s = overconfident_samples()
+    s = samples((0.0, -3.0), 73, 27)
     t = fit_temperature(s)
     assert nll(s, t) < nll(s, 1.0) and brier(s, t) < brier(s, 1.0) and ece(s, t) < ece(s, 1.0)
 
@@ -851,6 +932,12 @@ def softmax(xs) -> list[float]:
     return [e / s for e in es]
 
 
+def log_softmax(xs) -> list[float]:
+    m = max(xs)
+    lse = m + math.log(sum(math.exp(x - m) for x in xs))
+    return [x - lse for x in xs]
+
+
 def calibrate(logprobs, temperature: float) -> list[float]:
     if temperature <= 0:
         raise ValueError("temperature must be positive")
@@ -858,14 +945,14 @@ def calibrate(logprobs, temperature: float) -> list[float]:
 
 
 def nll(samples, temperature: float) -> float:
-    return -sum(math.log(max(calibrate(s.logprobs, temperature)[s.outcome], 1e-12)) for s in samples) / len(samples)
+    """Mean negative log-likelihood, computed in log space: no clipping, so it stays convex in 1/T."""
+    if temperature <= 0:
+        raise ValueError("temperature must be positive")
+    return -sum(log_softmax([lp / temperature for lp in s.logprobs])[s.outcome] for s in samples) / len(samples)
 
 
 def fit_temperature(samples, lo: float = 0.05, hi: float = 20.0, iterations: int = 100) -> float:
-    """The temperature with the lowest negative log-likelihood.
-
-    NLL is convex in the inverse temperature, so a golden-section search over it finds the minimum.
-    """
+    """The temperature with the lowest negative log-likelihood (golden-section search over 1/T)."""
     if not samples:
         raise ValueError("no samples to fit")
     g = (math.sqrt(5) - 1) / 2
@@ -907,71 +994,119 @@ def ece(samples, temperature: float, bins: int = 10) -> float:
     return sum(abs(correct_sum[k] - conf_sum[k]) for k in range(bins) if count[k]) / len(samples)
 ```
 
-- [ ] **Step 4: Run, see them pass** (6 passed)
+- [ ] **Step 4: Run, see them pass** (7 passed)
 
-- [ ] **Step 5: Commit** (`git commit -m "nar: temperature scaling, Brier and ECE"`)
+- [ ] **Step 5: Commit** (`git commit -m "nar: temperature scaling in log space, Brier and ECE"`)
 
 ---
 
-### Task 7: Storage and the refit lock
+### Task 7: Storage, per-model calibrators and OS locks
 
 **Files:**
 - Create: `src/nar_tools/store.py`
 - Test: `tests/test_store.py`
 
 **Interfaces:**
-- Produces: `nar_home() -> Path`, `check_task_type(task_type: str) -> str` (ValueError unless `^[a-z0-9][a-z0-9_-]{0,39}$`), `IDENTITY = {"version": 0, "temperature": 1.0}`, `class NarStore(root: Path | None = None)` with `log_call(record)`, `log_feedback(record)`, `log_promotion(record)`, `calls()`, `feedback()`, `promotions()`, `find_call(call_id) -> dict | None`, `labelled(task_type) -> list[tuple[str, list[float], int]]`, `feedback_count(task_type) -> int`, `current(task_type) -> dict`, `promote(task_type, calibrator: dict) -> dict`, `lock(timeout=10.0, stale_after=120.0)` (context manager, `TimeoutError` on timeout).
+- Produces: `nar_home() -> Path`, `check_task_type(task_type) -> str` (ValueError unless `^[a-z0-9][a-z0-9_-]{0,39}$`), `model_slug(model) -> str`, `file_lock(path: Path, timeout: float)` (context manager; `TimeoutError`), `IDENTITY = {"version": 0, "temperature": 1.0}`, `class NarStore(root=None)` with `log_call(record)`, `log_feedback(record)`, `log_promotion(record)`, `calls()`, `feedback()`, `promotions()`, `find_call(call_id) -> dict | None`, `labelled(model, task_type) -> list[tuple[str, list[float], int]]`, `feedback_count(model, task_type) -> int`, `current(model, task_type) -> dict`, `promote(model, task_type, calibrator) -> dict` (call under `lock()`), `lock(timeout=10.0)`. Call records carry `model` and `task_type`.
 
 - [ ] **Step 1: Write the failing tests** `tests/test_store.py`
 
 ```python
 import json
+import multiprocessing
 import os
 import time
 
 import pytest
 
-from nar_tools.store import NarStore, check_task_type
+from nar_tools.store import NarStore, check_task_type, model_slug
+
+
+def call(cid, model="m", task_type="general", raw=(0.0, -1.0)):
+    return {"call_id": cid, "model": model, "task_type": task_type, "raw_logprobs": list(raw), "options": ["x", "y"]}
+
+
+def _hold_lock(root, seconds, ready):
+    with NarStore(root).lock(timeout=5):
+        ready.set()
+        time.sleep(seconds)
+
+
+def _die_holding_lock(root, ready):
+    NarStore(root).lock(timeout=5).__enter__()
+    ready.set()
+    time.sleep(0.5)
+    os._exit(1)        # a crash: the lock is never released by our code
+
+
+def _append_many(root, worker, n):
+    s = NarStore(root)
+    for i in range(n):
+        s.log_call({**call(f"{worker}-{i}"), "pad": "x" * 500})
 
 
 def test_append_and_read_round_trip(tmp_path):
     s = NarStore(tmp_path)
-    s.log_call({"call_id": "c1", "task_type": "general", "raw_logprobs": [-0.1, -2.0], "options": ["x", "y"]})
+    s.log_call(call("c1", raw=(-0.1, -2.0)))
     s.log_feedback({"call_id": "c1", "outcome": 1})
     assert s.find_call("c1")["options"] == ["x", "y"]
-    assert s.labelled("general") == [("c1", [-0.1, -2.0], 1)]
+    assert s.labelled("m", "general") == [("c1", [-0.1, -2.0], 1)]
 
 
-def test_latest_feedback_wins_and_other_types_are_excluded(tmp_path):
+def test_calls_are_partitioned_by_model_and_type_and_latest_feedback_wins(tmp_path):
     s = NarStore(tmp_path)
-    s.log_call({"call_id": "c1", "task_type": "general", "raw_logprobs": [0.0, -1.0], "options": ["x", "y"]})
-    s.log_call({"call_id": "c2", "task_type": "triage", "raw_logprobs": [0.0, -1.0], "options": ["x", "y"]})
-    s.log_feedback({"call_id": "c1", "outcome": 0})
-    s.log_feedback({"call_id": "c1", "outcome": 1})
-    s.log_feedback({"call_id": "c2", "outcome": 0})
-    assert s.labelled("general") == [("c1", [0.0, -1.0], 1)]
-    assert s.feedback_count("general") == 2 and s.feedback_count("triage") == 1
+    s.log_call(call("c1"))
+    s.log_call(call("c2", task_type="triage"))
+    s.log_call(call("c3", model="other"))
+    for cid, o in (("c1", 0), ("c1", 1), ("c2", 0), ("c3", 0)):
+        s.log_feedback({"call_id": cid, "outcome": o})
+    assert s.labelled("m", "general") == [("c1", [0.0, -1.0], 1)]
+    assert s.feedback_count("m", "general") == 2
+    assert s.labelled("other", "general") == [("c3", [0.0, -1.0], 0)]
 
 
-def test_a_torn_line_is_skipped(tmp_path):
+def test_a_torn_line_never_swallows_the_next_record(tmp_path):
     s = NarStore(tmp_path)
-    s.log_call({"call_id": "c1", "task_type": "general"})
+    s.log_call(call("c1"))
     with open(tmp_path / "calls.jsonl", "ab") as f:
-        f.write(b'{"call_id": "c2", "task_')
-    assert [c["call_id"] for c in s.calls()] == ["c1"]
+        f.write(b'{"call_id": "torn", "task_')          # a crash mid-write, no newline
+    s.log_call(call("c2"))
+    assert [c["call_id"] for c in s.calls()] == ["c1", "c2"]
 
 
-def test_current_starts_at_identity_and_promote_bumps_versions(tmp_path):
+def test_bad_bytes_do_not_break_reading(tmp_path):
     s = NarStore(tmp_path)
-    assert s.current("general") == {"version": 0, "temperature": 1.0}
-    s.promote("general", {"temperature": 2.0})
-    s.promote("general", {"temperature": 3.0})
-    assert s.current("general")["version"] == 2 and s.current("general")["temperature"] == 3.0
-    assert json.loads((tmp_path / "current.json").read_text(encoding="utf-8"))["general"] == 2
-    assert (tmp_path / "calibrators" / "general" / "v1.json").exists()
+    s.log_call(call("c1"))
+    with open(tmp_path / "calls.jsonl", "ab") as f:
+        f.write(b'\xff\xfe not json\n')
+    s.log_call(call("c2"))
+    assert [c["call_id"] for c in s.calls()] == ["c1", "c2"]
 
 
-def test_lock_excludes_a_second_holder(tmp_path):
+def test_calibrators_start_at_identity_and_are_kept_per_model(tmp_path):
+    s = NarStore(tmp_path)
+    assert s.current("m", "general") == {"version": 0, "temperature": 1.0}
+    with s.lock():
+        s.promote("m", "general", {"temperature": 2.0})
+    assert s.current("m", "general")["temperature"] == 2.0
+    assert s.current("other", "general") == {"version": 0, "temperature": 1.0}
+    assert (tmp_path / "calibrators" / "m" / "general" / "v1.json").exists()
+
+
+def test_rollback_then_promote_never_overwrites_history(tmp_path):
+    s = NarStore(tmp_path)
+    with s.lock():
+        s.promote("m", "general", {"temperature": 2.0})
+        s.promote("m", "general", {"temperature": 3.0})
+    (tmp_path / "current.json").write_text(json.dumps({"m/general": 1}), encoding="utf-8")   # roll back to v1
+    v2 = (tmp_path / "calibrators" / "m" / "general" / "v2.json").read_text(encoding="utf-8")
+    with s.lock():
+        record = s.promote("m", "general", {"temperature": 4.0})
+    assert record["version"] == 3
+    assert (tmp_path / "calibrators" / "m" / "general" / "v2.json").read_text(encoding="utf-8") == v2
+
+
+def test_lock_excludes_a_second_holder_in_this_process(tmp_path):
     s = NarStore(tmp_path)
     with s.lock():
         with pytest.raises(TimeoutError):
@@ -981,21 +1116,47 @@ def test_lock_excludes_a_second_holder(tmp_path):
         pass
 
 
-def test_a_stale_lock_is_taken_over(tmp_path):
-    s = NarStore(tmp_path)
-    lock = tmp_path / "refit.lock"
-    lock.write_text("12345")
-    old = time.time() - 600
-    os.utime(lock, (old, old))
-    with s.lock(timeout=0.5, stale_after=60):
-        assert lock.exists()
-    assert not lock.exists()
+def test_a_live_holder_is_never_evicted_and_a_dead_one_is_released(tmp_path):
+    ctx = multiprocessing.get_context("spawn")
+    ready = ctx.Event()
+    holder = ctx.Process(target=_hold_lock, args=(str(tmp_path), 3.0, ready))
+    holder.start()
+    assert ready.wait(30)
+    with pytest.raises(TimeoutError):
+        with NarStore(tmp_path).lock(timeout=0.5):
+            pass
+    holder.join(30)
+    with NarStore(tmp_path).lock(timeout=2):
+        pass
+    ready = ctx.Event()
+    crasher = ctx.Process(target=_die_holding_lock, args=(str(tmp_path), ready))
+    crasher.start()
+    assert ready.wait(30)
+    crasher.join(30)
+    with NarStore(tmp_path).lock(timeout=2):     # the OS released the dead holder's lock
+        pass
+
+
+def test_concurrent_writers_keep_every_line(tmp_path):
+    ctx = multiprocessing.get_context("spawn")
+    workers = [ctx.Process(target=_append_many, args=(str(tmp_path), w, 50)) for w in range(4)]
+    for w in workers:
+        w.start()
+    for w in workers:
+        w.join(60)
+    assert len(NarStore(tmp_path).calls()) == 200
 
 
 @pytest.mark.parametrize("bad", ["", "General", "../x", "a b", "x" * 41])
 def test_task_type_is_a_safe_name(bad):
     with pytest.raises(ValueError):
         check_task_type(bad)
+
+
+def test_model_slug_is_a_safe_folder_name():
+    assert model_slug("openbmb/minicpm5-2b:q8_0") == "openbmb_minicpm5-2b_q8_0"
+    with pytest.raises(ValueError):
+        model_slug("::")
 ```
 
 - [ ] **Step 2: Run, see them fail**
@@ -1003,7 +1164,7 @@ def test_task_type_is_a_safe_name(bad):
 - [ ] **Step 3: Implement** `src/nar_tools/store.py`
 
 ```python
-"""Local, append-only storage for nar calls, feedback, calibrators and promotion decisions."""
+"""Local, append-only storage for nar calls, feedback, calibrators (per model and task type) and decisions."""
 from __future__ import annotations
 
 import json
@@ -1013,6 +1174,11 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
+
 TASK_TYPE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
 IDENTITY = {"version": 0, "temperature": 1.0}   # before any promotion: the raw model probabilities
 
@@ -1021,10 +1187,49 @@ def nar_home() -> Path:
     return Path(os.environ.get("NAR_HOME") or (Path.home() / ".aos" / "nar"))
 
 
-def check_task_type(task_type: str) -> str:
+def check_task_type(task_type) -> str:
     if not isinstance(task_type, str) or not TASK_TYPE.match(task_type):
         raise ValueError("task_type must be 1-40 characters: lowercase letters, digits, '-' or '_'")
     return task_type
+
+
+def model_slug(model) -> str:
+    """A folder-safe form of an Ollama tag: calibration is kept per model."""
+    slug = re.sub(r"[^a-z0-9._-]", "_", str(model).lower()).strip("._")
+    if not slug:
+        raise ValueError("model name is empty")
+    return slug
+
+
+@contextmanager
+def file_lock(path: Path, timeout: float):
+    """An OS lock on a file: released by the OS if the holder dies, never taken over on a timer."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    f = open(path, "a+b")
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            try:
+                if os.name == "nt":
+                    f.seek(0)
+                    msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.monotonic() > deadline:
+                    raise TimeoutError(f"{path.name} is held by another nar process; try again") from None
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    finally:
+        f.close()
 
 
 def _load_json(path: Path, default):
@@ -1039,23 +1244,30 @@ class NarStore:
         self.root = Path(root) if root else nar_home()
         self.root.mkdir(parents=True, exist_ok=True)
 
+    # append-only logs ---------------------------------------------------------------
     def _append(self, name: str, record: dict) -> None:
         line = (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8")
-        with open(self.root / name, "ab") as f:   # one write per record keeps lines whole
-            f.write(line)
+        with file_lock(self.root / "append.lock", timeout=10.0):
+            with open(self.root / name, "ab+") as f:
+                f.seek(0, os.SEEK_END)
+                if f.tell() > 0:
+                    f.seek(-1, os.SEEK_END)
+                    if f.read(1) != b"\n":
+                        f.write(b"\n")   # a crash left half a record: never glue the next one onto it
+                f.write(line)
 
     def _read(self, name: str) -> list[dict]:
         path = self.root / name
         if not path.exists():
             return []
         out = []
-        for raw in path.read_text(encoding="utf-8").splitlines():
+        for raw in path.read_bytes().decode("utf-8", errors="replace").splitlines():
             if not raw.strip():
                 continue
             try:
                 out.append(json.loads(raw))
             except ValueError:
-                continue   # a torn line never breaks the store
+                continue   # a torn or damaged line never breaks the store
         return out
 
     def log_call(self, record: dict) -> None:
@@ -1079,67 +1291,52 @@ class NarStore:
     def find_call(self, call_id: str) -> dict | None:
         return next((c for c in self.calls() if c.get("call_id") == call_id), None)
 
-    def labelled(self, task_type: str) -> list[tuple[str, list[float], int]]:
-        """(call_id, raw log-probabilities, outcome) for calls of this type with feedback; latest wins."""
-        outcome = {f["call_id"]: f["outcome"] for f in self.feedback()}
-        return [(c["call_id"], c["raw_logprobs"], outcome[c["call_id"]])
-                for c in self.calls() if c.get("task_type") == task_type and c.get("call_id") in outcome]
+    def labelled(self, model: str, task_type: str) -> list[tuple[str, list[float], int]]:
+        """(call_id, raw log-probabilities, outcome) for this model's calls of this type; latest feedback wins."""
+        outcome = {f["call_id"]: f["outcome"] for f in self.feedback() if "call_id" in f and "outcome" in f}
+        return [(c["call_id"], c["raw_logprobs"], outcome[c["call_id"]]) for c in self.calls()
+                if c.get("model") == model and c.get("task_type") == task_type and c.get("call_id") in outcome]
 
-    def feedback_count(self, task_type: str) -> int:
-        ids = {c["call_id"] for c in self.calls() if c.get("task_type") == task_type}
+    def feedback_count(self, model: str, task_type: str) -> int:
+        ids = {c.get("call_id") for c in self.calls() if c.get("model") == model and c.get("task_type") == task_type}
         return sum(1 for f in self.feedback() if f.get("call_id") in ids)
 
-    def current(self, task_type: str) -> dict:
-        check_task_type(task_type)
-        version = _load_json(self.root / "current.json", {}).get(task_type)
+    # calibrators --------------------------------------------------------------------
+    def _key(self, model: str, task_type: str) -> str:
+        return f"{model_slug(model)}/{check_task_type(task_type)}"
+
+    def _folder(self, model: str, task_type: str) -> Path:
+        return self.root / "calibrators" / model_slug(model) / check_task_type(task_type)
+
+    def current(self, model: str, task_type: str) -> dict:
+        version = _load_json(self.root / "current.json", {}).get(self._key(model, task_type))
         if not version:
             return dict(IDENTITY)
-        return _load_json(self.root / "calibrators" / task_type / f"v{version}.json", dict(IDENTITY))
+        return _load_json(self._folder(model, task_type) / f"v{version}.json", dict(IDENTITY))
 
-    def promote(self, task_type: str, calibrator: dict) -> dict:
-        """Write the next version and point current.json at it (atomic replace)."""
-        check_task_type(task_type)
-        folder = self.root / "calibrators" / task_type
+    def promote(self, model: str, task_type: str, calibrator: dict) -> dict:
+        """Write a new version (numbers are never reused, even after a rollback) and point
+        current.json at it with an atomic replace. Call it while holding lock()."""
+        folder = self._folder(model, task_type)
         folder.mkdir(parents=True, exist_ok=True)
-        record = {**calibrator, "version": self.current(task_type)["version"] + 1}
+        existing = [int(p.stem[1:]) for p in folder.glob("v*.json") if p.stem[1:].isdigit()]
+        record = {**calibrator, "model": model, "task_type": task_type, "version": max(existing, default=0) + 1}
         (folder / f"v{record['version']}.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
         pointer = _load_json(self.root / "current.json", {})
-        pointer[task_type] = record["version"]
+        pointer[self._key(model, task_type)] = record["version"]
         tmp = self.root / f"current.json.{os.getpid()}.tmp"
         tmp.write_text(json.dumps(pointer, indent=2), encoding="utf-8")
         os.replace(tmp, self.root / "current.json")
         return record
 
-    @contextmanager
-    def lock(self, timeout: float = 10.0, stale_after: float = 120.0):
-        """Cross-process lock for refits: Claude, Codex and OpenCode each run their own nar-mcp."""
-        path = self.root / "refit.lock"
-        deadline = time.monotonic() + timeout
-        while True:
-            try:
-                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                break
-            except FileExistsError:
-                try:
-                    if time.time() - path.stat().st_mtime > stale_after:
-                        path.unlink(missing_ok=True)   # a crashed holder
-                        continue
-                except FileNotFoundError:
-                    continue
-                if time.monotonic() > deadline:
-                    raise TimeoutError("another nar process is refitting; try again")
-                time.sleep(0.05)
-        try:
-            os.write(fd, str(os.getpid()).encode("ascii"))
-            os.close(fd)
-            yield
-        finally:
-            path.unlink(missing_ok=True)
+    def lock(self, timeout: float = 10.0):
+        """The refit lock: one refit and promotion at a time, across every nar process."""
+        return file_lock(self.root / "refit.lock", timeout)
 ```
 
-- [ ] **Step 4: Run, see them pass** (11 passed)
+- [ ] **Step 4: Run, see them pass** (14 passed; the multi-process tests take a few seconds)
 
-- [ ] **Step 5: Commit** (`git commit -m "nar: append-only store, calibrator versions, refit lock"`)
+- [ ] **Step 5: Commit** (`git commit -m "nar: append-only store, per-model calibrators, OS file locks"`)
 
 ---
 
@@ -1151,7 +1348,7 @@ class NarStore:
 
 **Interfaces:**
 - Consumes: `Sample`, `fit_temperature`, `brier`, `ece` (Task 6); `NarStore` (Task 7).
-- Produces: `MIN_TRAIN = 20`, `MIN_HELDOUT = 5`, `REFIT_EVERY = 20`, `is_heldout(call_id: str) -> bool`, `@dataclass Decision(task_type, promoted, reason, candidate_temperature=None, candidate_brier=None, candidate_ece=None, current_version=0, current_brier=None, current_ece=None, n_train=0, n_heldout=0)`, `refit(store: NarStore, task_type: str) -> Decision`.
+- Produces: `MIN_TRAIN = 20`, `MIN_HELDOUT = 5`, `REFIT_EVERY = 20`, `LOCK_TIMEOUT = 10.0`, `is_heldout(call_id) -> bool`, `should_promote(cand_brier, cand_ece, cur_brier, cur_ece) -> bool`, `@dataclass Decision(model, task_type, promoted, reason, candidate_temperature=None, candidate_brier=None, candidate_ece=None, current_version=0, current_brier=None, current_ece=None, n_train=0, n_heldout=0)`, `refit(store, model, task_type) -> Decision`.
 
 - [ ] **Step 1: Write the failing tests** `tests/test_gate.py`
 
@@ -1174,9 +1371,10 @@ def ids(n, heldout):
     return out
 
 
-def add(store, call_ids, raw, outcomes, task_type="general"):
+def add(store, call_ids, raw, outcomes, model="m", task_type="general"):
     for cid, o in zip(call_ids, outcomes):
-        store.log_call({"call_id": cid, "task_type": task_type, "raw_logprobs": list(raw), "options": ["a", "b"]})
+        store.log_call({"call_id": cid, "model": model, "task_type": task_type,
+                        "raw_logprobs": list(raw), "options": ["a", "b"]})
         store.log_feedback({"call_id": cid, "outcome": o})
 
 
@@ -1186,12 +1384,22 @@ def test_split_is_stable_and_about_one_in_five():
     assert [gate.is_heldout(c) for c in sample[:50]] == [gate.is_heldout(c) for c in sample[:50]]
 
 
+@pytest.mark.parametrize("cand_brier,cand_ece,expected", [
+    (0.1, 0.1, True),    # better on both
+    (0.2, 0.2, True),    # equal is no worse
+    (0.1, 0.3, False),   # calibration error got worse
+    (0.3, 0.1, False),   # Brier score got worse
+])
+def test_should_promote_needs_both_metrics_no_worse(cand_brier, cand_ece, expected):
+    assert gate.should_promote(cand_brier, cand_ece, 0.2, 0.2) is expected
+
+
 def test_too_few_labels_changes_nothing(tmp_path):
     s = NarStore(tmp_path)
     add(s, ids(5, False), (0.0, -3.0), [0] * 5)
-    d = gate.refit(s, "general")
+    d = gate.refit(s, "m", "general")
     assert d.promoted is False and "not enough" in d.reason
-    assert s.current("general")["version"] == 0 and len(s.promotions()) == 1
+    assert s.current("m", "general")["version"] == 0 and len(s.promotions()) == 1
 
 
 def test_a_better_calibrator_is_promoted(tmp_path):
@@ -1199,9 +1407,9 @@ def test_a_better_calibrator_is_promoted(tmp_path):
     raw = (0.0, -3.0)                       # says 95% A; A is right about 73% of the time everywhere
     add(s, ids(100, False), raw, [0] * 73 + [1] * 27)
     add(s, ids(30, True), raw, [0] * 22 + [1] * 8)
-    d = gate.refit(s, "general")
-    assert d.promoted is True and s.current("general")["version"] == 1
-    assert math.isclose(s.current("general")["temperature"], d.candidate_temperature)
+    d = gate.refit(s, "m", "general")
+    assert d.promoted is True and s.current("m", "general")["version"] == 1
+    assert math.isclose(s.current("m", "general")["temperature"], d.candidate_temperature)
 
 
 def test_a_worse_calibrator_is_never_promoted(tmp_path):
@@ -1209,9 +1417,19 @@ def test_a_worse_calibrator_is_never_promoted(tmp_path):
     raw = (0.0, -3.0)
     add(s, ids(100, False), raw, [0] * 50 + [1] * 50)   # training says: flatten to 50/50
     add(s, ids(30, True), raw, [0] * 30)                # held-out says: the raw 95% was right
-    d = gate.refit(s, "general")
+    d = gate.refit(s, "m", "general")
     assert d.promoted is False and "worse" in d.reason
-    assert s.current("general")["version"] == 0 and s.promotions()[-1]["promoted"] is False
+    assert s.current("m", "general")["version"] == 0 and s.promotions()[-1]["promoted"] is False
+
+
+def test_a_refit_never_touches_another_model(tmp_path):
+    s = NarStore(tmp_path)
+    raw = (0.0, -3.0)
+    add(s, ids(100, False), raw, [0] * 73 + [1] * 27, model="a")
+    add(s, ids(30, True), raw, [0] * 22 + [1] * 8, model="a")
+    assert gate.refit(s, "a", "general").promoted is True
+    assert s.current("b", "general") == {"version": 0, "temperature": 1.0}
+    assert gate.refit(s, "b", "general").promoted is False
 
 
 def test_refit_holds_the_lock(tmp_path, monkeypatch):
@@ -1219,7 +1437,7 @@ def test_refit_holds_the_lock(tmp_path, monkeypatch):
     monkeypatch.setattr(gate, "LOCK_TIMEOUT", 0.1)
     with s.lock():
         with pytest.raises(TimeoutError):
-            gate.refit(s, "general")
+            gate.refit(s, "m", "general")
 ```
 
 - [ ] **Step 2: Run, see them fail**
@@ -1248,8 +1466,14 @@ def is_heldout(call_id: str) -> bool:
     return int(hashlib.sha256(call_id.encode("utf-8")).hexdigest(), 16) % 5 == 0
 
 
+def should_promote(cand_brier: float, cand_ece: float, cur_brier: float, cur_ece: float) -> bool:
+    """No worse on BOTH the held-out Brier score and the held-out calibration error."""
+    return cand_brier <= cur_brier and cand_ece <= cur_ece
+
+
 @dataclass
 class Decision:
+    model: str
     task_type: str
     promoted: bool
     reason: str
@@ -1263,13 +1487,14 @@ class Decision:
     n_heldout: int = 0
 
 
-def refit(store: NarStore, task_type: str) -> Decision:
+def refit(store: NarStore, model: str, task_type: str) -> Decision:
     with store.lock(timeout=LOCK_TIMEOUT):
-        rows = store.labelled(task_type)
+        rows = store.labelled(model, task_type)
         train = [Sample(tuple(lp), o) for cid, lp, o in rows if not is_heldout(cid)]
         held = [Sample(tuple(lp), o) for cid, lp, o in rows if is_heldout(cid)]
-        current = store.current(task_type)
-        d = Decision(task_type, False, "", current_version=current["version"], n_train=len(train), n_heldout=len(held))
+        current = store.current(model, task_type)
+        d = Decision(model, task_type, False, "", current_version=current["version"],
+                     n_train=len(train), n_heldout=len(held))
         if len(train) < MIN_TRAIN or len(held) < MIN_HELDOUT:
             d.reason = f"not enough labelled calls (train {len(train)}/{MIN_TRAIN}, held-out {len(held)}/{MIN_HELDOUT})"
         else:
@@ -1279,9 +1504,9 @@ def refit(store: NarStore, task_type: str) -> Decision:
             d.current_brier, d.current_ece = brier(held, current["temperature"]), ece(held, current["temperature"])
             if abs(t - current["temperature"]) < 1e-6:
                 d.reason = "unchanged"
-            elif d.candidate_brier <= d.current_brier and d.candidate_ece <= d.current_ece:
-                store.promote(task_type, {"temperature": t, "brier": d.candidate_brier, "ece": d.candidate_ece,
-                                          "n_train": len(train), "n_heldout": len(held), "fitted_at": time.time()})
+            elif should_promote(d.candidate_brier, d.candidate_ece, d.current_brier, d.current_ece):
+                store.promote(model, task_type, {"temperature": t, "brier": d.candidate_brier, "ece": d.candidate_ece,
+                                                 "n_train": len(train), "n_heldout": len(held), "fitted_at": time.time()})
                 d.promoted, d.reason = True, "no worse on held-out calls"
             else:
                 d.reason = "worse on held-out calls; kept the current calibrator"
@@ -1289,9 +1514,9 @@ def refit(store: NarStore, task_type: str) -> Decision:
         return d
 ```
 
-- [ ] **Step 4: Run, see them pass** (5 passed)
+- [ ] **Step 4: Run, see them pass** (10 passed)
 
-- [ ] **Step 5: Commit** (`git commit -m "nar: the non-regressive promotion gate"`)
+- [ ] **Step 5: Commit** (`git commit -m "nar: the non-regressive promotion gate, per model"`)
 
 ---
 
@@ -1302,8 +1527,8 @@ def refit(store: NarStore, task_type: str) -> Decision:
 - Test: `tests/test_service.py`
 
 **Interfaces:**
-- Consumes: `OllamaClient`, `local_state` (Task 4); `build_messages`, `letter_logprobs`, `MAX_OPTIONS` (Task 5); `calibrate` (Task 6); `NarStore`, `check_task_type` (Task 7); `gate.refit`, `gate.REFIT_EVERY` (Task 8).
-- Produces: `MAX_ITEMS = 50`; `class NarService(client, store, model=None)` with `choose(question, options, task_type="general") -> dict` (keys `call_id, choice, choice_index, confidence, options[{option, probability}], letter_signal, calibrator_version, model`), `classify(items, labels, task_type="general") -> {"results": [...]}`, `feedback(call_id, outcome) -> {"recorded", "call_id", "outcome", "refit"}`, `status() -> dict`. Every input error is a `ValueError`.
+- Consumes: `OllamaClient.first_token`, `local_state` (Task 4); `build_messages`, `letter_logprobs`, `MAX_OPTIONS` (Task 5); `calibrate`, `Sample`, `brier`, `ece` (Task 6); `NarStore`, `check_task_type` (Task 7); `gate.refit`, `gate.is_heldout`, `gate.REFIT_EVERY`, `gate.MIN_HELDOUT` (Task 8).
+- Produces: `MAX_ITEMS = 50`; `class NarService(client, store, model=None)` with `choose(question, options, task_type="general") -> dict` (keys `call_id, choice, choice_index, confidence, options[{option, probability}], letter_signal, calibrator_version, model`), `classify(items, labels, task_type="general") -> {"results": [...]}`, `feedback(call_id, outcome) -> {"recorded", "call_id", "outcome", "refit"}`, `status() -> {"model", "store", "calibration": {model: {task_type: {calls, labelled, calibrator, reliability}}}, "last_decision"}`. Every input error is a `ValueError`.
 
 - [ ] **Step 1: Write the failing tests** `tests/test_service.py`
 
@@ -1313,19 +1538,20 @@ import math
 import pytest
 
 from nar_tools import gate
-from nar_tools.ollama import TokenLogprob
+from nar_tools.ollama import FirstToken, TokenLogprob
 from nar_tools.service import NarService
 from nar_tools.store import NarStore
 
 
 class FakeClient:
     def __init__(self):
-        self.top = [TokenLogprob("B", math.log(0.6)), TokenLogprob("A", math.log(0.3)), TokenLogprob("C", math.log(0.1))]
+        top = (TokenLogprob("B", math.log(0.6)), TokenLogprob("A", math.log(0.3)), TokenLogprob("C", math.log(0.1)))
+        self.first = FirstToken("B", math.log(0.6), top)
         self.calls = 0
 
-    def next_token_logprobs(self, model, messages, top=20):
+    def first_token(self, model, messages, top=20):
         self.calls += 1
-        return self.top
+        return self.first
 
 
 def make(tmp_path):
@@ -1340,6 +1566,15 @@ def test_choose_returns_calibrated_probabilities_and_logs_the_call(tmp_path):
     assert r["calibrator_version"] == 0 and r["letter_signal"] is True
     logged = svc.store.find_call(r["call_id"])
     assert logged["options"] == ["x", "y", "z"] and logged["model"] == "test-model"
+
+
+def test_choose_uses_this_models_calibrator(tmp_path):
+    svc = make(tmp_path)
+    with svc.store.lock():
+        svc.store.promote("test-model", "general", {"temperature": 50.0})
+        svc.store.promote("other-model", "general", {"temperature": 0.05})
+    r = svc.choose("Which?", ["x", "y", "z"])
+    assert r["calibrator_version"] == 1 and r["confidence"] < 0.35     # T=50 flattens; T=0.05 was not used
 
 
 @pytest.mark.parametrize("options", [["only"], ["a", "a"], ["a", " "], [str(i) for i in range(21)], "ab"])
@@ -1389,15 +1624,15 @@ def test_unknown_call_id(tmp_path):
         make(tmp_path).feedback("missing", 0)
 
 
-def test_every_twentieth_outcome_triggers_a_refit(tmp_path, monkeypatch):
+def test_every_twentieth_outcome_triggers_a_refit_for_that_model(tmp_path, monkeypatch):
     seen = []
-    monkeypatch.setattr(gate, "refit", lambda store, t: seen.append(t) or gate.Decision(t, False, "stub"))
+    monkeypatch.setattr(gate, "refit", lambda store, m, t: seen.append((m, t)) or gate.Decision(m, t, False, "stub"))
     svc = make(tmp_path)
     for i in range(40):
         cid = svc.choose("Which?", ["x", "y"])["call_id"]
         r = svc.feedback(cid, 0)
         assert (r["refit"] is not None) == ((i + 1) % 20 == 0)
-    assert seen == ["general", "general"]
+    assert seen == [("test-model", "general")] * 2
 
 
 def test_classify_scores_each_item(tmp_path):
@@ -1410,14 +1645,16 @@ def test_classify_scores_each_item(tmp_path):
         svc.classify(["x"] * 51, ["a", "b"])
 
 
-def test_status_counts_calls_and_labels(tmp_path):
+def test_status_counts_calls_labels_and_reliability(tmp_path):
     svc = make(tmp_path)
     cid = svc.choose("Which?", ["x", "y"])["call_id"]
     svc.choose("Which?", ["x", "y"], task_type="triage")
     svc.feedback(cid, 1)
-    st = svc.status()
-    assert st["task_types"]["general"] == {"calls": 1, "labelled": 1, "calibrator": {"version": 0, "temperature": 1.0}}
-    assert st["task_types"]["triage"]["labelled"] == 0 and st["model"] == "test-model"
+    general = svc.status()["calibration"]["test-model"]["general"]
+    assert general["calls"] == 1 and general["labelled"] == 1
+    assert general["calibrator"] == {"version": 0, "temperature": 1.0}
+    assert general["reliability"] is None               # fewer than MIN_HELDOUT held-out outcomes
+    assert svc.status()["calibration"]["test-model"]["triage"]["labelled"] == 0
 ```
 
 - [ ] **Step 2: Run, see them fail**
@@ -1433,7 +1670,7 @@ import uuid
 from dataclasses import asdict
 
 from nar_tools import gate
-from nar_tools.calibration import calibrate
+from nar_tools.calibration import Sample, brier, calibrate, ece
 from nar_tools.ollama import OllamaClient, local_state
 from nar_tools.scoring import MAX_OPTIONS, build_messages, letter_logprobs
 from nar_tools.store import NarStore, check_task_type
@@ -1465,9 +1702,8 @@ class NarService:
             raise ValueError("question must not be empty")
         if not self.model:
             raise ValueError("no local model configured (run: aos install local)")
-        top = self.client.next_token_logprobs(self.model, build_messages(str(question), opts))
-        raw, signal = letter_logprobs(top, len(opts))
-        cal = self.store.current(task_type)
+        raw, signal = letter_logprobs(self.client.first_token(self.model, build_messages(str(question), opts)), len(opts))
+        cal = self.store.current(self.model, task_type)
         probs = calibrate(raw, cal["temperature"])
         best = max(range(len(opts)), key=probs.__getitem__)
         call_id = uuid.uuid4().hex
@@ -1506,21 +1742,30 @@ class NarService:
             raise ValueError(f"outcome index must be 0 to {len(opts) - 1}")
         self.store.log_feedback({"call_id": call["call_id"], "at": time.time(), "outcome": index})
         result = {"recorded": True, "call_id": call["call_id"], "outcome": index, "refit": None}
-        if self.store.feedback_count(call["task_type"]) % gate.REFIT_EVERY == 0:
-            result["refit"] = asdict(gate.refit(self.store, call["task_type"]))
+        if self.store.feedback_count(call["model"], call["task_type"]) % gate.REFIT_EVERY == 0:
+            result["refit"] = asdict(gate.refit(self.store, call["model"], call["task_type"]))
         return result
+
+    def _reliability(self, model: str, task_type: str, temperature: float) -> dict | None:
+        held = [Sample(tuple(lp), o) for cid, lp, o in self.store.labelled(model, task_type) if gate.is_heldout(cid)]
+        if len(held) < gate.MIN_HELDOUT:
+            return None
+        return {"brier": round(brier(held, temperature), 4), "ece": round(ece(held, temperature), 4), "n_heldout": len(held)}
 
     def status(self) -> dict:
         calls = self.store.calls()
         labelled_ids = {f.get("call_id") for f in self.store.feedback()}
-        per_type = {}
-        for t in sorted({c.get("task_type", "general") for c in calls}):
-            of_type = [c for c in calls if c.get("task_type") == t]
-            per_type[t] = {"calls": len(of_type),
-                           "labelled": sum(1 for c in of_type if c.get("call_id") in labelled_ids),
-                           "calibrator": self.store.current(t)}
+        calibration: dict = {}
+        for model, task_type in sorted({(c.get("model"), c.get("task_type")) for c in calls if c.get("model")}):
+            of_kind = [c for c in calls if c.get("model") == model and c.get("task_type") == task_type]
+            current = self.store.current(model, task_type)
+            calibration.setdefault(model, {})[task_type] = {
+                "calls": len(of_kind),
+                "labelled": sum(1 for c in of_kind if c.get("call_id") in labelled_ids),
+                "calibrator": current,
+                "reliability": self._reliability(model, task_type, current["temperature"])}
         decisions = self.store.promotions()
-        return {"model": self.model, "store": str(self.store.root), "task_types": per_type,
+        return {"model": self.model, "store": str(self.store.root), "calibration": calibration,
                 "last_decision": decisions[-1] if decisions else None}
 ```
 
@@ -1538,12 +1783,15 @@ class NarService:
 
 **Interfaces:**
 - Consumes: `NarService` (Task 9), `OllamaClient`, `OllamaUnavailable` (Task 4), `NarStore` (Task 7).
-- Produces: FastMCP app `mcp` named `nar` with tools `nar_choose`, `nar_classify`, `nar_feedback`, `nar_status`; `get_service()`; `main()` (stdio). Results: the service's dict, or `{"unavailable": True, "reason"}` / `{"error"}`.
+- Produces: FastMCP app `mcp` named `nar` with tools `nar_choose`, `nar_classify`, `nar_feedback` (`outcome` strictly an integer or a string; booleans rejected), `nar_status`; `get_service()`; `main()` (stdio). Results: the service's dict, or `{"unavailable": True, "reason"}` / `{"error"}`.
 
 - [ ] **Step 1: Write the failing tests** `tests/test_server.py`
 
 ```python
 import asyncio
+
+import pytest
+from mcp.server.fastmcp.exceptions import ToolError
 
 from nar_tools import server
 from nar_tools.ollama import OllamaUnavailable
@@ -1555,6 +1803,15 @@ class Down:
 
     def classify(self, *args):
         raise ValueError("give a list of 1 to 50 items")
+
+
+class Recorder:
+    def __init__(self):
+        self.args = None
+
+    def feedback(self, call_id, outcome):
+        self.args = (call_id, outcome)
+        return {"recorded": True}
 
 
 def test_the_four_tools_are_registered_with_guidance():
@@ -1571,6 +1828,23 @@ def test_unavailable_ollama_becomes_a_result_not_an_exception(monkeypatch):
 def test_bad_input_becomes_an_error_result(monkeypatch):
     monkeypatch.setattr(server, "get_service", lambda: Down())
     assert "error" in server.nar_classify([], ["a", "b"])
+
+
+def test_feedback_takes_an_index_or_text_through_mcp(monkeypatch):
+    rec = Recorder()
+    monkeypatch.setattr(server, "get_service", lambda: rec)
+    asyncio.run(server.mcp.call_tool("nar_feedback", {"call_id": "c1", "outcome": 1}))
+    assert rec.args == ("c1", 1)
+    asyncio.run(server.mcp.call_tool("nar_feedback", {"call_id": "c1", "outcome": "yes"}))
+    assert rec.args == ("c1", "yes")
+
+
+def test_feedback_rejects_a_boolean_through_mcp(monkeypatch):
+    rec = Recorder()
+    monkeypatch.setattr(server, "get_service", lambda: rec)
+    with pytest.raises(ToolError):
+        asyncio.run(server.mcp.call_tool("nar_feedback", {"call_id": "c1", "outcome": True}))
+    assert rec.args is None
 ```
 
 - [ ] **Step 2: Run, see them fail**
@@ -1581,7 +1855,10 @@ def test_bad_input_becomes_an_error_result(monkeypatch):
 """The `nar` MCP server (stdio): calibrated single-pass option scoring with the local model."""
 from __future__ import annotations
 
+from typing import Annotated
+
 from mcp.server.fastmcp import FastMCP
+from pydantic import Strict
 
 from nar_tools.ollama import OllamaClient, OllamaUnavailable
 from nar_tools.service import NarService
@@ -1626,16 +1903,17 @@ def nar_classify(items: list[str], labels: list[str], task_type: str = "general"
 
 
 @mcp.tool()
-def nar_feedback(call_id: str, outcome: str) -> dict:
+def nar_feedback(call_id: str, outcome: Annotated[int, Strict()] | Annotated[str, Strict()]) -> dict:
     """Record which option was actually right for an earlier nar_choose or nar_classify result: the
-    option's exact text or its 0-based index. Every 20 outcomes per task type, nar refits its calibration
-    and keeps the new one only if it is no worse on held-out calls."""
+    option's 0-based index or its exact text. Every 20 outcomes per model and task type, nar refits its
+    calibration and keeps the new one only if it is no worse on held-out calls."""
     return _safe(lambda: get_service().feedback(call_id, outcome))
 
 
 @mcp.tool()
 def nar_status() -> dict:
-    """The local model in use, calls and outcomes per task type, current calibrators, last refit decision."""
+    """The local model in use; calls, outcomes, calibrator and held-out reliability per model and task
+    type; and the last refit decision."""
     return _safe(lambda: get_service().status())
 
 
@@ -1643,7 +1921,7 @@ def main() -> None:
     mcp.run()   # stdio
 ```
 
-- [ ] **Step 4: Run, see them pass** (3 passed; full suite green)
+- [ ] **Step 4: Run, see them pass** (5 passed; full suite green)
 
 - [ ] **Step 5: Commit** (`git commit -m "nar: FastMCP stdio server with four tools"`)
 
@@ -1657,7 +1935,7 @@ def main() -> None:
 
 **Interfaces:**
 - Consumes: Tasks 4-9.
-- Produces: `load_jsonl(name) -> list[dict]`, `load_toolset() -> list[dict]`, `@dataclass ModelResult(model, tool_success=0.0, choose_accuracy=0.0, choose_ece=1.0, tokens_per_s=0.0, fully_on_gpu=False, errors=[])`, `evaluate(client, model) -> ModelResult`, `verdict(candidate, baseline, min_tps=15.0) -> {"passes", "reasons"}`, `run(models, client=None, baseline_model=None, out_dir=None) -> dict` (writes `<NAR_HOME>/eval/<stamp>.json` and `latest.json` with keys `created_at, machine, baseline, models, verdicts`); `cli.main(argv=None) -> int` with `eval --models a,b [--baseline t]`, `fit [--task-type t]`, `status`, `choose QUESTION -o A -o B [--task-type t]`.
+- Produces: `load_jsonl(name)`, `load_toolset()`, `@dataclass ModelResult(model, tool_success=0.0, choose_accuracy=0.0, choose_ece=1.0, tokens_per_s=0.0, fully_on_gpu=False, temperature=1.0, errors=[])`, `evaluate(client, model, temperature=1.0) -> ModelResult`, `verdict(candidate, baseline, min_tps) -> {"passes", "reasons"}`, `run(models, client=None, baseline_model=None, out_dir=None, store=None) -> dict` (writes `<NAR_HOME>/eval/<stamp>.json` and `latest.json`: `created_at, machine, baseline, min_tokens_per_s, models, verdicts`); `cli.main(argv=None) -> int` with `eval --models a,b [--baseline t]`, `fit [--model m] [--task-type t]`, `status`, `choose QUESTION --option A --option B [--task-type t]`.
 
 - [ ] **Step 1: Add the eval data**
 
@@ -1709,7 +1987,7 @@ def main() -> None:
 ]
 ```
 
-`src/nar_tools/evals/tools.jsonl` (17 cases; `expect: null` means no tool call is right; free-text arguments are not checked):
+`src/nar_tools/evals/tools.jsonl` (17 cases; `expect: null` means making no call is right; free-text arguments are not compared, but every required argument must be present and non-empty):
 
 ```jsonl
 {"prompt": "Open the file README.md and show me what is inside.", "expect": {"name": "read_file", "arguments": {"path": "README.md"}}}
@@ -1736,24 +2014,29 @@ def main() -> None:
 ```python
 import math
 
+import pytest
+
 from nar_tools import evaluate
 from nar_tools.evaluate import ModelResult, verdict
-from nar_tools.ollama import TokenLogprob
+from nar_tools.ollama import FirstToken, TokenLogprob
+from nar_tools.store import NarStore
+
+REQUIRED = {t["function"]["name"]: t["function"]["parameters"]["required"] for t in evaluate.load_toolset()}
 
 
 class ScriptedClient:
-    """Answers every eval task correctly, fast, fully on the GPU."""
+    """Answers every eval task correctly (with every required argument), fast, fully on the GPU."""
 
-    def __init__(self, on_gpu=True, tps=40.0):
-        self.on_gpu, self.tps = on_gpu, tps
+    def __init__(self, on_gpu=True, tps=40.0, extra_call=False, drop_required=False):
+        self.on_gpu, self.tps, self.extra_call, self.drop_required = on_gpu, tps, extra_call, drop_required
         self.unloaded = []
 
-    def next_token_logprobs(self, model, messages, top=20):
+    def first_token(self, model, messages, top=20):
         user = messages[-1]["content"]
         case = next(c for c in evaluate.load_jsonl("choose.jsonl") if c["question"] in user)
         letter = "ABCDEFGHIJKLMNOPQRST"[case["answer"]]
         other = "B" if letter == "A" else "A"
-        return [TokenLogprob(letter, math.log(0.9)), TokenLogprob(other, math.log(0.1))]
+        return FirstToken(letter, math.log(0.9), (TokenLogprob(letter, math.log(0.9)), TokenLogprob(other, math.log(0.1))))
 
     def chat(self, model, messages, tools=None, num_predict=None):
         if tools is None:
@@ -1761,8 +2044,16 @@ class ScriptedClient:
         case = next(c for c in evaluate.load_jsonl("tools.jsonl") if c["prompt"] == messages[-1]["content"])
         if case["expect"] is None:
             return {"message": {"content": "hello"}}
-        return {"message": {"tool_calls": [{"function": {"name": case["expect"]["name"],
-                                                         "arguments": case["expect"]["arguments"]}}]}}
+        name = case["expect"]["name"]
+        args = dict(case["expect"]["arguments"])
+        for required in REQUIRED[name]:
+            args.setdefault(required, "filled in")
+        if self.drop_required:
+            args.pop(REQUIRED[name][0])
+        calls = [{"function": {"name": name, "arguments": args}}]
+        if self.extra_call:
+            calls.append({"function": {"name": "set_timer", "arguments": {"minutes": 1}}})
+        return {"message": {"tool_calls": calls}}
 
     def loaded_models(self):
         return [{"name": "m", "model": "m", "size": 100, "size_vram": 100 if self.on_gpu else 60}]
@@ -1771,14 +2062,19 @@ class ScriptedClient:
         self.unloaded.append(model)
 
 
+def result(**kw):
+    base = dict(model="new", tool_success=0.8, choose_accuracy=0.8, choose_ece=0.10, tokens_per_s=40, fully_on_gpu=True)
+    base.update(kw)
+    return ModelResult(**base)
+
+
 def test_eval_data_is_well_formed():
     choose = evaluate.load_jsonl("choose.jsonl")
     assert len(choose) >= 30
     assert all(0 <= c["answer"] < len(c["options"]) <= 20 for c in choose)
     counts = [[c["answer"] for c in choose].count(i) for i in range(4)]
     assert max(counts) - min(counts) <= 2
-    names = {t["function"]["name"] for t in evaluate.load_toolset()}
-    assert all(c["expect"] is None or c["expect"]["name"] in names for c in evaluate.load_jsonl("tools.jsonl"))
+    assert all(c["expect"] is None or c["expect"]["name"] in REQUIRED for c in evaluate.load_jsonl("tools.jsonl"))
 
 
 def test_a_perfect_model_scores_full_marks_and_is_unloaded():
@@ -1789,22 +2085,44 @@ def test_a_perfect_model_scores_full_marks_and_is_unloaded():
     assert client.unloaded == ["m"]
 
 
-def test_verdict_hard_limits_and_comparisons():
-    base = ModelResult("old", tool_success=0.8, choose_accuracy=0.8, choose_ece=0.10, tokens_per_s=30, fully_on_gpu=True)
-    good = ModelResult("new", tool_success=0.9, choose_accuracy=0.8, choose_ece=0.08, tokens_per_s=40, fully_on_gpu=True)
-    assert verdict(good, base)["passes"] is True
-    fewer_tools = ModelResult("new", tool_success=0.7, choose_accuracy=0.9, choose_ece=0.05, tokens_per_s=40, fully_on_gpu=True)
-    assert verdict(fewer_tools, base)["passes"] is False
-    slow = ModelResult("new", tool_success=0.9, choose_accuracy=0.9, choose_ece=0.05, tokens_per_s=9, fully_on_gpu=True)
-    assert "tokens/s" in " ".join(verdict(slow, base)["reasons"])
-    split = ModelResult("new", tool_success=0.9, choose_accuracy=0.9, choose_ece=0.05, tokens_per_s=40, fully_on_gpu=False)
-    assert verdict(split, base)["passes"] is False
+@pytest.mark.parametrize("flaw", ["extra_call", "drop_required"])
+def test_invalid_tool_calls_are_not_successes(flaw):
+    assert evaluate.evaluate(ScriptedClient(**{flaw: True}), "m").tool_success < 0.2
 
 
-def test_run_writes_a_report_with_verdicts(tmp_path):
-    report = evaluate.run(["m"], client=ScriptedClient(), baseline_model="m", out_dir=tmp_path)
-    assert report["baseline"] == "m" and report["verdicts"]["m"]["passes"] is True
-    assert (tmp_path / "latest.json").exists()
+def test_verdict_passes_when_no_worse_and_within_limits():
+    base = result(model="old")
+    assert verdict(result(), base, 15)["passes"] is True                       # equal is no worse
+    assert verdict(result(tool_success=0.9, choose_ece=0.05), base, 15)["passes"] is True
+
+
+@pytest.mark.parametrize("change,phrase", [
+    (dict(tool_success=0.7), "tool calls"),
+    (dict(choose_accuracy=0.7), "accuracy"),
+    (dict(choose_ece=0.2), "calibration"),
+    (dict(tokens_per_s=9), "tokens/s"),
+    (dict(fully_on_gpu=False), "GPU"),
+])
+def test_each_gated_metric_and_limit_blocks_on_its_own(change, phrase):
+    v = verdict(result(**change), result(model="old"), 15)
+    assert v["passes"] is False and phrase in " ".join(v["reasons"])
+
+
+def test_a_baseline_that_could_not_be_measured_blocks_adoption():
+    v = verdict(result(tool_success=0.1), result(model="old", errors=["tools: unreachable"]), 15)
+    assert v["passes"] is False and "could not be measured" in " ".join(v["reasons"])
+
+
+def test_run_evaluates_each_model_with_its_deployed_calibration(tmp_path, monkeypatch):
+    store = NarStore(tmp_path / "nar")
+    with store.lock():
+        store.promote("m", "general", {"temperature": 2.0})
+    seen = {}
+    real = evaluate.evaluate
+    monkeypatch.setattr(evaluate, "evaluate", lambda c, m, temperature=1.0: seen.setdefault(m, temperature) and real(c, m, temperature))
+    report = evaluate.run(["new"], client=ScriptedClient(), baseline_model="m", out_dir=tmp_path, store=store)
+    assert seen == {"new": 1.0, "m": 2.0}
+    assert report["baseline"] == "m" and (tmp_path / "latest.json").exists()
 ```
 
 ```python
@@ -1815,13 +2133,13 @@ from nar_tools import cli
 
 def test_fit_prints_a_decision(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("NAR_HOME", str(tmp_path))
-    assert cli.main(["fit", "--task-type", "general"]) == 0
+    assert cli.main(["fit", "--model", "m", "--task-type", "general"]) == 0
     assert "not enough" in json.loads(capsys.readouterr().out)["reason"]
 
 
 def test_errors_exit_nonzero(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("NAR_HOME", str(tmp_path))
-    assert cli.main(["fit", "--task-type", "../x"]) == 1
+    assert cli.main(["fit", "--model", "m", "--task-type", "../x"]) == 1
     assert "task_type" in capsys.readouterr().err
 ```
 
@@ -1842,11 +2160,11 @@ from pathlib import Path
 from nar_tools.calibration import Sample, ece
 from nar_tools.ollama import OllamaClient, OllamaUnavailable, local_state
 from nar_tools.scoring import build_messages, letter_logprobs
-from nar_tools.store import nar_home
+from nar_tools.store import NarStore, nar_home
 
 EVALS = Path(__file__).resolve().parent / "evals"
 SPEED_PROMPT = "Explain in about 150 words why a test should fail before its fix is written."
-MIN_TOKENS_PER_S = 15.0
+DEFAULT_MIN_TOKENS_PER_S = 15.0
 
 
 @dataclass
@@ -1857,6 +2175,7 @@ class ModelResult:
     choose_ece: float = 1.0
     tokens_per_s: float = 0.0
     fully_on_gpu: bool = False
+    temperature: float = 1.0
     errors: list[str] = field(default_factory=list)
 
 
@@ -1883,35 +2202,44 @@ def _args_match(expected: dict, got: dict) -> bool:
     return True
 
 
+def _call_ok(calls: list, expect: dict | None, required: dict[str, list[str]]) -> bool:
+    if expect is None:
+        return not calls
+    if len(calls) != 1:
+        return False                      # exactly one call: extra calls are not free
+    fn = calls[0].get("function") or {}
+    args = fn.get("arguments") or {}
+    if isinstance(args, str):
+        try:
+            args = json.loads(args)
+        except ValueError:
+            return False
+    if fn.get("name") != expect["name"]:
+        return False
+    if any(str(args.get(r, "")).strip() == "" for r in required.get(expect["name"], [])):
+        return False                      # every required argument present and non-empty
+    return _args_match(expect["arguments"], args)
+
+
 def eval_tools(client, model: str) -> float:
-    toolset, cases, ok = load_toolset(), load_jsonl("tools.jsonl"), 0
+    toolset = load_toolset()
+    required = {t["function"]["name"]: t["function"]["parameters"].get("required", []) for t in toolset}
+    cases = load_jsonl("tools.jsonl")
+    ok = 0
     for case in cases:
         reply = client.chat(model, [{"role": "user", "content": case["prompt"]}], tools=toolset)
-        calls = (reply.get("message") or {}).get("tool_calls") or []
-        if case["expect"] is None:
-            ok += not calls
-            continue
-        if not calls:
-            continue
-        fn = calls[0].get("function") or {}
-        args = fn.get("arguments") or {}
-        if isinstance(args, str):
-            try:
-                args = json.loads(args)
-            except ValueError:
-                args = {}
-        ok += fn.get("name") == case["expect"]["name"] and _args_match(case["expect"]["arguments"], args)
+        ok += _call_ok((reply.get("message") or {}).get("tool_calls") or [], case["expect"], required)
     return ok / len(cases)
 
 
-def eval_choose(client, model: str) -> tuple[float, float]:
+def eval_choose(client, model: str, temperature: float) -> tuple[float, float]:
     cases, samples, correct = load_jsonl("choose.jsonl"), [], 0
     for case in cases:
-        raw, _ = letter_logprobs(client.next_token_logprobs(model, build_messages(case["question"], case["options"])),
-                                 len(case["options"]))
+        first = client.first_token(model, build_messages(case["question"], case["options"]))
+        raw, _ = letter_logprobs(first, len(case["options"]))
         samples.append(Sample(tuple(raw), case["answer"]))
         correct += max(range(len(raw)), key=raw.__getitem__) == case["answer"]
-    return correct / len(cases), ece(samples, 1.0)
+    return correct / len(cases), ece(samples, temperature)
 
 
 def eval_speed(client, model: str) -> tuple[float, bool]:
@@ -1922,16 +2250,22 @@ def eval_speed(client, model: str) -> tuple[float, bool]:
     return tps, on_gpu
 
 
-def evaluate(client, model: str) -> ModelResult:
-    r = ModelResult(model)
+def evaluate(client, model: str, temperature: float = 1.0) -> ModelResult:
+    """Measure one model; `temperature` is the calibration it would really be used with."""
+    r = ModelResult(model, temperature=temperature)
     try:
-        for label, step in (("tools", lambda: setattr(r, "tool_success", eval_tools(client, model))),
-                            ("choose", lambda: _set_choose(r, eval_choose(client, model))),
-                            ("speed", lambda: _set_speed(r, eval_speed(client, model)))):
-            try:
-                step()
-            except (OllamaUnavailable, KeyError, ValueError) as e:
-                r.errors.append(f"{label}: {e}")
+        try:
+            r.tool_success = eval_tools(client, model)
+        except (OllamaUnavailable, KeyError, ValueError) as e:
+            r.errors.append(f"tools: {e}")
+        try:
+            r.choose_accuracy, r.choose_ece = eval_choose(client, model, temperature)
+        except (OllamaUnavailable, KeyError, ValueError) as e:
+            r.errors.append(f"choose: {e}")
+        try:
+            r.tokens_per_s, r.fully_on_gpu = eval_speed(client, model)
+        except (OllamaUnavailable, KeyError, ValueError) as e:
+            r.errors.append(f"speed: {e}")
     finally:
         try:
             client.unload(model)
@@ -1940,15 +2274,7 @@ def evaluate(client, model: str) -> ModelResult:
     return r
 
 
-def _set_choose(r: ModelResult, value: tuple[float, float]) -> None:
-    r.choose_accuracy, r.choose_ece = value
-
-
-def _set_speed(r: ModelResult, value: tuple[float, bool]) -> None:
-    r.tokens_per_s, r.fully_on_gpu = value
-
-
-def verdict(candidate: ModelResult, baseline: ModelResult | None, min_tps: float = MIN_TOKENS_PER_S) -> dict:
+def verdict(candidate: ModelResult, baseline: ModelResult | None, min_tps: float) -> dict:
     reasons = []
     if candidate.errors:
         reasons.append("errors: " + "; ".join(candidate.errors))
@@ -1957,24 +2283,32 @@ def verdict(candidate: ModelResult, baseline: ModelResult | None, min_tps: float
     if candidate.tokens_per_s < min_tps:
         reasons.append(f"{candidate.tokens_per_s:.1f} tokens/s is below {min_tps:g}")
     if baseline is not None and baseline.model != candidate.model:
-        if candidate.tool_success < baseline.tool_success:
-            reasons.append("fewer successful tool calls than the current default")
-        if candidate.choose_accuracy < baseline.choose_accuracy:
-            reasons.append("lower nar_choose accuracy than the current default")
-        if candidate.choose_ece > baseline.choose_ece:
-            reasons.append("worse calibration than the current default")
+        if baseline.errors:
+            reasons.append("the current default could not be measured: " + "; ".join(baseline.errors))
+        else:
+            if candidate.tool_success < baseline.tool_success:
+                reasons.append("fewer successful tool calls than the current default")
+            if candidate.choose_accuracy < baseline.choose_accuracy:
+                reasons.append("lower nar_choose accuracy than the current default")
+            if candidate.choose_ece > baseline.choose_ece:
+                reasons.append("worse calibration than the current default")
     return {"passes": not reasons, "reasons": reasons}
 
 
-def run(models: list[str], client=None, baseline_model: str | None = None, out_dir: Path | None = None) -> dict:
+def run(models: list[str], client=None, baseline_model: str | None = None, out_dir: Path | None = None,
+        store: NarStore | None = None) -> dict:
     client = client or OllamaClient()
-    baseline_model = baseline_model or local_state().get("default")
+    store = store or NarStore()
+    state = local_state()
+    baseline_model = baseline_model or state.get("default")
+    min_tps = float(state.get("min_tokens_per_s") or DEFAULT_MIN_TOKENS_PER_S)
     names = list(dict.fromkeys(models + ([baseline_model] if baseline_model else [])))
-    results = {m: evaluate(client, m) for m in names}
+    results = {m: evaluate(client, m, temperature=store.current(m, "general")["temperature"]) for m in names}
     base = results.get(baseline_model) if baseline_model else None
     report = {"created_at": time.time(), "machine": platform.node(), "baseline": baseline_model,
+              "min_tokens_per_s": min_tps,
               "models": {m: asdict(r) for m, r in results.items()},
-              "verdicts": {m: verdict(r, base) for m, r in results.items()}}
+              "verdicts": {m: verdict(r, base, min_tps) for m, r in results.items()}}
     out = Path(out_dir) if out_dir else nar_home() / "eval"
     out.mkdir(parents=True, exist_ok=True)
     text = json.dumps(report, indent=2)
@@ -1986,7 +2320,7 @@ def run(models: list[str], client=None, baseline_model: str | None = None, out_d
 `src/nar_tools/cli.py`:
 
 ```python
-"""The `nar` command: eval, fit, status, choose."""
+"""The `nar` command: eval, fit, status, choose. Long options only (PowerShell owns -o)."""
 from __future__ import annotations
 
 import argparse
@@ -1996,7 +2330,7 @@ from dataclasses import asdict
 
 from nar_tools import gate
 from nar_tools.evaluate import run
-from nar_tools.ollama import OllamaClient, OllamaUnavailable
+from nar_tools.ollama import OllamaClient, OllamaUnavailable, local_state
 from nar_tools.service import NarService
 from nar_tools.store import NarStore
 
@@ -2007,20 +2341,24 @@ def main(argv: list[str] | None = None) -> int:
     e = sub.add_parser("eval", help="bake-off; writes <NAR_HOME>/eval/latest.json")
     e.add_argument("--models", required=True, help="comma-separated Ollama tags")
     e.add_argument("--baseline", help="tag to compare against (default: the current default model)")
-    f = sub.add_parser("fit", help="refit, and maybe promote, one task type's calibrator")
+    f = sub.add_parser("fit", help="refit, and maybe promote, one model's calibrator for one task type")
+    f.add_argument("--model", help="Ollama tag (default: the current default model)")
     f.add_argument("--task-type", default="general")
-    sub.add_parser("status", help="counts, calibrators, last decision")
+    sub.add_parser("status", help="calls, outcomes, calibrators, reliability, last decision")
     c = sub.add_parser("choose", help="score options once (manual check)")
     c.add_argument("question")
-    c.add_argument("-o", "--option", action="append", required=True)
+    c.add_argument("--option", action="append", required=True)
     c.add_argument("--task-type", default="general")
     args = p.parse_args(argv)
     try:
         if args.cmd == "eval":
             report = run([m.strip() for m in args.models.split(",") if m.strip()], baseline_model=args.baseline)
-            out = {"baseline": report["baseline"], "verdicts": report["verdicts"], "models": report["models"]}
+            out = {k: report[k] for k in ("baseline", "min_tokens_per_s", "verdicts", "models")}
         elif args.cmd == "fit":
-            out = asdict(gate.refit(NarStore(), args.task_type))
+            model = args.model or local_state().get("default")
+            if not model:
+                raise ValueError("no model given and no local default configured (aos install local)")
+            out = asdict(gate.refit(NarStore(), model, args.task_type))
         elif args.cmd == "status":
             out = NarService(OllamaClient(), NarStore()).status()
         else:
@@ -2038,19 +2376,19 @@ if __name__ == "__main__":
 
 - [ ] **Step 4: Run, see them pass** (`uv run pytest -q` -> whole suite green)
 
-- [ ] **Step 5: Commit** (`git commit -m "nar: bake-off (nar eval) and CLI"`)
+- [ ] **Step 5: Commit** (`git commit -m "nar: strict bake-off (nar eval) and CLI"`)
 
 ---
 
-### Task 12: aos registers nar, runs it from ~\.aos, and adopts models through the gate
+### Task 12: aos registers nar, runs it from ~\.aos, syncs its state, and adopts models through the gate
 
 **Files:**
-- Modify: `aos.psm1` (`Get-AosMcpManifest`, `Expand-AosPlaceholders`, `Test-AosMcpCurrent`, `Add-AosMcpServer`, `Sync-AosMcp`, `Get-AosStatus` MCP section, `Get-AosNarVenv`, `Install-AosNarTools` (replace the Task 1 stub), `Get-AosNarHome`, `Invoke-AosLocalAdopt`, dispatcher `local` and `nar`, help), `config/mcp.json`
-- Test: `tests/aos.Tests.ps1` (`Describe 'MCP placeholders and nar registration'`, `Describe 'aos local adopt'`)
+- Modify: `aos.psm1` (`Get-AosMcpManifest`, `Expand-AosPlaceholders`, `Test-AosMcpCurrent`, `Add-AosMcpServer`, `Sync-AosMcp`, `Get-AosStatus` MCP section, `Sync-AosBrain`, `Get-AosNarVenv`, `Get-AosNarHome`, `Install-AosNarTools` (replace the Task 1 stub), `Invoke-AosLocalAdopt`, `Invoke-AosNar`, dispatcher `local` and `nar`, help), `config/mcp.json`
+- Test: `tests/aos.Tests.ps1` (`Describe 'MCP placeholders and nar registration'`, `Describe 'aos local adopt'`, `Describe 'Brain sync includes the local state'`, `Describe 'aos nar dispatch'`)
 
 **Interfaces:**
-- Consumes: `Get-AosLocalConfig`, `Get-AosLocalConfigPath`, `Get-AosStateDir`, `Sync-AosLocalState` (Task 1); `Sync-AosCodexProfiles` (existing); the report format from Task 11 (`baseline`, `verdicts[tag].passes`, `verdicts[tag].reasons`).
-- Produces: `aos local adopt <tag> [-DryRun]`, `aos nar <args>` (runs `~\.aos\venvs\nar-tools\Scripts\nar.exe`), `nar` registered in Claude Code and Codex by `aos sync` once the venv exists.
+- Consumes: Task 1 functions; `Sync-AosCodexProfiles` (existing); the report format from Task 11 (`baseline`, `verdicts[tag].passes`, `verdicts[tag].reasons`).
+- Produces: `aos local adopt <tag> [-DryRun]`, `aos nar <args>` (runs `~\.aos\venvs\nar-tools\Scripts\nar.exe`, arguments forwarded unchanged), `nar` registered in Claude Code and Codex by `aos sync` once the venv exists, `aos sync` refreshing `~\.aos\local.json`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2159,9 +2497,33 @@ Describe 'aos local adopt' {
         Should -Invoke Sync-AosLocalState -ModuleName aos -Times 0 -Exactly
     }
 }
+
+Describe 'Brain sync includes the local state' {
+    BeforeEach {
+        foreach ($f in 'Set-AosJunction', 'Sync-AosClaudeSkills', 'Set-AosManagedBlock', 'Sync-AosCodexAgents',
+                       'Sync-AosClaudeSettings', 'Sync-AosCodexProfiles', 'Sync-AosMcp', 'Sync-AosProfile', 'Sync-AosLocalState') {
+            Mock $f -ModuleName aos { }
+        }
+    }
+
+    It 'refreshes ~\.aos\local.json and passes DryRun through' {
+        InModuleScope aos { Sync-AosBrain -DryRun }
+        Should -Invoke Sync-AosLocalState -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
+    }
+}
+
+Describe 'aos nar dispatch' {
+    It 'forwards long options unchanged' {
+        Mock Invoke-AosNar -ModuleName aos { }
+        aos nar choose 'Which is larger?' --option 7 --option 12
+        Should -Invoke Invoke-AosNar -ModuleName aos -Times 1 -Exactly -ParameterFilter {
+            ($Arguments -join '|') -ceq 'choose|Which is larger?|--option|7|--option|12'
+        }
+    }
+}
 ```
 
-- [ ] **Step 2: Run, see them fail** (`tests\Run-Tests.ps1`; the 9 new tests FAIL)
+- [ ] **Step 2: Run, see them fail** (`tests\Run-Tests.ps1`; the 11 new tests FAIL)
 
 - [ ] **Step 3: Implement**
 
@@ -2249,16 +2611,18 @@ function Get-AosNarHome {
 }
 
 function Install-AosNarTools([switch]$DryRun) {
-    # nar-tools (Desktop\1-Projects\nar-tools) runs from a venv under ~\.aos, outside OneDrive and AppData.
+    # nar-tools (Desktop\1-Projects\nar-tools) runs from a venv under ~\.aos: outside OneDrive, and on the
+    # system Python (uv must not download one into AppData, which a packaged app can make private).
     $repo = Join-Path (Get-AosProjectsDir) 'nar-tools'
     if (-not (Test-Path -LiteralPath (Join-Path $repo 'pyproject.toml'))) { Write-AosInfo "nar-tools not found in $repo; skipped"; return }
     if (-not (Test-AosCommand uv)) { Write-AosWarn 'uv missing (aos install base)'; return }
     $venv = Get-AosNarVenv
     if ($DryRun) { Write-AosDry "uv sync --frozen --no-dev (venv $venv)"; return }
-    $savedEnv = $env:UV_PROJECT_ENVIRONMENT; $savedLink = $env:UV_LINK_MODE
-    $env:UV_PROJECT_ENVIRONMENT = $venv; $env:UV_LINK_MODE = 'copy'
+    $saved = @{}
+    $vars = @{ UV_PROJECT_ENVIRONMENT = $venv; UV_LINK_MODE = 'copy'; UV_PYTHON_DOWNLOADS = 'never' }
+    foreach ($k in @($vars.Keys)) { $saved[$k] = [Environment]::GetEnvironmentVariable($k, 'Process'); [Environment]::SetEnvironmentVariable($k, $vars[$k], 'Process') }
     try { $r = Invoke-AosCapture "uv sync --frozen --no-dev --directory `"$repo`"" }
-    finally { $env:UV_PROJECT_ENVIRONMENT = $savedEnv; $env:UV_LINK_MODE = $savedLink }
+    finally { foreach ($k in @($vars.Keys)) { [Environment]::SetEnvironmentVariable($k, $saved[$k], 'Process') } }
     if ($r.Code -eq 0) { Write-AosOk "nar-tools ready in $venv" } else { Write-AosWarn "uv sync for nar-tools failed (exit $($r.Code))" }
 }
 
@@ -2291,7 +2655,14 @@ function Invoke-AosNar([string[]]$Arguments) {
 }
 ```
 
-In `Get-AosStatus`'s MCP section: read the manifest with `Get-AosMcpManifest`, and at the top of the per-server loop:
+`Sync-AosBrain`, after `Sync-AosCodexProfiles -DryRun:$DryRun`:
+
+```powershell
+    Write-AosStep 'Local model state (~\.aos\local.json, read by nar)'
+    Sync-AosLocalState -DryRun:$DryRun
+```
+
+`Get-AosStatus` MCP section: read the manifest with `Get-AosMcpManifest`, and at the top of the per-server loop:
 
 ```powershell
         $s = $manifest['servers'][$name]
@@ -2309,7 +2680,7 @@ Help, add:
 
 ```
   aos local adopt <tag>      make a model the local default, only if the latest nar eval says it is no worse
-  aos nar <args>             the nar CLI (eval, fit, status, choose) from its venv in ~\.aos
+  aos nar <args>             the nar CLI from its venv in ~\.aos (long options: --option, not -o)
 ```
 
 - [ ] **Step 4: Run, see them pass** (`aos test`: all green in both shells)
@@ -2318,7 +2689,7 @@ Help, add:
 
 ```bash
 git add aos.psm1 config/mcp.json tests/aos.Tests.ps1
-git commit -m "aos: nar registration with run-time paths, aos nar, aos local adopt"
+git commit -m "aos: nar registration with run-time paths, aos nar, aos local adopt, local state in sync"
 ```
 
 ---
@@ -2330,28 +2701,28 @@ git commit -m "aos: nar registration with run-time paths, aos nar, aos local ado
 - [ ] **Step 1: Preview, then install** (downloads: Ollama via winget, then `openbmb/minicpm5-2b:q8_0` 2.7 GB and `qwen3.5:4b` 3.4 GB)
 
 Run: `aos install local -DryRun`, then `aos install local`.
-Expected: `Ollama.Ollama installed`, both models `pulled`, `wrote ~\.aos\local.json`, `nar-tools ready in ~\.aos\venvs\nar-tools`. `ollama --version` reports 0.12.11 or newer (logprobs).
+Expected: `Ollama.Ollama installed`, both models `pulled`, `<default> runs entirely on the GPU` (or a warning to report), `wrote ~\.aos\local.json`, `nar-tools ready in ~\.aos\venvs\nar-tools`. `ollama --version` is 0.12.11 or newer.
 
 - [ ] **Step 2: Pull the remaining candidate** (2.2 GB): `ollama pull granite4.2:3b`
 
 - [ ] **Step 3: Bake-off**
 
 Run: `aos nar eval --models openbmb/minicpm5-2b:q8_0,qwen3.5:4b,granite4.2:3b`
-Expected: a report per model (tool success, choose accuracy, ECE, tokens/s, GPU) and verdicts against the default. Record the numbers for `docs/decisions.md`.
+Expected: per model tool success, choose accuracy, ECE, tokens/s, GPU, and verdicts against the default. Keep the numbers for `docs/decisions.md`.
 
 - [ ] **Step 4: Adopt if a candidate passes and is better**
 
-If a non-default candidate passes and is better on the gated metrics: `aos local adopt <tag>`, commit `config/local.json`. If the default fails a hard limit and no candidate passes, stop and report to the user before changing anything.
+If a non-default candidate passes and beats the default on the gated metrics: `aos local adopt <tag>`, commit `config/local.json`. If the default fails a hard limit or could not be measured, stop and report to the user before changing anything.
 
 - [ ] **Step 5: Register and check**
 
-Run: `aos sync` (registers `nar` in Claude Code and Codex), `aos status` (Local models ok; claude/codex: nar ok).
+Run: `aos sync` (registers `nar` in Claude Code and Codex; refreshes `~\.aos\local.json`), `aos status` (Local models ok; claude/codex: nar ok).
 Run: `codex exec --profile local "Reply with the single word OK" </dev/null` - the Codex local profile works through Ollama.
 Run: `codex exec "Call the nar_choose tool with question 'Which is a prime number?' and options ['21','29','33'], then print its JSON" </dev/null` - result has `choice` 29 and a `call_id`.
 Run: `claude -p "Use the nar_choose MCP tool once: question 'Which planet is closest to the Sun?', options Venus, Mercury, Mars. Print the tool's JSON." --allowedTools mcp__nar__nar_choose` - same shape.
 Run the outside-the-package probe (WMI, as in round 3) with `aos status` and `aos nar status`: all ok.
 
-- [ ] **Step 6: Ask the user for the offline check** (criterion 2): with Wi-Fi off, in Windows Terminal: `aos nar choose "Which is larger?" -o 7 -o 12` returns a result.
+- [ ] **Step 6: Ask the user for the offline check** (criterion 2): with Wi-Fi off, in Windows Terminal: `aos nar choose "Which is larger?" --option 7 --option 12` returns a result.
 
 ---
 
@@ -2396,10 +2767,12 @@ README Daily use, new rows:
 
 - **Bake-off on this laptop** (fixed tasks, temperature 0): one line per model with tool success,
   nar_choose accuracy, ECE, tokens/s, on GPU yes/no - copied from the report.
-- **Default:** <the tag in config/local.json after Step 4 of Task 13>, because <the verdict's reasons>.
-- **nar**: one forward pass per choice (Ollama logprobs), temperature calibration per task type,
-  promotion only if Brier and ECE on held-out calls are no worse; data in ~\.aos\nar.
+- **Default:** <the tag in config/local.json after Task 13 Step 4>, because <the verdict's reasons>.
+- **nar**: one forward pass per choice (Ollama logprobs); temperature calibration per model and task
+  type; promotion only if Brier and ECE on held-out calls are no worse; OS file locks; data in ~\.aos\nar.
+- **Plan review by Codex before code**: 14 findings, all accepted (list in the plan).
 ```
+
 - [ ] **Step 3: `aos sync`** so Codex's copy of the contract updates; `aos test` green.
 - [ ] **Step 4: Reviews** - Codex reviews agentic-os `main..local-stack` and nar-tools `main` read-only (`codex exec --profile review`); fix findings with tests first.
 - [ ] **Step 5: CI and merge** - push `local-stack`, CI green, fast-forward `main`, push. nar-tools: push to its GitHub repo (if the user approved creating it), CI green.
