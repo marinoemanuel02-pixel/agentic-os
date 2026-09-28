@@ -16,6 +16,7 @@ vendor-maintained bridges. The reasons for each choice are in [docs/decisions.md
 | **brain** | one `AGENTS.md` and one `skills/` folder read by both agents, merged Claude settings, Codex profiles, MCP servers in both | `agents-home/`, `config/` |
 | **bridges** | Claude calls Codex (`/codex:*`), Codex calls Claude (`$cc:*`), superpowers in both | plugins |
 | **refs** | shallow clones of the repos worth reading | `refs/repos.json` -> `~\.aos\refs` |
+| **local** | Ollama and the local model; the `nar` tools (calibrated single-pass scoring) | `config/local.json`, `Desktop\1-Projects\nar-tools`; models in `~\.ollama` |
 | **aos** | `aos status / sync / update / usage / new / secret / remote` | `aos.psm1` |
 
 How the pieces connect:
@@ -65,6 +66,8 @@ settings are merged, never replaced, and backups go to `~/.aos-backups/`.
 | Update everything | `aos update` (weekly is plenty) |
 | Store an API key | `aos secret set <name>` (encrypted to your Windows login in `~\.aos\secrets`, never a plaintext file); scripts read it with `aos secret get <name>` |
 | Work from your phone | see [From your phone](#from-your-phone) |
+| Use the local model | `codex --profile local`; agents call the `nar` tools on their own when a choice benefits |
+| Try a newer local model | `ollama pull <tag>`, `aos nar eval --models <tag>`, then `aos local adopt <tag>` (only if no worse) |
 | Check the setup's own code | `aos test` (parse, ASCII, Pester under PowerShell 5.1 and 7; CI runs it on every push) |
 
 Which agent to use for what, and how to stretch two entry plans: [docs/routing.md](docs/routing.md).
