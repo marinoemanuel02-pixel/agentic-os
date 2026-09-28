@@ -440,13 +440,13 @@ function Install-AosEngines([switch]$DryRun) {
     Update-AosPath
     Use-AosLocalBin
     Write-AosStep 'Claude Code CLI (native installer; updates itself)'
-    if (Test-AosCommand claude) { Write-AosOk ('claude ' + (claude --version)) }
+    if (Test-AosCommand claude) { Write-AosOk ('claude ' + (Invoke-AosCapture 'claude --version').Text.Trim()) }
     elseif ($DryRun) { Write-AosDry 'irm https://claude.ai/install.ps1 | iex   (in a child process)' }
     else {
         powershell -NoProfile -ExecutionPolicy Bypass -Command 'irm https://claude.ai/install.ps1 | iex' | Out-Host
         Update-AosPath
         Use-AosLocalBin
-        if (Test-AosCommand claude) { Write-AosOk ('claude ' + (claude --version)) }
+        if (Test-AosCommand claude) { Write-AosOk ('claude ' + (Invoke-AosCapture 'claude --version').Text.Trim()) }
     }
     # The native installer puts claude.exe in ~\.local\bin but may leave that folder off PATH.
     $pathAdd = @(); $pathRemove = @()
