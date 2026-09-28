@@ -5,8 +5,10 @@ to day is `agents-home/AGENTS.md`; this file is only about changing the repo its
 
 - Read `README.md` (what and how) and `docs/decisions.md` (why) before changing behaviour.
 - `aos.psm1` and `bootstrap.ps1` stay ASCII-only and must run under Windows PowerShell 5.1 and
-  PowerShell 7: no `??`, no ternary, no `&&`/`||`. Parse-check after every edit with
-  `[System.Management.Automation.Language.Parser]::ParseFile()`.
+  PowerShell 7: no `??`, no ternary, no `&&`/`||`. Run `aos test` after every edit: it checks
+  parsing and ASCII, then runs `tests/` under both shells. CI runs the same on every push.
+- New or changed behaviour gets a test in `tests/aos.Tests.ps1`, ideally written by the other
+  vendor. Tests use `$TestDrive` and `$env:AOS_BACKUPS`, never the real profile, registry or network.
 - Every step stays idempotent: a second `aos sync` changes nothing. Merge into the user's files,
   never replace them, and back up to `~/.aos-backups/` first.
 - Preview before applying: `powershell -ExecutionPolicy Bypass -File .\bootstrap.ps1 -DryRun`.

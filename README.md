@@ -64,6 +64,7 @@ settings are merged, never replaced, and backups go to `~/.aos-backups/`.
 | See usage | `/usage` in Claude Code, `/status` in Codex, `aos usage` for local history |
 | Update everything | `aos update` (weekly is plenty) |
 | Store an API key | `aos secret set <name>` (Windows secret store, never a plaintext file) |
+| Check the setup's own code | `aos test` (parse, ASCII, Pester under PowerShell 5.1 and 7; CI runs it on every push) |
 
 Which agent to use for what, and how to stretch two entry plans: [docs/routing.md](docs/routing.md).
 
@@ -118,4 +119,6 @@ agentic-os/
                          override with $env:AOS_REFS)
   docs/routing.md        who does what, limits playbook
   docs/decisions.md      why it is built this way, with sources
+  tests/                 Pester 5 suite (written by Codex) + Run-Tests.ps1 (used by aos test)
+  .github/workflows/     ci.yml: aos test on windows-latest for every push
 ```

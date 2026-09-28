@@ -17,6 +17,8 @@ $env:AOS_BACKUPS = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-test-backup
 $config = New-PesterConfiguration
 $config.Run.Path = $PSScriptRoot
 $config.Run.PassThru = $true
+# Filesystem-only suite: never create Pester fixtures in the user registry.
+$config.TestRegistry.Enabled = $false
 $config.Output.Verbosity = 'Detailed'
 $result = Invoke-Pester -Configuration $config
 

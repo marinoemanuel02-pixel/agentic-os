@@ -162,7 +162,15 @@ function Move-AosItem([string]$Source, [string]$Destination) {
     # existing destination is refused: Move-Item would silently nest the source inside it.
     if (-not (Test-Path -LiteralPath $Source)) { return $false }
     if (Test-Path -LiteralPath $Destination) { return $false }
-    try { Move-Item -LiteralPath $Source -Destination $Destination -ErrorAction Stop } catch { return $false }
+    try {
+        # Rename directories as a unit. Move-Item can partially move a tree when a file is locked.
+        # Cross-volume directory moves fail closed rather than copying only part of the data.
+        if ([System.IO.Directory]::Exists($Source)) {
+            [System.IO.Directory]::Move($Source, $Destination)
+        }
+        else { [System.IO.File]::Move($Source, $Destination) }
+    }
+    catch { return $false }
     return ((Test-Path -LiteralPath $Destination) -and -not (Test-Path -LiteralPath $Source))
 }
 
