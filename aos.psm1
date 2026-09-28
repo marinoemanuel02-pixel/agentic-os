@@ -532,43 +532,63 @@ function Sync-AosClaudeSettings([switch]$DryRun) {
     Write-AosOk "merged into $target"
 }
 
+function Get-AosMcpManifest { return Read-AosJson (Join-Path $script:Root 'config\mcp.json') }
+
+function Expand-AosPlaceholders([string]$Text) {
+    # Repo files hold no absolute paths; these resolve on the machine at run time.
+    return $Text.Replace('{{projects}}', (Get-AosProjectsDir)).Replace('{{home}}', $HOME)
+}
+
+function Test-AosMcpCurrent($Result, [string[]]$Needles) {
+    if ($Result.Code -ne 0) { return $false }
+    $text = ([string]$Result.Text).Replace('\\', '\')   # codex prints JSON: its backslashes arrive doubled
+    foreach ($n in $Needles) { if ($text.IndexOf($n, [StringComparison]::OrdinalIgnoreCase) -lt 0) { return $false } }
+    return $true
+}
+
+function Add-AosMcpServer([string]$Agent, [string]$Name, [bool]$Http, [string]$Url, [string[]]$Command) {
+    if ($Agent -eq 'claude') {
+        if ($Http) { claude mcp add --scope user --transport http $Name $Url | Out-Host }
+        else { claude mcp add --scope user $Name -- @Command | Out-Host }
+    }
+    else {
+        if ($Http) { codex mcp add $Name --url $Url | Out-Host }
+        else { codex mcp add $Name -- @Command | Out-Host }
+    }
+    return ($LASTEXITCODE -eq 0)
+}
+
 function Sync-AosMcp([switch]$DryRun) {
-    # Registered = present AND pointing where the manifest says; a changed URL/command is re-added.
-    $manifest = Read-AosJson (Join-Path $script:Root 'config\mcp.json')
+    # Registered = present AND pointing where the manifest says; a changed URL or command is re-added.
+    $manifest = Get-AosMcpManifest
     foreach ($name in @($manifest['servers'].Keys)) {
         $s = $manifest['servers'][$name]
-        $isHttp = ($s['transport'] -eq 'http')
-        $expect = $s['url']
-        if (-not $isHttp) { $expect = [string]$s['command'] }
-        $cmd = @()
-        if (-not $isHttp) { $cmd = @($s['command']) + @($s['args']) }
-
-        if (-not (Test-AosCommand claude)) { Write-AosWarn "claude missing; $name not registered there" }
-        else {
-            $got = Invoke-AosCapture "claude mcp get $name"
-            $current = ($got.Code -eq 0) -and ($got.Text -match [regex]::Escape($expect))
-            if ($current) { Write-AosOk "claude: $name" }
-            elseif ($DryRun) { Write-AosDry "claude mcp add --scope user $name" }
-            else {
-                if ($got.Code -eq 0) { $null = Invoke-AosCapture "claude mcp remove $name --scope user"; Write-AosInfo "claude: $name changed; re-adding" }
-                if ($isHttp) { claude mcp add --scope user --transport http $name $expect | Out-Host }
-                else { claude mcp add --scope user $name -- @cmd | Out-Host }
-                if ($LASTEXITCODE -eq 0) { Write-AosOk "claude: added $name" } else { Write-AosWarn "claude: adding $name failed (exit $LASTEXITCODE)" }
-            }
+        if ($s.Contains('requires')) {
+            $need = Expand-AosPlaceholders ([string]$s['requires'])
+            if (-not (Test-Path -LiteralPath $need)) { Write-AosInfo "$name skipped: $need not found yet"; continue }
         }
-
-        if (-not (Test-AosCommand codex)) { Write-AosWarn "codex missing; $name not registered there" }
+        $isHttp = ($s['transport'] -eq 'http')
+        $cmd = @()
+        if ($isHttp) { $needles = @([string]$s['url']) }
         else {
-            $got = Invoke-AosCapture "codex mcp get $name --json"
-            $current = ($got.Code -eq 0) -and ($got.Text -match [regex]::Escape($expect))
-            if ($current) { Write-AosOk "codex: $name" }
-            elseif ($DryRun) { Write-AosDry "codex mcp add $name" }
-            else {
-                if ($got.Code -eq 0) { $null = Invoke-AosCapture "codex mcp remove $name"; Write-AosInfo "codex: $name changed; re-adding" }
-                if ($isHttp) { codex mcp add $name --url $expect | Out-Host }
-                else { codex mcp add $name -- @cmd | Out-Host }
-                if ($LASTEXITCODE -eq 0) { Write-AosOk "codex: added $name" } else { Write-AosWarn "codex: adding $name failed (exit $LASTEXITCODE)" }
+            $cmd = @(Expand-AosPlaceholders ([string]$s['command'])) + @(@($s['args']) | Where-Object { $null -ne $_ } | ForEach-Object { Expand-AosPlaceholders ([string]$_) })
+            $needles = $cmd
+        }
+        foreach ($agent in @('claude', 'codex')) {
+            if (-not (Test-AosCommand $agent)) { Write-AosWarn "$agent missing; $name not registered there"; continue }
+            $getCmd = "claude mcp get $name"
+            if ($agent -eq 'codex') { $getCmd = "codex mcp get $name --json" }
+            $got = Invoke-AosCapture $getCmd
+            if (Test-AosMcpCurrent $got $needles) { Write-AosOk "${agent}: $name"; continue }
+            if ($DryRun) { Write-AosDry "$agent mcp add $name"; continue }
+            if ($got.Code -eq 0) {
+                $rm = "claude mcp remove $name --scope user"
+                if ($agent -eq 'codex') { $rm = "codex mcp remove $name" }
+                $null = Invoke-AosCapture $rm
+                Write-AosInfo "${agent}: $name changed; re-adding"
             }
+            if (Add-AosMcpServer -Agent $agent -Name $name -Http $isHttp -Url ([string]$s['url']) -Command $cmd) { Write-AosOk "${agent}: added $name" }
+            else { Write-AosWarn "${agent}: adding $name failed" }
         }
     }
 }
@@ -710,6 +730,9 @@ function Sync-AosBrain([switch]$DryRun) {
     Write-AosStep 'Codex profiles (~/.codex/<name>.config.toml; config.toml itself stays the app''s)'
     Sync-AosCodexProfiles -DryRun:$DryRun
 
+    Write-AosStep 'Local model state (~\.aos\local.json, read by nar)'
+    Sync-AosLocalState -DryRun:$DryRun
+
     Write-AosStep 'MCP servers (same list in both agents)'
     Sync-AosMcp -DryRun:$DryRun
 
@@ -773,7 +796,56 @@ function Get-AosProjectsDir {
     return (Join-Path ([Environment]::GetFolderPath('Desktop')) '1-Projects')
 }
 
-function Install-AosNarTools([switch]$DryRun) { }
+function Get-AosNarVenv { return (Join-Path (Get-AosStateDir) 'venvs\nar-tools') }
+
+function Get-AosNarHome {
+    if ($env:NAR_HOME) { return $env:NAR_HOME }
+    return (Join-Path (Get-AosStateDir) 'nar')
+}
+
+function Install-AosNarTools([switch]$DryRun) {
+    # nar-tools (Desktop\1-Projects\nar-tools) runs from a venv under ~\.aos: outside OneDrive, and on the
+    # system Python (uv must not download one into AppData, which a packaged app can make private).
+    $repo = Join-Path (Get-AosProjectsDir) 'nar-tools'
+    if (-not (Test-Path -LiteralPath (Join-Path $repo 'pyproject.toml'))) { Write-AosInfo "nar-tools not found in $repo; skipped"; return }
+    if (-not (Test-AosCommand uv)) { Write-AosWarn 'uv missing (aos install base)'; return }
+    $venv = Get-AosNarVenv
+    if ($DryRun) { Write-AosDry "uv sync --frozen --no-dev (venv $venv)"; return }
+    $saved = @{}
+    $vars = @{ UV_PROJECT_ENVIRONMENT = $venv; UV_LINK_MODE = 'copy'; UV_PYTHON_DOWNLOADS = 'never' }
+    foreach ($k in @($vars.Keys)) { $saved[$k] = [Environment]::GetEnvironmentVariable($k, 'Process'); [Environment]::SetEnvironmentVariable($k, $vars[$k], 'Process') }
+    try { $r = Invoke-AosCapture "uv sync --frozen --no-dev --directory `"$repo`"" }
+    finally { foreach ($k in @($vars.Keys)) { [Environment]::SetEnvironmentVariable($k, $saved[$k], 'Process') } }
+    if ($r.Code -eq 0) { Write-AosOk "nar-tools ready in $venv" } else { Write-AosWarn "uv sync for nar-tools failed (exit $($r.Code))" }
+}
+
+function Invoke-AosLocalAdopt([string]$Tag, [switch]$DryRun) {
+    # The only way the default local model changes: the latest `nar eval` must say it is no worse.
+    if (-not $Tag) { Write-AosWarn 'usage: aos local adopt <ollama tag>'; return }
+    $cfg = Get-AosLocalConfig
+    if (-not $cfg) { Write-AosWarn 'config/local.json missing'; return }
+    if ($cfg['default'] -eq $Tag) { Write-AosOk "$Tag is already the default"; return }
+    $reportPath = Join-Path (Get-AosNarHome) 'eval\latest.json'
+    $report = Read-AosJson $reportPath
+    if (-not $report) { Write-AosWarn "no eval report at $reportPath (run: aos nar eval --models $Tag)"; return }
+    if ($report['baseline'] -ne $cfg['default']) { Write-AosWarn "the latest report compared against $($report['baseline']), not the current default $($cfg['default']); run aos nar eval again"; return }
+    if (-not ($report['verdicts'] -and $report['verdicts'].Contains($Tag))) { Write-AosWarn "the latest report has no verdict for $Tag (run: aos nar eval --models $Tag)"; return }
+    $v = $report['verdicts'][$Tag]
+    if (-not $v['passes']) { Write-AosWarn ("$Tag did not pass: " + (@($v['reasons']) -join '; ')); return }
+    if ($DryRun) { Write-AosDry "would make $Tag the default in config/local.json"; return }
+    $cfg['default'] = $Tag
+    Write-AosText -Path (Get-AosLocalConfigPath) -Text ((ConvertTo-Json -InputObject $cfg -Depth 10) + "`n")
+    Write-AosOk "default local model is now $Tag (commit config/local.json)"
+    Sync-AosLocalState
+    Sync-AosCodexProfiles
+}
+
+function Invoke-AosNar([string[]]$Arguments) {
+    $exe = Join-Path (Get-AosNarVenv) 'Scripts\nar.exe'
+    if (-not (Test-Path -LiteralPath $exe)) { Write-AosWarn 'nar-tools is not installed (aos install local)'; return }
+    & $exe @Arguments
+    $global:LASTEXITCODE = $LASTEXITCODE
+}
 
 function Get-AosLocalConfigPath { return (Join-Path $script:Root 'config\local.json') }
 
@@ -1013,13 +1085,15 @@ function Get-AosStatus {
     }
 
     Write-AosStep 'MCP servers'
-    $manifest = Read-AosJson (Join-Path $root 'config\mcp.json')
+    $manifest = Get-AosMcpManifest
     $claudeList = ''; $codexList = ''
     $haveCodex = Test-AosCommand codex
     if (Test-AosCommand claude) { $claudeList = (Invoke-AosCapture 'claude mcp list').Text }
     if ($haveCodex) { $codexList = (Invoke-AosCapture 'codex mcp list').Text }
     else { Write-AosWarn 'codex is not on PATH here: its MCP and plugin checks are skipped' }
     foreach ($name in @($manifest['servers'].Keys)) {
+        $s = $manifest['servers'][$name]
+        if ($s.Contains('requires') -and -not (Test-Path -LiteralPath (Expand-AosPlaceholders ([string]$s['requires'])))) { Write-AosInfo "${name}: not set up yet"; continue }
         $pattern = '(?im)^\W*' + [regex]::Escape($name) + '\b'
         if ($claudeList -match $pattern) { Write-AosOk "claude: $name" } else { Write-AosWarn "claude: $name not registered (aos sync)" }
         if (-not $haveCodex) { continue }
@@ -1313,6 +1387,8 @@ aos - agentic-os control
   aos refs                   clone/pull the reference repos in refs/repos.json (into ~\.aos\refs)
   aos secret set|get|list|remove <name>    keys encrypted to your Windows login (~\.aos\secrets)
   aos remote [folder]        let the Claude phone app start sessions here (default: Desktop); keep it open
+  aos local adopt <tag>      make a model the local default, only if the latest nar eval says it is no worse
+  aos nar <args>             the nar CLI from its venv in ~\.aos (long options: --option, not -o)
   aos where                  path of this repo
 '@
 }
@@ -1337,6 +1413,8 @@ function aos {
         'refs'    { Sync-AosRefs -DryRun:$DryRun }
         'secret'  { Invoke-AosSecret -Action $a1 -Name $a2 }
         'remote'  { Start-AosRemote -Dir $a1 -DryRun:$DryRun }
+        'local'   { if ($a1 -eq 'adopt') { Invoke-AosLocalAdopt -Tag $a2 -DryRun:$DryRun } else { Write-AosWarn 'usage: aos local adopt <ollama tag>' } }
+        'nar'     { Invoke-AosNar -Arguments @($Rest) }
         'where'   { $script:Root }
         default   { Show-AosHelp }
     }

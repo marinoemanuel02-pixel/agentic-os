@@ -10,6 +10,13 @@
       "transport": "http",
       "url": "https://mcp.context7.com/mcp",
       "why": "Current, version-specific library docs for both agents. Free tier works without a key."
+    },
+    "nar": {
+      "transport": "stdio",
+      "command": "{{home}}\\.aos\\venvs\\nar-tools\\Scripts\\nar-mcp.exe",
+      "args": [],
+      "requires": "{{home}}\\.aos\\venvs\\nar-tools\\Scripts\\nar-mcp.exe",
+      "why": "Local, calibrated single-pass (non-autoregressive) scoring of options; agents call it only when a choice among known alternatives benefits from it."
     }
   }
 }

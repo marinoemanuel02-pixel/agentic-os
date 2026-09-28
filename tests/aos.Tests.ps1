@@ -1417,4 +1417,133 @@ Describe 'Codex local profile' {
     }
 }
 
+Describe 'MCP placeholders and nar registration' {
+    BeforeEach {
+        $savedProjects = $env:AOS_PROJECTS
+        $env:AOS_PROJECTS = Join-Path $caseRoot 'projects'
+        $exe = Join-Path $env:AOS_PROJECTS 'nar-tools\nar-mcp.exe'
+        Mock Add-AosMcpServer -ModuleName aos { $true }
+        Mock Write-AosInfo -ModuleName aos { }
+        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -in @('claude', 'codex') }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 1; Text = 'No MCP server found' } } -ParameterFilter { $CommandLine -like '* mcp get *' }
+        Mock Get-AosMcpManifest -ModuleName aos {
+            [ordered]@{ servers = [ordered]@{ nar = [ordered]@{
+                transport = 'stdio'; command = '{{projects}}\nar-tools\nar-mcp.exe'; args = @()
+                requires = '{{projects}}\nar-tools\nar-mcp.exe' } } }
+        }
+    }
+    AfterEach { $env:AOS_PROJECTS = $savedProjects }
+
+    It 'expands the projects and home placeholders' {
+        InModuleScope aos {
+            Expand-AosPlaceholders '{{projects}}\x' | Should -BeExactly (Join-Path $env:AOS_PROJECTS 'x')
+            Expand-AosPlaceholders '{{home}}\.aos' | Should -BeExactly ($HOME + '\.aos')
+        }
+    }
+
+    It 'skips a server whose required file does not exist yet' {
+        InModuleScope aos { Sync-AosMcp }
+        Should -Invoke Add-AosMcpServer -ModuleName aos -Times 0 -Exactly
+        Should -Invoke Write-AosInfo -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'nar skipped' }
+    }
+
+    It 'registers the expanded command in both agents once the file exists' {
+        Write-TestFile $exe ''
+        InModuleScope aos { Sync-AosMcp }
+        # PowerShell names are case-insensitive: the loop variable must not be called $agent.
+        foreach ($want in 'claude', 'codex') {
+            Should -Invoke Add-AosMcpServer -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Agent -eq $want -and $Command[0] -eq $exe -and -not $Http }
+        }
+    }
+
+    It 'treats a registration as current when the CLI shows the command, even JSON-escaped' {
+        Write-TestFile $exe ''
+        $escaped = $exe.Replace('\', '\\')
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = "{`"transport`": {`"type`": `"stdio`", `"command`": `"$escaped`"}}" } } -ParameterFilter { $CommandLine -eq 'codex mcp get nar --json' }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = "nar:`n  Command: $exe" } } -ParameterFilter { $CommandLine -eq 'claude mcp get nar' }
+        InModuleScope aos { Sync-AosMcp }
+        Should -Invoke Add-AosMcpServer -ModuleName aos -Times 0 -Exactly
+    }
+}
+
+Describe 'aos local adopt' {
+    BeforeAll {
+        function Write-Report($Verdicts, [string]$Baseline = 'old:tag') {
+            $report = [ordered]@{ baseline = $Baseline; verdicts = $Verdicts }
+            Write-TestFile (Join-Path $env:NAR_HOME 'eval\latest.json') (ConvertTo-Json -Depth 10 -InputObject $report)
+        }
+    }
+    BeforeEach {
+        $savedNar = $env:NAR_HOME
+        $env:NAR_HOME = Join-Path $caseRoot 'nar'
+        $configPath = Join-Path $caseRoot 'local.json'
+        Write-TestFile $configPath '{ "default": "old:tag", "optional": [] }'
+        Mock Get-AosLocalConfigPath -ModuleName aos { $configPath }
+        Mock Sync-AosLocalState -ModuleName aos { }
+        Mock Sync-AosCodexProfiles -ModuleName aos { }
+        Mock Write-AosWarn -ModuleName aos { }
+    }
+    AfterEach { $env:NAR_HOME = $savedNar }
+
+    It 'refuses without an eval report' {
+        InModuleScope aos { Invoke-AosLocalAdopt -Tag 'new:tag' }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'no eval report' }
+        (Get-Content -Raw $configPath) | Should -Match '"old:tag"'
+        Should -Invoke Sync-AosLocalState -ModuleName aos -Times 0 -Exactly
+    }
+
+    It 'refuses a report made against another baseline' {
+        Write-Report @{ 'new:tag' = @{ passes = $true; reasons = @() } } 'other:tag'
+        InModuleScope aos { Invoke-AosLocalAdopt -Tag 'new:tag' }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'other:tag' }
+        (Get-Content -Raw $configPath) | Should -Match '"old:tag"'
+    }
+
+    It 'refuses a candidate that did not pass, naming the reasons' {
+        Write-Report @{ 'new:tag' = @{ passes = $false; reasons = @('worse calibration than the current default') } }
+        InModuleScope aos { Invoke-AosLocalAdopt -Tag 'new:tag' }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'worse calibration' }
+        (Get-Content -Raw $configPath) | Should -Match '"old:tag"'
+    }
+
+    It 'adopts a passing candidate and regenerates the derived files' {
+        Write-Report @{ 'new:tag' = @{ passes = $true; reasons = @() } }
+        InModuleScope aos { Invoke-AosLocalAdopt -Tag 'new:tag' }
+        (Get-Content -Raw $configPath | ConvertFrom-Json).default | Should -BeExactly 'new:tag'
+        Should -Invoke Sync-AosLocalState -ModuleName aos -Times 1 -Exactly
+        Should -Invoke Sync-AosCodexProfiles -ModuleName aos -Times 1 -Exactly
+    }
+
+    It 'changes nothing in DryRun' {
+        Write-Report @{ 'new:tag' = @{ passes = $true; reasons = @() } }
+        InModuleScope aos { Invoke-AosLocalAdopt -Tag 'new:tag' -DryRun }
+        (Get-Content -Raw $configPath) | Should -Match '"old:tag"'
+        Should -Invoke Sync-AosLocalState -ModuleName aos -Times 0 -Exactly
+    }
+}
+
+Describe 'Brain sync includes the local state' {
+    BeforeEach {
+        foreach ($f in 'Set-AosJunction', 'Sync-AosClaudeSkills', 'Set-AosManagedBlock', 'Sync-AosCodexAgents',
+                       'Sync-AosClaudeSettings', 'Sync-AosCodexProfiles', 'Sync-AosMcp', 'Sync-AosProfile', 'Sync-AosLocalState') {
+            Mock $f -ModuleName aos { }
+        }
+    }
+
+    It 'refreshes ~\.aos\local.json and passes DryRun through' {
+        InModuleScope aos { Sync-AosBrain -DryRun }
+        Should -Invoke Sync-AosLocalState -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
+    }
+}
+
+Describe 'aos nar dispatch' {
+    It 'forwards long options unchanged' {
+        Mock Invoke-AosNar -ModuleName aos { }
+        aos nar choose 'Which is larger?' --option 7 --option 12
+        Should -Invoke Invoke-AosNar -ModuleName aos -Times 1 -Exactly -ParameterFilter {
+            ($Arguments -join '|') -ceq 'choose|Which is larger?|--option|7|--option|12'
+        }
+    }
+}
+
 }
