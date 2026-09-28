@@ -16,7 +16,8 @@ vendor-maintained bridges. The reasons for each choice are in [docs/decisions.md
 | **brain** | one `AGENTS.md` and one `skills/` folder read by both agents, merged Claude settings, Codex profiles, MCP servers in both | `agents-home/`, `config/` |
 | **bridges** | Claude calls Codex (`/codex:*`), Codex calls Claude (`$cc:*`), superpowers in both | plugins |
 | **refs** | shallow clones of the repos worth reading | `refs/repos.json` -> `~\.aos\refs` |
-| **local** | Ollama and the local model; the `nar` tools (calibrated single-pass scoring) | `config/local.json`, `Desktop\1-Projects\nar-tools`; models in `~\.ollama` |
+| **local** | Ollama and the local model; the `nar` tools (calibrated single-pass scoring); Pi, the agent harness on the local model | `config/local.json`, `Desktop\1-Projects\nar-tools`; models in `~\.ollama` |
+| **phone** | Paseo: its daemon runs Claude Code, Codex and Pi on this PC for the Paseo Android app | `packages.json` (npm); state in `~\.paseo` |
 | **aos** | `aos status / sync / update / usage / new / secret / remote` | `aos.psm1` |
 
 How the pieces connect:
@@ -116,8 +117,6 @@ Rules that keep this upgradeable:
 ## Not installed yet (deliberately)
 
 Candidates for later layers, each with the reason to wait:
-- **Paseo** (one desktop + phone cockpit for both agents): the native apps plus Remote Control
-  and the ChatGPT mobile app cover this today. Revisit if you regularly run 3+ sessions.
 - **An always-on agent** (Hermes, OpenClaw): only on your ChatGPT login or API keys, never your
   Claude login (Anthropic's terms). Revisit when there is unattended work that repeats.
 - **chezmoi**, if a second machine appears and dotfiles need per-machine templating.

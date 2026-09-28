@@ -898,6 +898,14 @@ Describe 'Round 3: Install-AosNpmTools' {
         Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly
     }
 
+    It 'checks the command a package installs, not the package name' {
+        # A scoped package (@getpaseo/cli) installs paseo.cmd, never "@getpaseo/cli.cmd".
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = '' } } -ParameterFilter { $CommandLine -like 'npm install -g @getpaseo/cli*' }
+        Write-TestFile (Join-Path $npmPrefix 'paseo.cmd') ''
+        InModuleScope aos { Install-AosNpmTools -Packages @(@{ name = '@getpaseo/cli'; bin = 'paseo'; why = 'test' }) }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly
+    }
+
     It 'does not install a missing package in DryRun and previews prefix setup' {
         InModuleScope aos { Install-AosNpmTools -Packages @(@{ name = 'fixture-tool'; why = 'test' }) -DryRun }
         Should -Invoke Use-AosNpmPrefix -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
@@ -1322,6 +1330,7 @@ Describe 'Local model layer' {
         }
         Mock Install-AosWingetPackage -ModuleName aos { }
         Mock Install-AosNarTools -ModuleName aos { }
+        Mock Install-AosNpmTools -ModuleName aos { }
         Mock Write-AosWarn -ModuleName aos { }
         Mock Write-AosOk -ModuleName aos { }
         Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'ollama' }
@@ -1395,6 +1404,40 @@ Describe 'Local model layer' {
         Start-Sleep -Milliseconds 50
         InModuleScope aos { Sync-AosLocalState }
         (Get-Item -LiteralPath (Join-Path $stateDir 'local.json')).LastWriteTimeUtc | Should -Be $before
+    }
+
+    It 'installs the local agent harness from the local_npm list' {
+        Mock Get-AosPackages -ModuleName aos {
+            @{ local = @(@{ id = 'Ollama.Ollama'; why = 't' }); local_npm = @(@{ name = '@earendil-works/pi-coding-agent'; bin = 'pi'; why = 't' }) }
+        }
+        InModuleScope aos { Install-AosLocal -DryRun }
+        Should -Invoke Install-AosNpmTools -ModuleName aos -Times 1 -Exactly -ParameterFilter { @($Packages)[0]['bin'] -eq 'pi' -and $DryRun }
+    }
+}
+
+Describe 'Phone layer' {
+    BeforeEach {
+        Mock Get-AosPackages -ModuleName aos { @{ phone_npm = @(@{ name = '@getpaseo/cli'; bin = 'paseo'; why = 't' }) } }
+        Mock Install-AosNpmTools -ModuleName aos { }
+    }
+
+    It 'is an install layer, after local' {
+        InModuleScope aos {
+            $script:Layers | Should -Contain 'phone'
+            [array]::IndexOf($script:Layers, 'phone') | Should -BeGreaterThan ([array]::IndexOf($script:Layers, 'local'))
+        }
+    }
+
+    It 'installs the phone npm packages and passes DryRun through' {
+        InModuleScope aos { Install-AosPhone -DryRun }
+        Should -Invoke Install-AosNpmTools -ModuleName aos -Times 1 -Exactly -ParameterFilter { @($Packages)[0]['name'] -eq '@getpaseo/cli' -and $DryRun }
+    }
+
+    It 'is reachable through aos install phone' {
+        Mock Install-AosPhone -ModuleName aos { }
+        Mock Show-AosNextSteps -ModuleName aos { }
+        InModuleScope aos { Install-AosLayer -Layer phone -DryRun }
+        Should -Invoke Install-AosPhone -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
     }
 }
 

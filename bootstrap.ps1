@@ -9,6 +9,8 @@
       brain    one AGENTS.md + one skills folder for both agents, merged settings, MCP servers
       bridges  codex plugin in Claude Code, cc-plugin-codex in Codex, superpowers
       refs     shallow clones of the reference repos in refs/repos.json
+      local    Ollama and the local model, the nar tools, the local agent harness (config/local.json)
+      phone    Paseo, the daemon the Paseo phone app connects to
     Run it from the repo's final location: the brain layer links ~/.agents to this folder.
 
 .EXAMPLE
@@ -20,7 +22,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('all', 'base', 'engines', 'brain', 'bridges', 'refs', 'local')]
+    [ValidateSet('all', 'base', 'engines', 'brain', 'bridges', 'refs', 'local', 'phone')]
     [string[]]$Layer = @('all'),
     [switch]$DryRun
 )

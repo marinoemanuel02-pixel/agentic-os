@@ -7,7 +7,7 @@
 $script:Root = $PSScriptRoot
 $script:Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $script:Utf8Bom = New-Object System.Text.UTF8Encoding($true)
-$script:Layers = @('base', 'engines', 'brain', 'bridges', 'refs', 'local')
+$script:Layers = @('base', 'engines', 'brain', 'bridges', 'refs', 'local', 'phone')
 
 # Windows PowerShell 5.1 serializes some arrays as {"value":[...],"Count":n} unless this is removed.
 if ($PSVersionTable.PSVersion.Major -lt 6) { Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue }
@@ -421,8 +421,11 @@ function Install-AosNpmTools([object[]]$Packages, [switch]$DryRun) {
     $prefix = Get-AosNpmPrefix
     foreach ($n in $Packages) {
         $name = $n['name']
+        # The command it installs: a scoped package (@getpaseo/cli) installs paseo.cmd, not its own name.
+        $bin = $name
+        if ($n['bin']) { $bin = [string]$n['bin'] }
         # Only a copy in our prefix counts: one found elsewhere on PATH can be private to a packaged app.
-        if (Test-Path -LiteralPath (Join-Path $prefix "$name.cmd")) { Write-AosOk $name; continue }
+        if (Test-Path -LiteralPath (Join-Path $prefix "$bin.cmd")) { Write-AosOk $name; continue }
         if ($DryRun) { Write-AosDry "npm install -g $name   ($($n['why']))"; continue }
         # An explicit prefix: a failed config write or an NPM_CONFIG_PREFIX override can't redirect it.
         $r = Invoke-AosCapture "npm install -g $name --prefix `"$prefix`""
@@ -920,6 +923,18 @@ function Install-AosLocal([switch]$DryRun) {
     }
     Sync-AosLocalState -DryRun:$DryRun
     Install-AosNarTools -DryRun:$DryRun
+    $harness = (Get-AosPackages)['local_npm']
+    if ($harness) {
+        Write-AosStep 'Local agent harness (npm, in ~\.npm-global)'
+        Install-AosNpmTools -Packages $harness -DryRun:$DryRun
+    }
+}
+
+function Install-AosPhone([switch]$DryRun) {
+    # Paseo: its daemon runs the agents on this PC; the Paseo Android app pairs with it by QR code.
+    Update-AosPath
+    Write-AosStep 'Phone (Paseo daemon; state in ~\.paseo)'
+    Install-AosNpmTools -Packages (Get-AosPackages)['phone_npm'] -DryRun:$DryRun
 }
 
 function Sync-AosRefs([switch]$DryRun) {
@@ -979,6 +994,7 @@ function Install-AosLayer {
             'bridges' { Install-AosBridges -DryRun:$DryRun }
             'refs'    { Sync-AosRefs -DryRun:$DryRun }
             'local'   { Install-AosLocal -DryRun:$DryRun }
+            'phone'   { Install-AosPhone -DryRun:$DryRun }
         }
     }
     Show-AosNextSteps

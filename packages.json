@@ -25,6 +25,12 @@
   "local": [
     { "id": "Ollama.Ollama",              "why": "local model runtime (CUDA on the GTX 1660 Ti); models live in ~\\.ollama" }
   ],
+  "local_npm": [
+    { "name": "@earendil-works/pi-coding-agent", "bin": "pi", "why": "Pi: the agent harness on the local model, run by Paseo's pi provider (config in ~\\.pi\\agent)" }
+  ],
+  "phone_npm": [
+    { "name": "@getpaseo/cli", "bin": "paseo", "why": "Paseo: the daemon the Paseo phone app connects to (state in ~\\.paseo)" }
+  ],
   "npm": [
     { "name": "ccusage",                  "why": "local usage/limit reports and the Claude Code status line" }
   ],
