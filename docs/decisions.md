@@ -3,6 +3,34 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-09-28 - Local model and the nar tools
+
+- **Bake-off on this laptop** (`aos nar eval`: 17 tool-call cases, 30 single-pass choices, temperature 0;
+  gated on tool success, choice accuracy and calibration error, hard limits 100% GPU and 15 tokens/s):
+
+  | Model | Tool calls | Choice accuracy | ECE | Tokens/s | GPU |
+  |---|---|---|---|---|---|
+  | openbmb/minicpm5-2b:q8_0 | 65% | 93% | 0.110 | 61 | 100% |
+  | qwen3.5:4b | 100% | 97% | 0.035 | 44-45 | 100% |
+  | granite4.2:3b | 94% | 83% | 0.082 | 62 | 100% |
+
+- **Default: qwen3.5:4b** (`aos local adopt`), better than MiniCPM5-2B on all three gated metrics;
+  granite4.2:3b was refused against it. MiniCPM5-2B's published function-calling lead did not hold
+  here: its Ollama package shows no tool-calling template. Qwen3.5-4B also reads images.
+- **nar**: one forward pass per choice (Ollama logprobs); temperature calibration per model and task
+  type; a refit is promoted only if Brier score and ECE on held-out calls are both no worse; OS file
+  locks; data in ~\.aos\nar. Registered in Claude Code and Codex; `aos status` checks it.
+- **No Codex profile for the local model.** Codex's own prompt is ~45K tokens; Ollama's default context
+  is 4K, a 32K context fits the 6 GB GPU fully and 64K spills 27% to the CPU, and a small model cannot
+  drive Codex's agent loop well anyway. An agent harness on the local model is chosen by prompt size in
+  the OpenCode/Paseo plan.
+- **Codex reviewed the plan (14 findings) and the code (2 new Important findings plus 5 it had flagged
+  while transcribing); all fixed test-first.** Two were left as minor: model tags that differ only in
+  `/`, `:` or `_` would share a calibrator, and `nar eval` with a bare tag (`foo` for `foo:latest`)
+  reports it off the GPU.
+- **This connection stalls Ollama's downloads** (TLS handshake timeouts to its storage host): a hung
+  `ollama pull` shows 0 bytes for minutes; stopping and re-running it resumes the partial download.
+
 ## 2026-09-28 - Shared state lives under the home folder; phone access
 
 - **The Claude desktop app redirects new AppData files into its own package.** It is an MSIX
