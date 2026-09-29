@@ -181,9 +181,15 @@ function Move-AosItem([string]$Source, [string]$Destination) {
 }
 
 function Backup-AosFile([string]$Path) {
+    # Throws on any failure, whatever the caller's ErrorActionPreference: no write may follow a failed backup.
     $dest = New-AosBackupPath
-    New-Item -ItemType Directory -Force -Path $dest | Out-Null
-    Copy-Item -LiteralPath $Path -Destination $dest -Force
+    try {
+        New-Item -ItemType Directory -Force -Path $dest -ErrorAction Stop | Out-Null
+        # New-Item -Force reports nothing when a parent is a file.
+        if (-not (Test-Path -LiteralPath $dest -PathType Container)) { throw "cannot create $dest" }
+        Copy-Item -LiteralPath $Path -Destination $dest -Force -ErrorAction Stop
+    }
+    catch { throw "backup of $Path failed: $($_.Exception.Message)" }
     return (Join-Path $dest (Split-Path -Leaf $Path))
 }
 
@@ -912,20 +918,27 @@ function Get-AosAgentModelfile([string]$From, [int]$NumCtx) {
 
 function Get-AosModelfileFacts([string]$Text) {
     # From `ollama show <tag> --modelfile`: the weight blobs (FROM lines), num_ctx, and a normalized
-    # definition (every line but comments and num_ctx, sorted) to compare two models by.
+    # definition to compare two models by: """ blocks verbatim, other directives in order, PARAMETER
+    # lines as a sorted set; comments, blank lines and num_ctx outside """ blocks are ignored.
     $from = New-Object 'System.Collections.Generic.List[string]'
     $body = New-Object 'System.Collections.Generic.List[string]'
+    $params = New-Object 'System.Collections.Generic.List[string]'
     $ctx = $null
+    $inQuote = $false
     foreach ($line in ($Text -split "`r?`n")) {
+        $odd = (([regex]::Matches($line, '"""')).Count % 2) -eq 1
+        if ($inQuote) { $body.Add($line); if ($odd) { $inQuote = $false }; continue }
         $t = $line.Trim()
-        if ($t.StartsWith('#')) { continue }
+        if ($odd) { $body.Add($t); $inQuote = $true; continue }
+        if (-not $t -or $t.StartsWith('#')) { continue }
         if ($t -match '^PARAMETER\s+num_ctx\s+(\d+)$') { $ctx = [int]$Matches[1]; continue }
+        if ($t -match '^PARAMETER\s') { if (-not $params.Contains($t)) { $params.Add($t) }; continue }
         if ($t -match '^FROM\s+(.+)$') { $from.Add($Matches[1].Trim()) }
-        if ($t) { $body.Add($t) }
+        $body.Add($t)
     }
-    $sorted = $body.ToArray()
+    $sorted = $params.ToArray()
     [System.Array]::Sort($sorted, [System.StringComparer]::Ordinal)
-    return @{ From = @($from); NumCtx = $ctx; Definition = ($sorted -join "`n") }
+    return @{ From = @($from); NumCtx = $ctx; Definition = ((@($body) + '' + @($sorted)) -join "`n") }
 }
 
 function Test-AosAgentModel([string]$Name, [string]$From, [int]$NumCtx) {
@@ -1024,8 +1037,10 @@ function Install-AosPhone([switch]$DryRun) {
     Write-AosStep 'Phone (Paseo daemon; state in ~\.paseo)'
     Install-AosNpmTools -Packages (Get-AosPackages)['phone_npm'] -DryRun:$DryRun
     Sync-AosPaseo -DryRun:$DryRun
-    Sync-AosPaseoPlugin -DryRun:$DryRun
     Sync-AosPaseoAutostart -DryRun:$DryRun
+    # Registering the plugin needs a running daemon, started with the user's environment.
+    Start-AosPaseoDaemon -DryRun:$DryRun
+    Sync-AosPaseoPlugin -DryRun:$DryRun
 }
 
 function Get-AosPaseoAutostartCommand {
@@ -1044,10 +1059,14 @@ function Sync-AosPaseoAutostart([switch]$DryRun) {
     if (-not (Test-AosCommand paseo)) { return }
     $name = 'agentic-os Paseo daemon'
     $want = Get-AosPaseoAutostartCommand
-    $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+    $task = Get-AosLogonTaskState $name
     if ($task) {
         $a = @($task.Actions)[0]
-        if ($a -and $a.Execute -eq $want.Execute -and $a.Arguments -eq $want.Arguments) { Write-AosOk "logon task '$name'"; return }
+        $same = $a -and $a.Execute -eq $want.Execute -and $a.Arguments -eq $want.Arguments
+        # Registering again repairs drift: disabled, no logon trigger for this user, battery rules.
+        $healthy = $task.Enabled -eq $true -and $task.HasCurrentUserLogonTrigger -eq $true -and
+            $task.DisallowStartIfOnBatteries -eq $false -and $task.StopIfGoingOnBatteries -eq $false
+        if ($same -and $healthy) { Write-AosOk "logon task '$name'"; return }
     }
     if ($DryRun) { Write-AosDry "register logon task '$name': $($want.Execute) $($want.Arguments)"; return }
     try {
@@ -1056,6 +1075,59 @@ function Sync-AosPaseoAutostart([switch]$DryRun) {
         Write-AosOk "logon task '$name' registered"
     }
     catch { Write-AosWarn "could not register the logon task '$name': $($_.Exception.Message)" }
+}
+
+function Test-AosPaseoDaemonRunning {
+    # `paseo daemon status` exits 0 whether or not the daemon runs; the text says which.
+    return ((Invoke-AosCapture 'paseo daemon status').Text -match 'localDaemon:\s*running')
+}
+
+function Start-AosPaseoDaemon([switch]$DryRun) {
+    # Through the logon task, never directly: a daemon started from inside the desktop apps inherits
+    # their MSIX environment. Waits up to 60 s for it to report running.
+    if (-not (Test-AosCommand paseo)) { return }
+    $name = 'agentic-os Paseo daemon'
+    if ($DryRun) { Write-AosDry "start the Paseo daemon if stopped (logon task '$name')"; return }
+    if (Test-AosPaseoDaemonRunning) { Write-AosOk 'Paseo daemon running'; return }
+    try { Start-AosLogonTask -Name $name }
+    catch { Write-AosWarn "could not start the logon task '$name': $($_.Exception.Message)"; return }
+    $waited = 0
+    while ($waited -lt 60) {
+        Start-Sleep -Seconds 2
+        $waited += 2
+        if (Test-AosPaseoDaemonRunning) { Write-AosOk 'Paseo daemon started'; return }
+    }
+    Write-AosWarn "the Paseo daemon did not report running within 60 s (paseo daemon status)"
+}
+
+function Get-AosLogonTaskState([string]$Name) {
+    # A thin wrapper: Get-ScheduledTask is CDXML and cannot be mocked, so tests mock this.
+    $t = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+    if (-not $t) { return $null }
+    return (ConvertTo-AosLogonTaskState $t)
+}
+
+function ConvertTo-AosLogonTaskState($Task) {
+    # The fields Sync-AosPaseoAutostart checks, flattened from the CIM task (Settings, Triggers).
+    $me = "$env:USERDOMAIN\$env:USERNAME"
+    $mine = $false
+    foreach ($t in @($Task.Triggers)) {
+        if (-not $t) { continue }
+        $logon = ($t.PSObject.TypeNames -join ' ') -match 'MSFT_TaskLogonTrigger'
+        if ($logon -and $t.Enabled -ne $false -and ($t.UserId -ieq $me -or $t.UserId -ieq $env:USERNAME)) { $mine = $true }
+    }
+    return [pscustomobject]@{
+        Actions = @($Task.Actions)
+        Enabled = [bool]$Task.Settings.Enabled
+        HasCurrentUserLogonTrigger = $mine
+        DisallowStartIfOnBatteries = [bool]$Task.Settings.DisallowStartIfOnBatteries
+        StopIfGoingOnBatteries = [bool]$Task.Settings.StopIfGoingOnBatteries
+    }
+}
+
+function Start-AosLogonTask([string]$Name) {
+    # A thin wrapper: Start-ScheduledTask is CDXML and cannot be mocked, so tests mock this.
+    Start-ScheduledTask -TaskName $Name -ErrorAction Stop
 }
 
 function Register-AosLogonTask([string]$Name, [string]$Execute, [string]$Arguments, [string]$Description) {
@@ -1085,12 +1157,44 @@ function Sync-AosPaseoPlugin([switch]$DryRun) {
     foreach ($p in $items) {
         if ($p -is [System.Collections.IDictionary] -and $p['id'] -eq 'aos') { $have = $p }
     }
-    if ($have -and ([string]$have['path']).TrimEnd('\') -ieq $dir.TrimEnd('\')) { Write-AosOk "Paseo plugin aos ($dir)"; return }
+    if ($have -and ([string]$have['path']).TrimEnd('\') -ieq $dir.TrimEnd('\')) { Repair-AosPaseoPlugin -Plugin $have -Dir $dir -DryRun:$DryRun; return }
     if ($DryRun) { Write-AosDry "paseo plugin install `"$dir`""; return }
-    if ($have) { $null = Invoke-AosCapture 'paseo plugin remove aos' }
+    # Install first: the old registration goes only when Paseo refuses the same id twice.
     $i = Invoke-AosCapture "paseo plugin install `"$dir`""
-    if ($i.Code -eq 0) { Write-AosOk "Paseo plugin aos installed from $dir" }
-    else { Write-AosWarn "paseo plugin install failed (exit $($i.Code))" }
+    if ($i.Code -eq 0) { Write-AosOk "Paseo plugin aos installed from $dir"; return }
+    if (-not $have -or $i.Text -notmatch 'already') { Write-AosWarn "paseo plugin install failed (exit $($i.Code)): $($i.Text)"; return }
+    $old = [string]$have['path']
+    $r = Invoke-AosCapture 'paseo plugin remove aos'
+    if ($r.Code -ne 0) { Write-AosWarn "paseo plugin remove aos failed (exit $($r.Code)): the old registration ($old) stays"; return }
+    $i = Invoke-AosCapture "paseo plugin install `"$dir`""
+    if ($i.Code -eq 0) { Write-AosOk "Paseo plugin aos moved to $dir"; return }
+    Write-AosWarn "paseo plugin install failed (exit $($i.Code)): $($i.Text)"
+    $b = Invoke-AosCapture "paseo plugin install `"$old`""
+    if ($b.Code -eq 0) { Write-AosInfo "restored the old aos plugin path ($old)" }
+    else { Write-AosWarn "restoring the old aos plugin path ($old) failed (exit $($b.Code)): paseo plugin install `"$old`"" }
+}
+
+function Repair-AosPaseoPlugin($Plugin, [string]$Dir, [switch]$DryRun) {
+    # Registered from the right folder: make sure it is enabled and running (a status Paseo does not
+    # report counts as running).
+    $off = ($Plugin['enabled'] -eq $false)
+    $down = $Plugin.Contains('status') -and $Plugin['status'] -ne 'running'
+    if (-not $off -and -not $down) { Write-AosOk "Paseo plugin aos ($Dir)"; return }
+    if ($DryRun) { Write-AosDry "paseo plugin enable/reload aos (status $($Plugin['status']))"; return }
+    if ($off) {
+        $e = Invoke-AosCapture 'paseo plugin enable aos'
+        if ($e.Code -ne 0) { Write-AosWarn "paseo plugin enable aos failed (exit $($e.Code))"; return }
+    }
+    $null = Invoke-AosCapture 'paseo plugin reload aos'
+    $status = $null
+    $r = Invoke-AosCapture 'paseo plugin ls --json'
+    if ($r.Code -eq 0) {
+        foreach ($p in (ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $r.Text))) {
+            if ($p -is [System.Collections.IDictionary] -and $p['id'] -eq 'aos') { $status = $p['status'] }
+        }
+    }
+    if ($status -eq 'running') { Write-AosOk "Paseo plugin aos enabled and running ($Dir)" }
+    else { Write-AosWarn "Paseo plugin aos is not running after reload (status $status): see paseo plugin ls" }
 }
 
 function Sync-AosPaseo([switch]$DryRun) {
@@ -1101,6 +1205,10 @@ function Sync-AosPaseo([switch]$DryRun) {
     if ($r.Code -ne 0) { Write-AosWarn "paseo daemon config get failed (exit $($r.Code)): plugins setting unknown"; return }
     if ($r.Text -match '"value"\s*:\s*true') { Write-AosOk 'Paseo plugins enabled'; return }
     if ($DryRun) { Write-AosDry 'paseo daemon config set pluginsEnabled true'; return }
+    $cfgHome = Join-Path $HOME '.paseo'
+    if ($env:PASEO_HOME) { $cfgHome = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:PASEO_HOME) }
+    $cfgFile = Join-Path $cfgHome 'config.json'
+    if (Test-Path -LiteralPath $cfgFile) { $null = Backup-AosFile $cfgFile }
     $s = Invoke-AosCapture 'paseo daemon config set pluginsEnabled true'
     if ($s.Code -eq 0) { Write-AosOk 'Paseo plugins enabled (a running daemon needs: paseo daemon restart)' }
     else { Write-AosWarn "paseo daemon config set pluginsEnabled failed (exit $($s.Code))" }
@@ -1108,7 +1216,8 @@ function Sync-AosPaseo([switch]$DryRun) {
 
 function Get-AosPiDir {
     # Pi's agent directory. PI_CODING_AGENT_DIR moves it for Pi and for aos alike.
-    if ($env:PI_CODING_AGENT_DIR) { return $env:PI_CODING_AGENT_DIR }
+    # A leading ~ or a relative path resolves like PowerShell does (home, current location).
+    if ($env:PI_CODING_AGENT_DIR) { return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:PI_CODING_AGENT_DIR) }
     return (Join-Path $HOME '.pi\agent')
 }
 
