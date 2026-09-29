@@ -1025,6 +1025,47 @@ function Install-AosPhone([switch]$DryRun) {
     Install-AosNpmTools -Packages (Get-AosPackages)['phone_npm'] -DryRun:$DryRun
     Sync-AosPaseo -DryRun:$DryRun
     Sync-AosPaseoPlugin -DryRun:$DryRun
+    Sync-AosPaseoAutostart -DryRun:$DryRun
+}
+
+function Get-AosPaseoAutostartCommand {
+    # What the logon task runs: `paseo daemon start` in a hidden PowerShell. At logon it gets the user's
+    # full environment, which a daemon started from inside the Claude or Codex app would not have.
+    $ps = Get-Command pwsh -ErrorAction SilentlyContinue
+    $exe = 'powershell.exe'
+    if ($ps) { $exe = $ps.Source }
+    $paseo = Join-Path (Get-AosNpmPrefix) 'paseo.cmd'
+    return @{ Execute = $exe; Arguments = "-NoProfile -WindowStyle Hidden -Command `"& '$paseo' daemon start`"" }
+}
+
+function Sync-AosPaseoAutostart([switch]$DryRun) {
+    # A per-user scheduled task, not a Startup-folder shortcut: the Startup folder is under AppData,
+    # where a file created from inside the desktop apps can stay private to them.
+    if (-not (Test-AosCommand paseo)) { return }
+    $name = 'agentic-os Paseo daemon'
+    $want = Get-AosPaseoAutostartCommand
+    $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+    if ($task) {
+        $a = @($task.Actions)[0]
+        if ($a -and $a.Execute -eq $want.Execute -and $a.Arguments -eq $want.Arguments) { Write-AosOk "logon task '$name'"; return }
+    }
+    if ($DryRun) { Write-AosDry "register logon task '$name': $($want.Execute) $($want.Arguments)"; return }
+    try {
+        Register-AosLogonTask -Name $name -Execute $want.Execute -Arguments $want.Arguments `
+            -Description 'Starts the Paseo daemon at logon (agentic-os: aos install phone)'
+        Write-AosOk "logon task '$name' registered"
+    }
+    catch { Write-AosWarn "could not register the logon task '$name': $($_.Exception.Message)" }
+}
+
+function Register-AosLogonTask([string]$Name, [string]$Execute, [string]$Arguments, [string]$Description) {
+    # A thin wrapper: the ScheduledTasks cmdlets are CDXML and cannot be mocked, so tests mock this.
+    $action = New-ScheduledTaskAction -Execute $Execute -Argument $Arguments
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+    # A laptop: without these, Windows skips the task when it logs on while on battery.
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+    $null = Register-ScheduledTask -TaskName $Name -Action $action -Trigger $trigger -Settings $settings `
+        -Description $Description -Force -ErrorAction Stop
 }
 
 function Get-AosPaseoPluginDir { return (Join-Path (Get-AosProjectsDir) 'nar-tools\paseo-plugin') }

@@ -1655,6 +1655,7 @@ Describe 'Phone layer' {
         Mock Install-AosNpmTools -ModuleName aos { }
         Mock Sync-AosPaseo -ModuleName aos { }
         Mock Sync-AosPaseoPlugin -ModuleName aos { }
+        Mock Sync-AosPaseoAutostart -ModuleName aos { }
     }
 
     It 'is an install layer, after local' {
@@ -1917,9 +1918,79 @@ Describe 'Paseo aos plugin' {
 
     It 'runs from aos install phone' {
         Mock Get-AosPackages -ModuleName aos { @{ phone_npm = @() } }
-        foreach ($f in 'Install-AosNpmTools', 'Sync-AosPaseo', 'Sync-AosPaseoPlugin') { Mock $f -ModuleName aos { } }
+        foreach ($f in 'Install-AosNpmTools', 'Sync-AosPaseo', 'Sync-AosPaseoPlugin', 'Sync-AosPaseoAutostart') { Mock $f -ModuleName aos { } }
         InModuleScope aos { Install-AosPhone -DryRun }
         Should -Invoke Sync-AosPaseoPlugin -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
+    }
+}
+
+Describe 'Paseo daemon at logon' {
+    BeforeEach {
+        $script:existingTask = $null
+        $script:wantArgs = '-NoProfile -WindowStyle Hidden -Command "& ''C:\u\.npm-global\paseo.cmd'' daemon start"'
+        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'paseo' }
+        Mock Get-AosPaseoAutostartCommand -ModuleName aos { @{ Execute = 'C:\ps\pwsh.exe'; Arguments = $script:wantArgs } }
+        Mock Get-ScheduledTask -ModuleName aos { $script:existingTask }
+        # Register-ScheduledTask is a CDXML command whose dynamic parameters cannot be mocked; aos wraps it
+        # in Register-AosLogonTask (checked live: at logon, also on battery).
+        Mock Register-AosLogonTask -ModuleName aos { }
+        foreach ($f in 'Write-AosOk', 'Write-AosDry', 'Write-AosWarn', 'Write-AosInfo') { Mock $f -ModuleName aos { } }
+    }
+
+    It 'registers a task that starts the daemon at logon' {
+        InModuleScope aos { Sync-AosPaseoAutostart }
+        Should -Invoke Register-AosLogonTask -ModuleName aos -Times 1 -Exactly -ParameterFilter {
+            $Name -eq 'agentic-os Paseo daemon' -and $Execute -eq 'C:\ps\pwsh.exe' -and $Arguments -eq $script:wantArgs
+        }
+    }
+
+    It 'does nothing when the task already runs the same command' {
+        $script:existingTask = [pscustomobject]@{ Actions = @([pscustomobject]@{ Execute = 'C:\ps\pwsh.exe'; Arguments = $script:wantArgs }) }
+        InModuleScope aos { Sync-AosPaseoAutostart }
+        Should -Invoke Register-AosLogonTask -ModuleName aos -Times 0 -Exactly
+    }
+
+    It 'replaces the task when its command changed' {
+        $script:existingTask = [pscustomobject]@{ Actions = @([pscustomobject]@{ Execute = 'C:\old\pwsh.exe'; Arguments = 'old' }) }
+        InModuleScope aos { Sync-AosPaseoAutostart }
+        Should -Invoke Register-AosLogonTask -ModuleName aos -Times 1 -Exactly
+    }
+
+    It 'warns instead of failing when Windows refuses the task' {
+        Mock Register-AosLogonTask -ModuleName aos { throw 'Access is denied' }
+        InModuleScope aos { Sync-AosPaseoAutostart }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'Access is denied' }
+    }
+
+    It 'registers nothing in DryRun' {
+        InModuleScope aos { Sync-AosPaseoAutostart -DryRun }
+        Should -Invoke Register-AosLogonTask -ModuleName aos -Times 0 -Exactly
+        Should -Invoke Write-AosDry -ModuleName aos -Times 1
+    }
+
+    It 'does nothing without paseo' {
+        Mock Test-AosCommand -ModuleName aos { $false } -ParameterFilter { $Name -eq 'paseo' }
+        InModuleScope aos { Sync-AosPaseoAutostart }
+        Should -Invoke Register-AosLogonTask -ModuleName aos -Times 0 -Exactly
+    }
+
+    It 'runs from aos install phone' {
+        Mock Get-AosPackages -ModuleName aos { @{ phone_npm = @() } }
+        foreach ($f in 'Install-AosNpmTools', 'Sync-AosPaseo', 'Sync-AosPaseoPlugin', 'Sync-AosPaseoAutostart') { Mock $f -ModuleName aos { } }
+        InModuleScope aos { Install-AosPhone -DryRun }
+        Should -Invoke Sync-AosPaseoAutostart -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
+    }
+}
+
+Describe 'Paseo daemon logon command' {
+    It 'starts paseo from the npm prefix through PowerShell, hidden' {
+        InModuleScope aos {
+            $c = Get-AosPaseoAutostartCommand
+            $c.Execute | Should -Match '(pwsh|powershell)\.exe$'
+            $c.Arguments | Should -Match '^-NoProfile -WindowStyle Hidden -Command '
+            $c.Arguments | Should -Match ([regex]::Escape((Join-Path (Get-AosNpmPrefix) 'paseo.cmd')))
+            $c.Arguments | Should -Match 'daemon start"$'
+        }
     }
 }
 
