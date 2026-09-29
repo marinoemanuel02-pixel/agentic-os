@@ -2039,7 +2039,7 @@ Describe 'Paseo daemon at logon' {
         $script:wantArgs = '-NoProfile -WindowStyle Hidden -Command "& ''C:\u\.npm-global\paseo.cmd'' daemon start"'
         Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'paseo' }
         Mock Get-AosPaseoAutostartCommand -ModuleName aos { @{ Execute = 'C:\ps\pwsh.exe'; Arguments = $script:wantArgs } }
-        Mock Get-ScheduledTask -ModuleName aos { $script:existingTask }
+        Mock Get-AosLogonTaskState -ModuleName aos { $script:existingTask }
         # Register-ScheduledTask is a CDXML command whose dynamic parameters cannot be mocked; aos wraps it
         # in Register-AosLogonTask (checked live: at logon, also on battery).
         Mock Register-AosLogonTask -ModuleName aos { }
@@ -2109,6 +2109,55 @@ Describe 'Paseo daemon at logon' {
         foreach ($f in 'Install-AosNpmTools', 'Sync-AosPaseo', 'Sync-AosPaseoPlugin', 'Sync-AosPaseoAutostart') { Mock $f -ModuleName aos { } }
         InModuleScope aos { Install-AosPhone -DryRun }
         Should -Invoke Sync-AosPaseoAutostart -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
+    }
+}
+
+Describe 'Logon task state' {
+    # Real tasks are CIM objects: the checked fields sit under Settings and Triggers.
+    BeforeAll {
+        function New-TestTrigger([string]$Class, [string]$User, $Enabled = $true) {
+            $t = [pscustomobject]@{ UserId = $User; Enabled = $Enabled }
+            $t.PSObject.TypeNames.Insert(0, "Microsoft.Management.Infrastructure.CimInstance#Root/Microsoft/Windows/TaskScheduler/$Class")
+            return $t
+        }
+        function New-TestTask($Triggers, [bool]$Enabled = $true, [bool]$Disallow = $false, [bool]$Stop = $false) {
+            [pscustomobject]@{
+                Actions = @([pscustomobject]@{ Execute = 'x.exe'; Arguments = 'a' })
+                Settings = [pscustomobject]@{ Enabled = $Enabled; DisallowStartIfOnBatteries = $Disallow; StopIfGoingOnBatteries = $Stop }
+                Triggers = @($Triggers)
+            }
+        }
+        $me = "$env:USERDOMAIN\$env:USERNAME"
+    }
+
+    It 'flattens a healthy task' {
+        $task = New-TestTask (New-TestTrigger 'MSFT_TaskLogonTrigger' $me)
+        $s = InModuleScope aos -Parameters @{ Task = $task } { param($Task) ConvertTo-AosLogonTaskState $Task }
+        $s.Enabled | Should -BeTrue
+        $s.HasCurrentUserLogonTrigger | Should -BeTrue
+        $s.DisallowStartIfOnBatteries | Should -BeFalse
+        $s.StopIfGoingOnBatteries | Should -BeFalse
+        @($s.Actions)[0].Execute | Should -Be 'x.exe'
+    }
+
+    It 'reports settings drift' {
+        $task = New-TestTask (New-TestTrigger 'MSFT_TaskLogonTrigger' $me) -Enabled $false -Disallow $true -Stop $true
+        $s = InModuleScope aos -Parameters @{ Task = $task } { param($Task) ConvertTo-AosLogonTaskState $Task }
+        $s.Enabled | Should -BeFalse
+        $s.DisallowStartIfOnBatteries | Should -BeTrue
+        $s.StopIfGoingOnBatteries | Should -BeTrue
+    }
+
+    It 'finds no current-user logon trigger in <Case>' -TestCases @(
+        @{ Case = 'another user'; Class = 'MSFT_TaskLogonTrigger'; User = 'OTHER\someone'; On = $true },
+        @{ Case = 'a boot trigger'; Class = 'MSFT_TaskBootTrigger'; User = 'SELF'; On = $true },
+        @{ Case = 'a disabled trigger'; Class = 'MSFT_TaskLogonTrigger'; User = 'SELF'; On = $false }
+    ) {
+        param($Case, $Class, $User, $On)
+        if ($User -eq 'SELF') { $User = $me }
+        $task = New-TestTask (New-TestTrigger $Class $User $On)
+        $s = InModuleScope aos -Parameters @{ Task = $task } { param($Task) ConvertTo-AosLogonTaskState $Task }
+        $s.HasCurrentUserLogonTrigger | Should -BeFalse
     }
 }
 

@@ -1059,10 +1059,14 @@ function Sync-AosPaseoAutostart([switch]$DryRun) {
     if (-not (Test-AosCommand paseo)) { return }
     $name = 'agentic-os Paseo daemon'
     $want = Get-AosPaseoAutostartCommand
-    $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+    $task = Get-AosLogonTaskState $name
     if ($task) {
         $a = @($task.Actions)[0]
-        if ($a -and $a.Execute -eq $want.Execute -and $a.Arguments -eq $want.Arguments) { Write-AosOk "logon task '$name'"; return }
+        $same = $a -and $a.Execute -eq $want.Execute -and $a.Arguments -eq $want.Arguments
+        # Registering again repairs drift: disabled, no logon trigger for this user, battery rules.
+        $healthy = $task.Enabled -eq $true -and $task.HasCurrentUserLogonTrigger -eq $true -and
+            $task.DisallowStartIfOnBatteries -eq $false -and $task.StopIfGoingOnBatteries -eq $false
+        if ($same -and $healthy) { Write-AosOk "logon task '$name'"; return }
     }
     if ($DryRun) { Write-AosDry "register logon task '$name': $($want.Execute) $($want.Arguments)"; return }
     try {
@@ -1094,6 +1098,31 @@ function Start-AosPaseoDaemon([switch]$DryRun) {
         if (Test-AosPaseoDaemonRunning) { Write-AosOk 'Paseo daemon started'; return }
     }
     Write-AosWarn "the Paseo daemon did not report running within 60 s (paseo daemon status)"
+}
+
+function Get-AosLogonTaskState([string]$Name) {
+    # A thin wrapper: Get-ScheduledTask is CDXML and cannot be mocked, so tests mock this.
+    $t = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+    if (-not $t) { return $null }
+    return (ConvertTo-AosLogonTaskState $t)
+}
+
+function ConvertTo-AosLogonTaskState($Task) {
+    # The fields Sync-AosPaseoAutostart checks, flattened from the CIM task (Settings, Triggers).
+    $me = "$env:USERDOMAIN\$env:USERNAME"
+    $mine = $false
+    foreach ($t in @($Task.Triggers)) {
+        if (-not $t) { continue }
+        $logon = ($t.PSObject.TypeNames -join ' ') -match 'MSFT_TaskLogonTrigger'
+        if ($logon -and $t.Enabled -ne $false -and ($t.UserId -ieq $me -or $t.UserId -ieq $env:USERNAME)) { $mine = $true }
+    }
+    return [pscustomobject]@{
+        Actions = @($Task.Actions)
+        Enabled = [bool]$Task.Settings.Enabled
+        HasCurrentUserLogonTrigger = $mine
+        DisallowStartIfOnBatteries = [bool]$Task.Settings.DisallowStartIfOnBatteries
+        StopIfGoingOnBatteries = [bool]$Task.Settings.StopIfGoingOnBatteries
+    }
 }
 
 function Start-AosLogonTask([string]$Name) {
