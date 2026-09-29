@@ -1331,6 +1331,7 @@ Describe 'Local model layer' {
         Mock Install-AosWingetPackage -ModuleName aos { }
         Mock Install-AosNarTools -ModuleName aos { }
         Mock Install-AosNpmTools -ModuleName aos { }
+        Mock Sync-AosPi -ModuleName aos { }
         Mock Write-AosWarn -ModuleName aos { }
         Mock Write-AosOk -ModuleName aos { }
         Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'ollama' }
@@ -1482,6 +1483,17 @@ Describe 'Agent model variant' {
         InModuleScope aos { Test-AosAgentModel -Name 'aos-agent' -From 'qwen3.5:4b' -NumCtx 16384 | Should -BeExactly 'stale' }
     }
 
+    It 'reports stale when the default changed something other than its weights (<Change>)' -ForEach @(
+        @{ Change = 'template'; Old = 'TEMPLATE triple-quoted-template'; New = 'TEMPLATE a-newer-template' }
+        @{ Change = 'parameter'; Old = 'PARAMETER top_k 20'; New = 'PARAMETER top_k 40' }
+        @{ Change = 'renderer'; Old = 'RENDERER qwen3.5'; New = 'RENDERER qwen3.6' }
+    ) {
+        # The variant was built from the old default; the default was re-pulled with the same weights.
+        $responses.variant = @{ Code = 0; Text = $variantModelfile }
+        $responses.base = @{ Code = 0; Text = $baseModelfile.Replace($Old, $New) }
+        InModuleScope aos { Test-AosAgentModel -Name 'aos-agent' -From 'qwen3.5:4b' -NumCtx 16384 | Should -BeExactly 'stale' }
+    }
+
     It 'does not accept matching comments without real FROM lines' {
         $responses.variant = @{ Code = 0; Text = "# FROM same-blob`nPARAMETER num_ctx 16384`n" }
         $responses.base = @{ Code = 0; Text = '# FROM same-blob' }
@@ -1601,14 +1613,15 @@ Describe 'Agent model variant' {
     }
 
     It 'creates the variant from the local install entry point' {
-        foreach ($f in 'Install-AosWingetPackage', 'Install-AosNarTools', 'Install-AosNpmTools') { Mock $f -ModuleName aos { } }
+        foreach ($f in 'Install-AosWingetPackage', 'Install-AosNarTools', 'Install-AosNpmTools', 'Sync-AosPi') { Mock $f -ModuleName aos { } }
         InModuleScope aos { Install-AosLocal }
         Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -like 'ollama create aos-agent *' }
     }
 
     It 'refreshes the variant through brain sync with DryRun=<Preview>' -ForEach @(@{ Preview = $false }, @{ Preview = $true }) {
         foreach ($f in 'Set-AosJunction', 'Sync-AosClaudeSkills', 'Set-AosManagedBlock', 'Sync-AosCodexAgents',
-                       'Sync-AosClaudeSettings', 'Sync-AosCodexProfiles', 'Sync-AosMcp', 'Sync-AosProfile', 'Sync-AosLocalState') {
+                       'Sync-AosClaudeSettings', 'Sync-AosCodexProfiles', 'Sync-AosMcp', 'Sync-AosProfile', 'Sync-AosLocalState',
+                       'Sync-AosPi') {
             Mock $f -ModuleName aos { }
         }
         InModuleScope aos -Parameters @{ Preview = $Preview } { param($Preview) Sync-AosBrain -DryRun:$Preview }
@@ -1782,7 +1795,8 @@ Describe 'aos local adopt' {
 Describe 'Brain sync includes the local state' {
     BeforeEach {
         foreach ($f in 'Set-AosJunction', 'Sync-AosClaudeSkills', 'Set-AosManagedBlock', 'Sync-AosCodexAgents',
-                       'Sync-AosClaudeSettings', 'Sync-AosCodexProfiles', 'Sync-AosMcp', 'Sync-AosProfile', 'Sync-AosLocalState') {
+                       'Sync-AosClaudeSettings', 'Sync-AosCodexProfiles', 'Sync-AosMcp', 'Sync-AosProfile', 'Sync-AosLocalState',
+                       'Sync-AosAgentModel', 'Sync-AosPi') {
             Mock $f -ModuleName aos { }
         }
     }
@@ -1800,6 +1814,123 @@ Describe 'aos nar dispatch' {
         Should -Invoke Invoke-AosNar -ModuleName aos -Times 1 -Exactly -ParameterFilter {
             ($Arguments -join '|') -ceq 'choose|Which is larger?|--option|7|--option|12'
         }
+    }
+}
+
+Describe 'Pi on the local model' {
+    BeforeEach {
+        $piDir = Join-Path $caseRoot 'pi agent'
+        $modelsPath = Join-Path $piDir 'models.json'
+        $settingsPath = Join-Path $piDir 'settings.json'
+        $gatePath = Join-Path $piDir 'extensions\aos-permission-gate.ts'
+        Mock Get-AosPiDir -ModuleName aos { $piDir }
+        Mock Get-AosLocalConfig -ModuleName aos {
+            [ordered]@{ default = 'qwen3.5:4b'; agent_model = 'aos-agent'; agent_num_ctx = 16384; ollama_url = 'http://127.0.0.1:11434/' }
+        }
+        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'pi' }
+        Mock Backup-AosFile -ModuleName aos { }
+        foreach ($f in 'Write-AosOk', 'Write-AosInfo', 'Write-AosDry', 'Write-AosWarn') { Mock $f -ModuleName aos { } }
+    }
+
+    It 'adds the aos provider and keeps the user''s providers and keys' {
+        Write-TestFile $modelsPath '{ "providers": { "mine": { "baseUrl": "http://x/v1", "api": "openai-completions", "models": [ { "id": "m" } ] } }, "other": 1 }'
+        InModuleScope aos { Sync-AosPi }
+        $j = Get-Content -Raw $modelsPath | ConvertFrom-Json
+        $j.other | Should -Be 1
+        $j.providers.mine.models[0].id | Should -BeExactly 'm'
+        $p = $j.providers.aos
+        $p.baseUrl | Should -BeExactly 'http://127.0.0.1:11434/v1'
+        $p.api | Should -BeExactly 'openai-completions'
+        $p.apiKey | Should -BeExactly 'ollama'
+        @($p.models).Count | Should -Be 1
+        $p.models[0].id | Should -BeExactly 'aos-agent'
+        $p.models[0].contextWindow | Should -Be 16384
+        $p.models[0].maxTokens | Should -Be 4096
+        $p.models[0].reasoning | Should -BeFalse
+        # Ollama 0.34 honours max_tokens (Pi sends max_completion_tokens by default) and knows no "developer" role.
+        $p.models[0].compat.maxTokensField | Should -BeExactly 'max_tokens'
+        $p.models[0].compat.supportsDeveloperRole | Should -BeFalse
+        $p.models[0].compat.supportsStore | Should -BeFalse
+        Should -Invoke Backup-AosFile -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Path -eq $modelsPath }
+    }
+
+    It 'replaces the aos provider whole instead of merging into it' {
+        Write-TestFile $modelsPath '{ "providers": { "aos": { "baseUrl": "http://old/v1", "extra": true, "models": [ { "id": "aos-agent", "contextWindow": 8192 }, { "id": "stale" } ] } } }'
+        InModuleScope aos { Sync-AosPi }
+        $p = (Get-Content -Raw $modelsPath | ConvertFrom-Json).providers.aos
+        @($p.models).Count | Should -Be 1
+        $p.models[0].contextWindow | Should -Be 16384
+        $p.PSObject.Properties.Name | Should -Not -Contain 'extra'
+    }
+
+    It 'sets the compaction override, compaction on and telemetry off, keeping other settings' {
+        # compaction.enabled is global in Pi; the 16K local model cannot work without it, so aos owns it.
+        Write-TestFile $settingsPath '{ "theme": "dark", "compaction": { "enabled": false, "keepRecentTokens": 9, "modelOverrides": { "x/y": { "reserveTokens": 1 } } } }'
+        InModuleScope aos { Sync-AosPi }
+        $s = Get-Content -Raw $settingsPath | ConvertFrom-Json
+        $s.theme | Should -BeExactly 'dark'
+        $s.compaction.enabled | Should -BeTrue
+        $s.compaction.keepRecentTokens | Should -Be 9
+        $s.compaction.modelOverrides.'x/y'.reserveTokens | Should -Be 1
+        $s.compaction.modelOverrides.'aos/aos-agent'.reserveTokens | Should -Be 4096
+        $s.compaction.modelOverrides.'aos/aos-agent'.keepRecentTokens | Should -Be 4096
+        $s.enableInstallTelemetry | Should -BeFalse
+    }
+
+    It 'installs the permission gate extension from the repo' {
+        InModuleScope aos { Sync-AosPi }
+        $want = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\config\pi\extensions\aos-permission-gate.ts'))
+        [System.IO.File]::ReadAllText($gatePath) | Should -BeExactly $want
+    }
+
+    It 'changes nothing on a second run' {
+        InModuleScope aos { Sync-AosPi }
+        $before = Get-TestTreeState $piDir
+        Start-Sleep -Milliseconds 50
+        InModuleScope aos { Sync-AosPi }
+        Get-TestTreeState $piDir | Should -BeExactly $before
+        Should -Invoke Backup-AosFile -ModuleName aos -Times 0 -Exactly
+    }
+
+    It 'writes nothing in DryRun' {
+        InModuleScope aos { Sync-AosPi -DryRun }
+        Test-Path -LiteralPath $piDir | Should -BeFalse
+        Should -Invoke Write-AosDry -ModuleName aos -Times 3 -Exactly
+    }
+
+    It 'leaves a file it cannot parse alone and warns' {
+        Write-TestFile $modelsPath '{ not json'
+        InModuleScope aos { Sync-AosPi }
+        [System.IO.File]::ReadAllText($modelsPath) | Should -BeExactly '{ not json'
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'models.json' }
+    }
+
+    It 'the permission gate blocks on Deny, on a dismissed dialog and without a UI (node --test)' {
+        # Enforcement, not just installation: Pi runs a tool only when every tool_call handler allows it.
+        $ErrorActionPreference = 'Continue'
+        $test = Join-Path $PSScriptRoot '..\config\pi\extensions\aos-permission-gate.test.ts'
+        $out = & node --no-warnings --experimental-strip-types --test $test 2>&1
+        $LASTEXITCODE | Should -Be 0 -Because (($out | Out-String).Trim())
+    }
+
+    It 'does nothing when pi is not installed' {
+        Mock Test-AosCommand -ModuleName aos { $false } -ParameterFilter { $Name -eq 'pi' }
+        InModuleScope aos { Sync-AosPi }
+        Test-Path -LiteralPath $piDir | Should -BeFalse
+    }
+
+    It 'runs from aos install local and aos sync' {
+        foreach ($f in 'Install-AosWingetPackage', 'Install-AosNarTools', 'Install-AosNpmTools', 'Sync-AosLocalState', 'Sync-AosAgentModel',
+                       'Set-AosJunction', 'Sync-AosClaudeSkills', 'Set-AosManagedBlock', 'Sync-AosCodexAgents', 'Sync-AosClaudeSettings',
+                       'Sync-AosCodexProfiles', 'Sync-AosMcp', 'Sync-AosProfile', 'Sync-AosPi') {
+            Mock $f -ModuleName aos { }
+        }
+        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'ollama' }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = "NAME ID SIZE`nqwen3.5:4b abc 3 GB" } } -ParameterFilter { $CommandLine -eq 'ollama list' }
+        InModuleScope aos { Sync-AosBrain -DryRun }
+        Should -Invoke Sync-AosPi -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
+        InModuleScope aos { Install-AosLocal -DryRun }
+        Should -Invoke Sync-AosPi -ModuleName aos -Times 2 -Exactly -ParameterFilter { $DryRun }
     }
 }
 

@@ -13,6 +13,8 @@ Import-Module $pester.Path -Force
 
 # Every test must stay out of the real profile: backups go to a throwaway folder for the whole run.
 $env:AOS_BACKUPS = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-test-backups-' + [guid]::NewGuid().ToString('N'))
+# Same for Pi's agent directory: a test that reaches Sync-AosPi unmocked must never touch ~/.pi/agent.
+$env:PI_CODING_AGENT_DIR = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-test-pi-' + [guid]::NewGuid().ToString('N'))
 
 $config = New-PesterConfiguration
 $config.Run.Path = $PSScriptRoot

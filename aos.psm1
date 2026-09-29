@@ -730,6 +730,9 @@ function Sync-AosBrain([switch]$DryRun) {
     Write-AosStep 'Local agent model (config/local.json agent_model: the default with a larger context)'
     Sync-AosAgentModel -DryRun:$DryRun
 
+    Write-AosStep 'Pi on the local model (~\.pi\agent: provider aos, compaction, permission gate)'
+    Sync-AosPi -DryRun:$DryRun
+
     Write-AosStep 'MCP servers (same list in both agents)'
     Sync-AosMcp -DryRun:$DryRun
 
@@ -908,20 +911,27 @@ function Get-AosAgentModelfile([string]$From, [int]$NumCtx) {
 }
 
 function Get-AosModelfileFacts([string]$Text) {
-    # The weight blobs (FROM lines) and num_ctx of `ollama show <tag> --modelfile`; comments ignored.
+    # From `ollama show <tag> --modelfile`: the weight blobs (FROM lines), num_ctx, and a normalized
+    # definition (every line but comments and num_ctx, sorted) to compare two models by.
     $from = New-Object 'System.Collections.Generic.List[string]'
+    $body = New-Object 'System.Collections.Generic.List[string]'
     $ctx = $null
     foreach ($line in ($Text -split "`r?`n")) {
         $t = $line.Trim()
+        if ($t.StartsWith('#')) { continue }
+        if ($t -match '^PARAMETER\s+num_ctx\s+(\d+)$') { $ctx = [int]$Matches[1]; continue }
         if ($t -match '^FROM\s+(.+)$') { $from.Add($Matches[1].Trim()) }
-        elseif ($t -match '^PARAMETER\s+num_ctx\s+(\d+)$') { $ctx = [int]$Matches[1] }
+        if ($t) { $body.Add($t) }
     }
-    return @{ From = @($from); NumCtx = $ctx }
+    $sorted = $body.ToArray()
+    [System.Array]::Sort($sorted, [System.StringComparer]::Ordinal)
+    return @{ From = @($from); NumCtx = $ctx; Definition = ($sorted -join "`n") }
 }
 
 function Test-AosAgentModel([string]$Name, [string]$From, [int]$NumCtx) {
-    # What Ollama holds is the truth, not bookkeeping: the variant must have the default's weight blobs
-    # and the configured context. Returns 'ok', 'stale' or 'missing'.
+    # What Ollama holds is the truth, not bookkeeping: the variant must be the default's definition
+    # (weights, template, renderer, parameters, license) plus the configured context.
+    # Returns 'ok', 'stale' or 'missing'.
     $variant = Invoke-AosCapture "ollama show $Name --modelfile"
     if ($variant.Code -ne 0) { return 'missing' }
     $v = Get-AosModelfileFacts $variant.Text
@@ -929,7 +939,7 @@ function Test-AosAgentModel([string]$Name, [string]$From, [int]$NumCtx) {
     $base = Invoke-AosCapture "ollama show $From --modelfile"
     if ($base.Code -ne 0) { return 'stale' }
     $b = Get-AosModelfileFacts $base.Text
-    if ($b.From.Count -eq 0 -or (($v.From -join "`n") -ne ($b.From -join "`n"))) { return 'stale' }
+    if ($b.From.Count -eq 0 -or -not ($v.Definition -ceq $b.Definition)) { return 'stale' }
     return 'ok'
 }
 
@@ -1005,6 +1015,7 @@ function Install-AosLocal([switch]$DryRun) {
         Write-AosStep 'Local agent harness (npm, in ~\.npm-global)'
         Install-AosNpmTools -Packages $harness -DryRun:$DryRun
     }
+    Sync-AosPi -DryRun:$DryRun
 }
 
 function Install-AosPhone([switch]$DryRun) {
@@ -1012,6 +1023,108 @@ function Install-AosPhone([switch]$DryRun) {
     Update-AosPath
     Write-AosStep 'Phone (Paseo daemon; state in ~\.paseo)'
     Install-AosNpmTools -Packages (Get-AosPackages)['phone_npm'] -DryRun:$DryRun
+}
+
+function Get-AosPiDir {
+    # Pi's agent directory. PI_CODING_AGENT_DIR moves it for Pi and for aos alike.
+    if ($env:PI_CODING_AGENT_DIR) { return $env:PI_CODING_AGENT_DIR }
+    return (Join-Path $HOME '.pi\agent')
+}
+
+function Get-AosPiOverlay {
+    # What aos owns in Pi's files, from config/local.json; $null when no agent model is configured.
+    $cfg = Get-AosLocalConfig
+    if (-not $cfg -or -not $cfg['agent_model']) { return $null }
+    $name = [string]$cfg['agent_model']
+    $model = [ordered]@{
+        id = $name; name = "$name (local)"; input = @('text'); reasoning = $false
+        contextWindow = [int]$cfg['agent_num_ctx']; maxTokens = 4096
+        # Ollama 0.34 honours max_tokens (Pi sends max_completion_tokens by default) and has no "developer" role.
+        compat = [ordered]@{ maxTokensField = 'max_tokens'; supportsDeveloperRole = $false; supportsStore = $false }
+    }
+    return @{
+        Provider = [ordered]@{
+            baseUrl = ([string]$cfg['ollama_url']).TrimEnd('/') + '/v1'
+            api = 'openai-completions'
+            apiKey = 'ollama'   # a dummy key makes the model available; Ollama ignores it
+            models = @($model)
+        }
+        OverrideKey = "aos/$name"
+        # Pi's defaults (reserve 16384, keep 20000) do not fit a 16K window.
+        Override = [ordered]@{ reserveTokens = 4096; keepRecentTokens = 4096 }
+    }
+}
+
+function Read-AosJsonOrWarn([string]$Path) {
+    # @{ Ok; Value }: Ok is false when the file exists but is not JSON (then it is left alone).
+    try {
+        $ErrorActionPreference = 'Stop'
+        return @{ Ok = $true; Value = (Read-AosJson $Path) }
+    }
+    catch {
+        Write-AosWarn "$Path is not valid JSON: left alone (fix it by hand, then aos sync)"
+        return @{ Ok = $false; Value = $null }
+    }
+}
+
+function Copy-AosTree($Value) {
+    if ($null -eq $Value) { return [ordered]@{} }
+    return ConvertTo-AosHashtable (ConvertFrom-Json -InputObject (ConvertTo-Json -InputObject $Value -Depth 20))
+}
+
+function Set-AosJsonFile([string]$Path, $Old, $New, [string]$Label, [switch]$DryRun) {
+    # Both sides are serialized by this shell, so 5.1 and 7 each compare like with like.
+    $a = ''
+    if ($null -ne $Old) { $a = ConvertTo-Json -InputObject $Old -Depth 20 -Compress }
+    $b = ConvertTo-Json -InputObject $New -Depth 20 -Compress
+    if ($a -ceq $b) { Write-AosOk "$Label up to date"; return }
+    if ($DryRun) { Write-AosDry "would update $Path ($Label)"; return }
+    if (Test-Path -LiteralPath $Path) { $null = Backup-AosFile $Path }
+    Write-AosText -Path $Path -Text ((ConvertTo-Json -InputObject $New -Depth 20) + "`n")
+    Write-AosOk "updated $Path ($Label)"
+}
+
+function Sync-AosPi([switch]$DryRun) {
+    # Pi on the local model, for Paseo's pi provider. aos owns providers.aos in models.json, three
+    # settings and the aos-permission-gate extension; everything else in Pi's folder is the user's.
+    if (-not (Test-AosCommand pi)) { Write-AosInfo 'pi is not installed: Pi setup skipped (aos install local)'; return }
+    $o = Get-AosPiOverlay
+    if (-not $o) { return }
+    $dir = Get-AosPiDir
+
+    $path = Join-Path $dir 'models.json'
+    $r = Read-AosJsonOrWarn $path
+    if ($r.Ok) {
+        $new = Copy-AosTree $r.Value
+        if (-not ($new['providers'] -is [System.Collections.IDictionary])) { $new['providers'] = [ordered]@{} }
+        $new['providers']['aos'] = $o.Provider
+        Set-AosJsonFile -Path $path -Old $r.Value -New $new -Label 'Pi provider aos (local model)' -DryRun:$DryRun
+    }
+
+    $path = Join-Path $dir 'settings.json'
+    $r = Read-AosJsonOrWarn $path
+    if ($r.Ok) {
+        $new = Copy-AosTree $r.Value
+        $new['enableInstallTelemetry'] = $false
+        if (-not ($new['compaction'] -is [System.Collections.IDictionary])) { $new['compaction'] = [ordered]@{} }
+        $new['compaction']['enabled'] = $true   # global in Pi; a 16K window cannot work without it
+        if (-not ($new['compaction']['modelOverrides'] -is [System.Collections.IDictionary])) { $new['compaction']['modelOverrides'] = [ordered]@{} }
+        $new['compaction']['modelOverrides'][$o.OverrideKey] = $o.Override
+        Set-AosJsonFile -Path $path -Old $r.Value -New $new -Label 'Pi settings (compaction, telemetry off)' -DryRun:$DryRun
+    }
+
+    $src = Join-Path $script:Root 'config\pi\extensions\aos-permission-gate.ts'
+    $dest = Join-Path $dir 'extensions\aos-permission-gate.ts'
+    $want = [System.IO.File]::ReadAllText($src)
+    $have = $null
+    if (Test-Path -LiteralPath $dest) { $have = [System.IO.File]::ReadAllText($dest) }
+    if ($have -ceq $want) { Write-AosOk 'Pi permission gate up to date' }
+    elseif ($DryRun) { Write-AosDry "would install $dest" }
+    else {
+        if ($null -ne $have) { $null = Backup-AosFile $dest }
+        Write-AosText -Path $dest -Text $want
+        Write-AosOk "installed $dest"
+    }
 }
 
 function Sync-AosRefs([switch]$DryRun) {

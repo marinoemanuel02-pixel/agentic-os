@@ -11,6 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 22.6+ runs the Pi permission-gate tests (TypeScript, type stripping); pin the local version.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Pester 5 for Windows PowerShell 5.1 and PowerShell 7
         shell: pwsh
         run: |
