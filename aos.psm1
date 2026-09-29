@@ -1037,8 +1037,10 @@ function Install-AosPhone([switch]$DryRun) {
     Write-AosStep 'Phone (Paseo daemon; state in ~\.paseo)'
     Install-AosNpmTools -Packages (Get-AosPackages)['phone_npm'] -DryRun:$DryRun
     Sync-AosPaseo -DryRun:$DryRun
-    Sync-AosPaseoPlugin -DryRun:$DryRun
     Sync-AosPaseoAutostart -DryRun:$DryRun
+    # Registering the plugin needs a running daemon, started with the user's environment.
+    Start-AosPaseoDaemon -DryRun:$DryRun
+    Sync-AosPaseoPlugin -DryRun:$DryRun
 }
 
 function Get-AosPaseoAutostartCommand {
@@ -1069,6 +1071,34 @@ function Sync-AosPaseoAutostart([switch]$DryRun) {
         Write-AosOk "logon task '$name' registered"
     }
     catch { Write-AosWarn "could not register the logon task '$name': $($_.Exception.Message)" }
+}
+
+function Test-AosPaseoDaemonRunning {
+    # `paseo daemon status` exits 0 whether or not the daemon runs; the text says which.
+    return ((Invoke-AosCapture 'paseo daemon status').Text -match 'localDaemon:\s*running')
+}
+
+function Start-AosPaseoDaemon([switch]$DryRun) {
+    # Through the logon task, never directly: a daemon started from inside the desktop apps inherits
+    # their MSIX environment. Waits up to 60 s for it to report running.
+    if (-not (Test-AosCommand paseo)) { return }
+    $name = 'agentic-os Paseo daemon'
+    if ($DryRun) { Write-AosDry "start the Paseo daemon if stopped (logon task '$name')"; return }
+    if (Test-AosPaseoDaemonRunning) { Write-AosOk 'Paseo daemon running'; return }
+    try { Start-AosLogonTask -Name $name }
+    catch { Write-AosWarn "could not start the logon task '$name': $($_.Exception.Message)"; return }
+    $waited = 0
+    while ($waited -lt 60) {
+        Start-Sleep -Seconds 2
+        $waited += 2
+        if (Test-AosPaseoDaemonRunning) { Write-AosOk 'Paseo daemon started'; return }
+    }
+    Write-AosWarn "the Paseo daemon did not report running within 60 s (paseo daemon status)"
+}
+
+function Start-AosLogonTask([string]$Name) {
+    # A thin wrapper: Start-ScheduledTask is CDXML and cannot be mocked, so tests mock this.
+    Start-ScheduledTask -TaskName $Name -ErrorAction Stop
 }
 
 function Register-AosLogonTask([string]$Name, [string]$Execute, [string]$Arguments, [string]$Description) {
