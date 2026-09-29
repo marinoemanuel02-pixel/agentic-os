@@ -58,13 +58,26 @@ that could catch "basic", "carousel" or "slop"; and nothing turned a rejection i
 | Explainers, motion graphics, product and data videos | Code: Remotion (React), three.js / react-three-fiber for 3D with real lighting and materials, shaders, Manim for math | The main path for "made from these models alone"; the models write the animation code |
 | The user's footage, talks, interviews, screen recordings | Edit pipeline: FFmpeg, silence removal, local Whisper subtitles, OpenTimelineIO or editor project handoff | Rough cut automated; fine edit optional in Kdenlive / DaVinci Resolve |
 | 3D worlds and objects | Blender through an MCP server, or three.js | Free asset libraries (CC0) |
-| Real-motion B-roll | Free stock footage (Pexels; the user's API key in `aos secret`) graded to the style lock | Never ungraded, never generic filler |
+| Real-motion B-roll | Free footage from the sources in "Footage sources" below, graded to the style lock | Never ungraded, never generic filler; every clip logged in `credits.md` |
 | Generative images or video | ComfyUI (installed, ~17 GB of models) | Opt-in per video only, and it must pass the anti-slop gate like everything else |
 
 Voice: local TTS (Kokoro, English; an Italian-capable local voice to be chosen), or the user's own
 recording. Music and effects: free licensed libraries; loudness mixed to the platform profile.
 
-## Quality gates
+## Footage sources
+
+Decided 2026-09-29: Pexels' API key issuance is paused ("New API key issuance is currently paused" at
+pexels.com/api), so the first two sources need no key at all. Checked live the same day:
+
+| Source | Key | Use it for | Licence handling |
+|---|---|---|---|
+| NASA Image and Video Library (`images-api.nasa.gov/search?media_type=video`) | none | space, Earth, science, engineering | Generally not copyrighted in the US. Never imply NASA endorses the video or a product; no NASA logo or insignia in commercial use; identifiable current NASA employees or astronauts need permission for commercial use; third-party material embedded in NASA content stays restricted; credit NASA when practicable |
+| Internet Archive (`archive.org/advancedsearch.php`, item metadata at `archive.org/metadata/<id>`) | none | historic and public-domain footage (for example the Prelinger collection) | Per item: use a clip only when its `licenseurl` says public domain or CC0, or a Creative Commons licence whose terms the video meets and the credit is given; no licence field means do not use it |
+| Pixabay video API (`pixabay.com/api/videos/`) | free, after registration; not yet registered | general stock B-roll | Content License; no mass downloading (100 requests per 60 s), attribution requested, keep the key in `aos secret` |
+| Pexels | paused | (later, if it reopens) | free licence, credit optional |
+
+Every footage clip used is logged in the project's `credits.md`: source, URL, licence, author or agency,
+date fetched. The fetch step refuses a clip it cannot log a licence for.
 
 - **Technical checks (scripts, Codex-built):** resolution and frame rate of the platform profile; audio
   loudness (YouTube: -14 LUFS integrated, true peak <= -1 dBTP); captions present and in sync; text inside
