@@ -181,9 +181,15 @@ function Move-AosItem([string]$Source, [string]$Destination) {
 }
 
 function Backup-AosFile([string]$Path) {
+    # Throws on any failure, whatever the caller's ErrorActionPreference: no write may follow a failed backup.
     $dest = New-AosBackupPath
-    New-Item -ItemType Directory -Force -Path $dest | Out-Null
-    Copy-Item -LiteralPath $Path -Destination $dest -Force
+    try {
+        New-Item -ItemType Directory -Force -Path $dest -ErrorAction Stop | Out-Null
+        # New-Item -Force reports nothing when a parent is a file.
+        if (-not (Test-Path -LiteralPath $dest -PathType Container)) { throw "cannot create $dest" }
+        Copy-Item -LiteralPath $Path -Destination $dest -Force -ErrorAction Stop
+    }
+    catch { throw "backup of $Path failed: $($_.Exception.Message)" }
     return (Join-Path $dest (Split-Path -Leaf $Path))
 }
 
@@ -1108,7 +1114,8 @@ function Sync-AosPaseo([switch]$DryRun) {
 
 function Get-AosPiDir {
     # Pi's agent directory. PI_CODING_AGENT_DIR moves it for Pi and for aos alike.
-    if ($env:PI_CODING_AGENT_DIR) { return $env:PI_CODING_AGENT_DIR }
+    # A leading ~ or a relative path resolves like PowerShell does (home, current location).
+    if ($env:PI_CODING_AGENT_DIR) { return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:PI_CODING_AGENT_DIR) }
     return (Join-Path $HOME '.pi\agent')
 }
 
