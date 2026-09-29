@@ -1653,6 +1653,7 @@ Describe 'Phone layer' {
     BeforeEach {
         Mock Get-AosPackages -ModuleName aos { @{ phone_npm = @(@{ name = '@getpaseo/cli'; bin = 'paseo'; why = 't' }) } }
         Mock Install-AosNpmTools -ModuleName aos { }
+        Mock Sync-AosPaseo -ModuleName aos { }
     }
 
     It 'is an install layer, after local' {
@@ -1665,6 +1666,12 @@ Describe 'Phone layer' {
     It 'installs the phone npm packages and passes DryRun through' {
         InModuleScope aos { Install-AosPhone -DryRun }
         Should -Invoke Install-AosNpmTools -ModuleName aos -Times 1 -Exactly -ParameterFilter { @($Packages)[0]['name'] -eq '@getpaseo/cli' -and $DryRun }
+    }
+
+    It 'enables Paseo plugins once, through Paseo''s own CLI' {
+        Mock Sync-AosPaseo -ModuleName aos { }
+        InModuleScope aos { Install-AosPhone -DryRun }
+        Should -Invoke Sync-AosPaseo -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
     }
 
     It 'is reachable through aos install phone' {
@@ -1814,6 +1821,52 @@ Describe 'aos nar dispatch' {
         Should -Invoke Invoke-AosNar -ModuleName aos -Times 1 -Exactly -ParameterFilter {
             ($Arguments -join '|') -ceq 'choose|Which is larger?|--option|7|--option|12'
         }
+    }
+}
+
+Describe 'Paseo config' {
+    BeforeEach {
+        $script:pluginsJson = '{ "source": "configured", "path": "pluginsEnabled", "set": false }'
+        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'paseo' }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = $script:pluginsJson } } -ParameterFilter { $CommandLine -eq 'paseo daemon config get pluginsEnabled --json' }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = '{ "action": "saved", "applied": false }' } } -ParameterFilter { $CommandLine -like 'paseo daemon config set *' }
+        foreach ($f in 'Write-AosOk', 'Write-AosInfo', 'Write-AosDry', 'Write-AosWarn') { Mock $f -ModuleName aos { } }
+    }
+
+    It 'turns plugins on when they are not set' {
+        InModuleScope aos { Sync-AosPaseo }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -eq 'paseo daemon config set pluginsEnabled true' }
+    }
+
+    It 'turns plugins on when they are off' {
+        $script:pluginsJson = '{ "source": "configured", "path": "pluginsEnabled", "set": true, "value": false }'
+        InModuleScope aos { Sync-AosPaseo }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -eq 'paseo daemon config set pluginsEnabled true' }
+    }
+
+    It 'sets nothing when plugins are already on' {
+        $script:pluginsJson = '{ "source": "configured", "path": "pluginsEnabled", "set": true, "value": true }'
+        InModuleScope aos { Sync-AosPaseo }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'paseo daemon config set *' }
+    }
+
+    It 'sets nothing in DryRun' {
+        InModuleScope aos { Sync-AosPaseo -DryRun }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'paseo daemon config set *' }
+        Should -Invoke Write-AosDry -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'pluginsEnabled' }
+    }
+
+    It 'warns and sets nothing when the setting cannot be read' {
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 1; Text = 'error' } } -ParameterFilter { $CommandLine -eq 'paseo daemon config get pluginsEnabled --json' }
+        InModuleScope aos { Sync-AosPaseo }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'paseo daemon config set *' }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1
+    }
+
+    It 'does nothing without paseo' {
+        Mock Test-AosCommand -ModuleName aos { $false } -ParameterFilter { $Name -eq 'paseo' }
+        InModuleScope aos { Sync-AosPaseo }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly
     }
 }
 

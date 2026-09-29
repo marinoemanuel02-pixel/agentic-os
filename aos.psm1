@@ -1023,6 +1023,20 @@ function Install-AosPhone([switch]$DryRun) {
     Update-AosPath
     Write-AosStep 'Phone (Paseo daemon; state in ~\.paseo)'
     Install-AosNpmTools -Packages (Get-AosPackages)['phone_npm'] -DryRun:$DryRun
+    Sync-AosPaseo -DryRun:$DryRun
+}
+
+function Sync-AosPaseo([switch]$DryRun) {
+    # The Paseo setting aos needs: plugins on (for the aos plugin). Only through Paseo's CLI, one key at a
+    # time: `config get` redacts secret-like values, so aos never reads an object and writes it back.
+    if (-not (Test-AosCommand paseo)) { Write-AosInfo 'paseo is not installed: skipped (aos install phone)'; return }
+    $r = Invoke-AosCapture 'paseo daemon config get pluginsEnabled --json'
+    if ($r.Code -ne 0) { Write-AosWarn "paseo daemon config get failed (exit $($r.Code)): plugins setting unknown"; return }
+    if ($r.Text -match '"value"\s*:\s*true') { Write-AosOk 'Paseo plugins enabled'; return }
+    if ($DryRun) { Write-AosDry 'paseo daemon config set pluginsEnabled true'; return }
+    $s = Invoke-AosCapture 'paseo daemon config set pluginsEnabled true'
+    if ($s.Code -eq 0) { Write-AosOk 'Paseo plugins enabled (a running daemon needs: paseo daemon restart)' }
+    else { Write-AosWarn "paseo daemon config set pluginsEnabled failed (exit $($s.Code))" }
 }
 
 function Get-AosPiDir {
