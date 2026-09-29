@@ -918,20 +918,27 @@ function Get-AosAgentModelfile([string]$From, [int]$NumCtx) {
 
 function Get-AosModelfileFacts([string]$Text) {
     # From `ollama show <tag> --modelfile`: the weight blobs (FROM lines), num_ctx, and a normalized
-    # definition (every line but comments and num_ctx, sorted) to compare two models by.
+    # definition to compare two models by: """ blocks verbatim, other directives in order, PARAMETER
+    # lines as a sorted set; comments, blank lines and num_ctx outside """ blocks are ignored.
     $from = New-Object 'System.Collections.Generic.List[string]'
     $body = New-Object 'System.Collections.Generic.List[string]'
+    $params = New-Object 'System.Collections.Generic.List[string]'
     $ctx = $null
+    $inQuote = $false
     foreach ($line in ($Text -split "`r?`n")) {
+        $odd = (([regex]::Matches($line, '"""')).Count % 2) -eq 1
+        if ($inQuote) { $body.Add($line); if ($odd) { $inQuote = $false }; continue }
         $t = $line.Trim()
-        if ($t.StartsWith('#')) { continue }
+        if ($odd) { $body.Add($t); $inQuote = $true; continue }
+        if (-not $t -or $t.StartsWith('#')) { continue }
         if ($t -match '^PARAMETER\s+num_ctx\s+(\d+)$') { $ctx = [int]$Matches[1]; continue }
+        if ($t -match '^PARAMETER\s') { if (-not $params.Contains($t)) { $params.Add($t) }; continue }
         if ($t -match '^FROM\s+(.+)$') { $from.Add($Matches[1].Trim()) }
-        if ($t) { $body.Add($t) }
+        $body.Add($t)
     }
-    $sorted = $body.ToArray()
+    $sorted = $params.ToArray()
     [System.Array]::Sort($sorted, [System.StringComparer]::Ordinal)
-    return @{ From = @($from); NumCtx = $ctx; Definition = ($sorted -join "`n") }
+    return @{ From = @($from); NumCtx = $ctx; Definition = ((@($body) + '' + @($sorted)) -join "`n") }
 }
 
 function Test-AosAgentModel([string]$Name, [string]$From, [int]$NumCtx) {
