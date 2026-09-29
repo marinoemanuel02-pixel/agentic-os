@@ -88,6 +88,15 @@ sends prompts and approvals.
 | Start Claude sessions on the PC from the phone | On the PC: `aos remote` (Desktop hub) or `aos remote <project>`, and leave that window open. Then Claude app > Code | PC awake; at most 2 sessions at once |
 | Use Codex on the PC from the phone | Once: Codex app > Settings > Connections > Control this PC > Set up, and scan the QR code with the ChatGPT app. Then ChatGPT app > Codex | PC awake, online and unlocked |
 | Work while the PC is off | Claude app > Code (cloud session) or ChatGPT app > Codex (cloud task), on a GitHub repo | Push first: they see only what was pushed |
+| Claude Code, Codex **and the local model** from one app | **Paseo** (Android, Play Store). Once: on the PC, in Windows Terminal, `paseo daemon pair --relay`, and scan the QR code in the app (Add connection > Scan QR code); keep the QR private. Then pick a provider per session: Claude, Codex, or Pi with model `aos/aos-agent` (the local model) | The Paseo daemon running on the PC: `paseo daemon start` from Windows Terminal, not from inside the Claude app |
+| See agentic-os status and nar calibration; label nar's recent choices | Paseo app > a workspace > **+** > **agentic-os** (the aos plugin). A tap on the right option records it; the call leaves the list | Paseo paired |
+
+The local model in Paseo (Pi) asks before every command or file change it wants to make: the question
+shows up in the app as Allow / Deny, and nothing runs until you answer. Reading files needs no approval.
+It is a 4B model with a 16K context: good for small, well-defined tasks; it can misreport what happened,
+so check its claims. Voice input in Paseo is off: turning it on downloads about 1 GB of speech models
+(`paseo daemon config set features.dictation.enabled true`; for Italian also set
+`features.dictation.stt.model parakeet-tdt-0.6b-v3-int8`), then `paseo daemon restart`.
 
 Keep the PC reachable (your Windows settings, once): keep it plugged in; Settings > System >
 Power > sleep: Never when plugged in; Control Panel > Power Options > "Choose what closing the lid

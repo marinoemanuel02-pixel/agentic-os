@@ -10,6 +10,28 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-28-local-stack-design.md` (build steps 4 and 5). Deviation: the spec names OpenCode as the local harness; Pi is tried first (smaller prompt and download, below). Recorded in `docs/decisions.md` by Task 9.
 
+## Status (2026-09-29 afternoon)
+
+- Done: Tasks 1-9 (commits on agentic-os `paseo-app` and nar-tools `paseo-app`/`paseo-plugin`). Pi passed
+  the Task 7 gate (numbers in `docs/decisions.md`, 2026-09-29), so the OpenCode fallback is not needed.
+  The plugin was tested end to end in Paseo's local web UI: the panel renders status, calibration and
+  recent calls, and a tap recorded feedback that `nar status` and `nar recent` confirm.
+- Left: Task 10 (the user pairs the phone by QR, then the away-from-home checks); start-at-login is the
+  user's choice; voice (about 1 GB of speech models) is off until the user decides.
+
+## Review record (round 2, 2026-09-29)
+
+Codex reviewed revision 2 (9 findings; one run was cut by its usage limit and resumed). Dispositions:
+Paseo env through `config set` impossible and `config get` redacts secrets -> no Paseo env override; Pi
+telemetry off in Pi's own settings, and aos sets only `pluginsEnabled` through the CLI. Pi sends
+`max_completion_tokens` -> `compat.maxTokensField: max_tokens` (verified live: Pi sent a shrinking
+`max_tokens`). The gate must use the untruncated size -> every request captured and replayed against a
+32K copy; Codex's claim that Ollama reports cached tokens outside `prompt_tokens` was checked and did not
+hold. Codex permission test -> Task 10 asks for a write outside the workspace. Provenance -> the whole
+normalized modelfile is compared. 30 s RPC deadline -> `aos status` runs in the background (it took
+~28 s). `paseo provider models` used for model lists. Gate enforcement -> node tests for Allow, Deny,
+dismissal and no UI, plus live Deny/Allow through Paseo. OpenCode fallback -> would need its own plan.
+
 ## Review record (round 1, 2026-09-29)
 
 Claude wrote its review first (scratchpad `review-claude-paseo-plan.md`), then Codex reviewed blind (`codex exec --profile review`, 12 findings). Every Codex citation was checked against the code before it was accepted.
