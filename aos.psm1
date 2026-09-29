@@ -1128,12 +1128,44 @@ function Sync-AosPaseoPlugin([switch]$DryRun) {
     foreach ($p in $items) {
         if ($p -is [System.Collections.IDictionary] -and $p['id'] -eq 'aos') { $have = $p }
     }
-    if ($have -and ([string]$have['path']).TrimEnd('\') -ieq $dir.TrimEnd('\')) { Write-AosOk "Paseo plugin aos ($dir)"; return }
+    if ($have -and ([string]$have['path']).TrimEnd('\') -ieq $dir.TrimEnd('\')) { Repair-AosPaseoPlugin -Plugin $have -Dir $dir -DryRun:$DryRun; return }
     if ($DryRun) { Write-AosDry "paseo plugin install `"$dir`""; return }
-    if ($have) { $null = Invoke-AosCapture 'paseo plugin remove aos' }
+    # Install first: the old registration goes only when Paseo refuses the same id twice.
     $i = Invoke-AosCapture "paseo plugin install `"$dir`""
-    if ($i.Code -eq 0) { Write-AosOk "Paseo plugin aos installed from $dir" }
-    else { Write-AosWarn "paseo plugin install failed (exit $($i.Code))" }
+    if ($i.Code -eq 0) { Write-AosOk "Paseo plugin aos installed from $dir"; return }
+    if (-not $have -or $i.Text -notmatch 'already') { Write-AosWarn "paseo plugin install failed (exit $($i.Code)): $($i.Text)"; return }
+    $old = [string]$have['path']
+    $r = Invoke-AosCapture 'paseo plugin remove aos'
+    if ($r.Code -ne 0) { Write-AosWarn "paseo plugin remove aos failed (exit $($r.Code)): the old registration ($old) stays"; return }
+    $i = Invoke-AosCapture "paseo plugin install `"$dir`""
+    if ($i.Code -eq 0) { Write-AosOk "Paseo plugin aos moved to $dir"; return }
+    Write-AosWarn "paseo plugin install failed (exit $($i.Code)): $($i.Text)"
+    $b = Invoke-AosCapture "paseo plugin install `"$old`""
+    if ($b.Code -eq 0) { Write-AosInfo "restored the old aos plugin path ($old)" }
+    else { Write-AosWarn "restoring the old aos plugin path ($old) failed (exit $($b.Code)): paseo plugin install `"$old`"" }
+}
+
+function Repair-AosPaseoPlugin($Plugin, [string]$Dir, [switch]$DryRun) {
+    # Registered from the right folder: make sure it is enabled and running (a status Paseo does not
+    # report counts as running).
+    $off = ($Plugin['enabled'] -eq $false)
+    $down = $Plugin.Contains('status') -and $Plugin['status'] -ne 'running'
+    if (-not $off -and -not $down) { Write-AosOk "Paseo plugin aos ($Dir)"; return }
+    if ($DryRun) { Write-AosDry "paseo plugin enable/reload aos (status $($Plugin['status']))"; return }
+    if ($off) {
+        $e = Invoke-AosCapture 'paseo plugin enable aos'
+        if ($e.Code -ne 0) { Write-AosWarn "paseo plugin enable aos failed (exit $($e.Code))"; return }
+    }
+    $null = Invoke-AosCapture 'paseo plugin reload aos'
+    $status = $null
+    $r = Invoke-AosCapture 'paseo plugin ls --json'
+    if ($r.Code -eq 0) {
+        foreach ($p in (ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $r.Text))) {
+            if ($p -is [System.Collections.IDictionary] -and $p['id'] -eq 'aos') { $status = $p['status'] }
+        }
+    }
+    if ($status -eq 'running') { Write-AosOk "Paseo plugin aos enabled and running ($Dir)" }
+    else { Write-AosWarn "Paseo plugin aos is not running after reload (status $status): see paseo plugin ls" }
 }
 
 function Sync-AosPaseo([switch]$DryRun) {
@@ -1144,6 +1176,10 @@ function Sync-AosPaseo([switch]$DryRun) {
     if ($r.Code -ne 0) { Write-AosWarn "paseo daemon config get failed (exit $($r.Code)): plugins setting unknown"; return }
     if ($r.Text -match '"value"\s*:\s*true') { Write-AosOk 'Paseo plugins enabled'; return }
     if ($DryRun) { Write-AosDry 'paseo daemon config set pluginsEnabled true'; return }
+    $cfgHome = Join-Path $HOME '.paseo'
+    if ($env:PASEO_HOME) { $cfgHome = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:PASEO_HOME) }
+    $cfgFile = Join-Path $cfgHome 'config.json'
+    if (Test-Path -LiteralPath $cfgFile) { $null = Backup-AosFile $cfgFile }
     $s = Invoke-AosCapture 'paseo daemon config set pluginsEnabled true'
     if ($s.Code -eq 0) { Write-AosOk 'Paseo plugins enabled (a running daemon needs: paseo daemon restart)' }
     else { Write-AosWarn "paseo daemon config set pluginsEnabled failed (exit $($s.Code))" }
