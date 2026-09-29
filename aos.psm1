@@ -727,6 +727,9 @@ function Sync-AosBrain([switch]$DryRun) {
     Write-AosStep 'Local model state (~\.aos\local.json, read by nar)'
     Sync-AosLocalState -DryRun:$DryRun
 
+    Write-AosStep 'Local agent model (config/local.json agent_model: the default with a larger context)'
+    Sync-AosAgentModel -DryRun:$DryRun
+
     Write-AosStep 'MCP servers (same list in both agents)'
     Sync-AosMcp -DryRun:$DryRun
 
@@ -818,7 +821,13 @@ function Invoke-AosLocalAdopt([string]$Tag, [switch]$DryRun) {
     if (-not $Tag) { Write-AosWarn 'usage: aos local adopt <ollama tag>'; return }
     $cfg = Get-AosLocalConfig
     if (-not $cfg) { Write-AosWarn 'config/local.json missing'; return }
-    if ($cfg['default'] -eq $Tag) { Write-AosOk "$Tag is already the default"; return }
+    if ($cfg['default'] -eq $Tag) {
+        # Still reconcile: repeating an adopt is how a failed rebuild of the agent variant is retried.
+        Write-AosOk "$Tag is already the default"
+        Sync-AosLocalState -DryRun:$DryRun
+        Sync-AosAgentModel -DryRun:$DryRun
+        return
+    }
     $reportPath = Join-Path (Get-AosNarHome) 'eval\latest.json'
     $report = Read-AosJson $reportPath
     if (-not $report) { Write-AosWarn "no eval report at $reportPath (run: aos nar eval --models $Tag)"; return }
@@ -832,6 +841,7 @@ function Invoke-AosLocalAdopt([string]$Tag, [switch]$DryRun) {
     Write-AosOk "default local model is now $Tag (commit config/local.json)"
     Sync-AosLocalState
     Sync-AosCodexProfiles
+    Sync-AosAgentModel
 }
 
 function Invoke-AosNar([string[]]$Arguments) {
@@ -893,6 +903,72 @@ function Sync-AosLocalState([switch]$DryRun) {
     Write-AosOk "wrote $target"
 }
 
+function Get-AosAgentModelfile([string]$From, [int]$NumCtx) {
+    return "FROM $From`nPARAMETER num_ctx $NumCtx`n"
+}
+
+function Get-AosModelfileFacts([string]$Text) {
+    # The weight blobs (FROM lines) and num_ctx of `ollama show <tag> --modelfile`; comments ignored.
+    $from = New-Object 'System.Collections.Generic.List[string]'
+    $ctx = $null
+    foreach ($line in ($Text -split "`r?`n")) {
+        $t = $line.Trim()
+        if ($t -match '^FROM\s+(.+)$') { $from.Add($Matches[1].Trim()) }
+        elseif ($t -match '^PARAMETER\s+num_ctx\s+(\d+)$') { $ctx = [int]$Matches[1] }
+    }
+    return @{ From = @($from); NumCtx = $ctx }
+}
+
+function Test-AosAgentModel([string]$Name, [string]$From, [int]$NumCtx) {
+    # What Ollama holds is the truth, not bookkeeping: the variant must have the default's weight blobs
+    # and the configured context. Returns 'ok', 'stale' or 'missing'.
+    $variant = Invoke-AosCapture "ollama show $Name --modelfile"
+    if ($variant.Code -ne 0) { return 'missing' }
+    $v = Get-AosModelfileFacts $variant.Text
+    if ($v.NumCtx -ne $NumCtx -or $v.From.Count -eq 0) { return 'stale' }
+    $base = Invoke-AosCapture "ollama show $From --modelfile"
+    if ($base.Code -ne 0) { return 'stale' }
+    $b = Get-AosModelfileFacts $base.Text
+    if ($b.From.Count -eq 0 -or (($v.From -join "`n") -ne ($b.From -join "`n"))) { return 'stale' }
+    return 'ok'
+}
+
+function Sync-AosAgentModel([switch]$DryRun) {
+    # Agent harnesses reach the local model through OpenAI-compatible APIs, which cannot set Ollama's
+    # context size, so they use this variant of the default model (config/local.json agent_model).
+    $cfg = Get-AosLocalConfig
+    if (-not $cfg -or -not $cfg['agent_model']) { return }
+    if (-not (Test-AosCommand ollama)) { Write-AosWarn 'ollama missing: the agent model is not created (aos install local)'; return }
+    $name = [string]$cfg['agent_model']; $from = [string]$cfg['default']; $ctx = [int]$cfg['agent_num_ctx']
+    if (-not (Test-AosOllamaModel -List (Invoke-AosCapture 'ollama list').Text -Tag $from)) {
+        Write-AosWarn "default model $from is not pulled: $name not created (aos install local)"; return
+    }
+    $state = Test-AosAgentModel -Name $name -From $from -NumCtx $ctx
+    if ($state -eq 'ok') { Write-AosOk "$name ($from, context $ctx)"; return }
+    if ($DryRun) { Write-AosDry "ollama create $name from $from with num_ctx $ctx   ($state)"; return }
+    $file = Join-Path (Get-AosStateDir) 'agent.Modelfile'
+    Write-AosText -Path $file -Text (Get-AosAgentModelfile -From $from -NumCtx $ctx)
+    $r = Invoke-AosCapture "ollama create $name -f `"$file`""
+    if ($r.Code -ne 0) { Write-AosWarn "ollama create $name failed (exit $($r.Code))"; return }
+    $null = Invoke-AosCapture "ollama run $name `"Reply with OK`""   # load it once, then ask where it runs
+    switch (Test-AosOllamaGpu -PsText (Invoke-AosCapture 'ollama ps').Text -Tag $name) {
+        'gpu'   { Write-AosOk "$name ($from, context $ctx) runs entirely on the GPU" }
+        'split' { Write-AosWarn "$name does not fit the GPU at context $ctx and runs partly on the CPU (slower)" }
+        default { Write-AosWarn "$name did not load (see ollama ps)" }
+    }
+}
+
+function Show-AosAgentModelStatus($Local) {
+    # One `aos status` line for the agent variant; the caller has checked that ollama runs.
+    if (-not $Local -or -not $Local['agent_model']) { return }
+    $name = [string]$Local['agent_model']; $from = [string]$Local['default']; $ctx = [int]$Local['agent_num_ctx']
+    switch (Test-AosAgentModel -Name $name -From $from -NumCtx $ctx) {
+        'ok'    { Write-AosOk "$name ($from, context $ctx)" }
+        'stale' { Write-AosWarn "$name is not $from with context $ctx (aos sync)" }
+        default { Write-AosWarn "$name missing (aos install local)" }
+    }
+}
+
 function Install-AosLocal([switch]$DryRun) {
     Update-AosPath
     $cfg = Get-AosLocalConfig
@@ -922,6 +998,7 @@ function Install-AosLocal([switch]$DryRun) {
         }
     }
     Sync-AosLocalState -DryRun:$DryRun
+    Sync-AosAgentModel -DryRun:$DryRun
     Install-AosNarTools -DryRun:$DryRun
     $harness = (Get-AosPackages)['local_npm']
     if ($harness) {
@@ -1041,6 +1118,7 @@ function Get-AosStatus {
                     'split' { Write-AosWarn "default model $($local['default']) is loaded split across CPU and GPU" }
                     default { Write-AosOk "default model $($local['default']) (not loaded right now)" }
                 }
+                Show-AosAgentModelStatus $local
             }
         }
     }
