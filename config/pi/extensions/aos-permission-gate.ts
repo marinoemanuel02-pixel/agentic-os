@@ -17,13 +17,18 @@ function describe(toolName: string, input: Record<string, unknown>): string {
   return `${toolName}: ${json.length > 300 ? json.slice(0, 300) + "..." : json}`;
 }
 
+// The reason is what the model reads as the tool's result. A 4B model read "Denied by the user" as the
+// command's output and reported success (measured 2026-09-29), so the wording leaves no room for that.
+const DENIED = "NOT RUN: the user denied permission for this tool call. Nothing was executed and nothing changed. Tell the user it did not run.";
+const NO_UI = "NOT RUN: nobody is available to approve this tool call. Nothing was executed and nothing changed.";
+
 export default function (pi: ExtensionAPI) {
   pi.on("tool_call", async (event, ctx) => {
     if (READ_ONLY.has(event.toolName)) return undefined;
-    if (!ctx.hasUI) return { block: true, reason: "aos permission gate: no UI to ask for approval" };
+    if (!ctx.hasUI) return { block: true, reason: NO_UI };
     const input = (event.input ?? {}) as Record<string, unknown>;
     const choice = await ctx.ui.select(`Allow ${describe(event.toolName, input)}?`, ["Allow", "Deny"]);
-    if (choice !== "Allow") return { block: true, reason: "Denied by the user" };
+    if (choice !== "Allow") return { block: true, reason: DENIED };
     return undefined;
   });
 }

@@ -33,9 +33,13 @@ for (const [tool, input, shown] of gated) {
     assert.ok(asked[0].includes(shown), asked[0]);
   });
 
-  test(`${tool}: Deny blocks it`, async () => {
+  test(`${tool}: Deny blocks it, with a reason a small model cannot read as success`, async () => {
+    // Measured 2026-09-29: qwen3.5:4b read "Denied by the user" as the command's output and claimed success.
     const { ctx } = fakeCtx("Deny");
-    assert.deepEqual(await loadHandler()({ toolName: tool, input }, ctx), { block: true, reason: "Denied by the user" });
+    const result = (await loadHandler()({ toolName: tool, input }, ctx)) as { block?: boolean; reason?: string };
+    assert.equal(result?.block, true);
+    assert.match(result?.reason ?? "", /^NOT RUN\b/);
+    assert.match(result?.reason ?? "", /nothing was executed/i);
   });
 
   test(`${tool}: a dismissed dialog blocks it`, async () => {

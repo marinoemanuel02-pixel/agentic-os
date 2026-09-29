@@ -3,6 +3,45 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-09-29 - Phone access through Paseo; Pi as the local agent
+
+- **Paseo for the phone** (spec step 5; replaces "not installed yet" in the README): its daemon runs
+  Claude Code, Codex and Pi on this PC and pairs with the Paseo Android app over an end-to-end encrypted
+  relay. Installed from npm (`aos install phone`), 538 MB, of which 253 MB is the Claude Agent SDK's
+  bundled Windows binary. It runs on Node 24 although Paseo pins 22.20. Its voice features download
+  about 1 GB of local speech models at daemon start; they are off until the user decides (the default
+  dictation model is English-only; `parakeet-tdt-0.6b-v3-int8` covers Italian).
+- **Pi, not OpenCode, is the harness on the local model** (the spec named OpenCode). Pi's whole first
+  request, including Paseo's added system prompt and four tools, is 2,011 tokens. OpenCode would have
+  cost ~360 MB (npm installs two 180 MB Windows binaries) for a larger prompt; it stays the fallback,
+  behind its own reviewed plan. Pi installs 414 MB (284 MB of it esbuild for all 26 platforms).
+- **The gate Pi passed** (a Paseo session in a scratch repo, every request captured by a logging proxy
+  and replayed against a 32K copy of the model, so a request the 16K model truncated would show):
+  largest request 11,769 tokens against a limit of 12,288 (16K minus a 4K reply); replayed sizes equal
+  the live ones for all 23 requests, so nothing was truncated; Pi compacted at 13,024 tokens down to
+  6,020; `aos-agent` stayed 100% on the GPU; read, bash and write tool calls, steering mid-turn and the
+  permission prompts worked; all answers were correct. Ollama's `prompt_tokens` includes the cached
+  prefix (checked by replaying one request twice), and Pi records `input` = prompt minus cache, so the
+  size of a request is Pi's `input + cacheRead`.
+- **What aos sets for Pi** (`Sync-AosPi`, owned keys only): the `aos` provider with `aos-agent` (16K
+  window, 4K output, `compat.maxTokensField: max_tokens` because Ollama 0.34 ignores
+  `max_completion_tokens`, no `developer` role); compaction on, with reserve and kept-recent tokens of
+  4096 for that model (Pi's defaults, 16384 and 20000, exceed the window); install telemetry off.
+- **Permission gate**: Pi has no permission prompts and Paseo adds none for it, so an aos extension asks
+  before every tool that is not read-only; Paseo shows the question on the phone. It blocks on Deny, on
+  a dismissed question and without a UI. The block message says "NOT RUN" plainly: the 4B model read
+  "Denied by the user" as the command's output and claimed success. Every bash call asks, which is safe
+  but tedious from a phone (six questions for one grep-heavy answer). Paseo's CLI approves a Pi question
+  only with an answer: `paseo permit allow <agent> <id> --input '{"answers":{"q":"Allow"}}'`.
+- **No MCP servers for the local agent** in this version: every tool schema costs prompt in a 16K window.
+- **aos-agent** (the default with `num_ctx 16384`): its state is read from Ollama, comparing the whole
+  normalized modelfile with the default's, not kept as bookkeeping; `aos local adopt` and `aos sync`
+  rebuild it. The 2026-09-28 line "a 32K context fits the 6 GB GPU fully" was measured on MiniCPM5-2B;
+  for qwen3.5:4b, 16K runs 100% on the GPU (3.3-3.5 GB) and 32K 77%.
+- **Reviews**: the plan went through two cross-vendor rounds (Claude first, then Codex blind: 12 and 9
+  findings); all accepted after checking each against the code, except one correction: Codex's reading
+  that Ollama reports cached tokens outside `prompt_tokens` did not hold when measured.
+
 ## 2026-09-28 - Local model and the nar tools
 
 - **Bake-off on this laptop** (`aos nar eval`: 17 tool-call cases, 30 single-pass choices, temperature 0;
