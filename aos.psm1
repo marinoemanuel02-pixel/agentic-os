@@ -1024,6 +1024,32 @@ function Install-AosPhone([switch]$DryRun) {
     Write-AosStep 'Phone (Paseo daemon; state in ~\.paseo)'
     Install-AosNpmTools -Packages (Get-AosPackages)['phone_npm'] -DryRun:$DryRun
     Sync-AosPaseo -DryRun:$DryRun
+    Sync-AosPaseoPlugin -DryRun:$DryRun
+}
+
+function Get-AosPaseoPluginDir { return (Join-Path (Get-AosProjectsDir) 'nar-tools\paseo-plugin') }
+
+function Sync-AosPaseoPlugin([switch]$DryRun) {
+    # The aos plugin (the agentic-os panel in the Paseo app) lives in nar-tools/paseo-plugin. Paseo
+    # compiles it from that folder and supplies its libraries, so the folder needs no node_modules.
+    if (-not (Test-AosCommand paseo)) { return }
+    $dir = Get-AosPaseoPluginDir
+    if (-not (Test-Path -LiteralPath (Join-Path $dir 'paseo-plugin.json'))) { Write-AosWarn "no aos plugin at $dir (nar-tools checkout, branch with paseo-plugin/)"; return }
+    $r = Invoke-AosCapture 'paseo plugin ls --json'
+    if ($r.Code -ne 0) { Write-AosWarn "paseo plugin ls failed (exit $($r.Code))"; return }
+    $have = $null
+    # No @() here: ConvertTo-AosHashtable already returns the list whole, and 5.1 and 7 unroll
+    # ConvertFrom-Json's array differently; wrapping it again hides the entries.
+    $items = ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $r.Text)
+    foreach ($p in $items) {
+        if ($p -is [System.Collections.IDictionary] -and $p['id'] -eq 'aos') { $have = $p }
+    }
+    if ($have -and ([string]$have['path']).TrimEnd('\') -ieq $dir.TrimEnd('\')) { Write-AosOk "Paseo plugin aos ($dir)"; return }
+    if ($DryRun) { Write-AosDry "paseo plugin install `"$dir`""; return }
+    if ($have) { $null = Invoke-AosCapture 'paseo plugin remove aos' }
+    $i = Invoke-AosCapture "paseo plugin install `"$dir`""
+    if ($i.Code -eq 0) { Write-AosOk "Paseo plugin aos installed from $dir" }
+    else { Write-AosWarn "paseo plugin install failed (exit $($i.Code))" }
 }
 
 function Sync-AosPaseo([switch]$DryRun) {

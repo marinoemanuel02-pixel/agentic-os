@@ -1654,6 +1654,7 @@ Describe 'Phone layer' {
         Mock Get-AosPackages -ModuleName aos { @{ phone_npm = @(@{ name = '@getpaseo/cli'; bin = 'paseo'; why = 't' }) } }
         Mock Install-AosNpmTools -ModuleName aos { }
         Mock Sync-AosPaseo -ModuleName aos { }
+        Mock Sync-AosPaseoPlugin -ModuleName aos { }
     }
 
     It 'is an install layer, after local' {
@@ -1867,6 +1868,58 @@ Describe 'Paseo config' {
         Mock Test-AosCommand -ModuleName aos { $false } -ParameterFilter { $Name -eq 'paseo' }
         InModuleScope aos { Sync-AosPaseo }
         Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly
+    }
+}
+
+Describe 'Paseo aos plugin' {
+    BeforeEach {
+        $pluginDir = Join-Path $caseRoot 'projects\nar-tools\paseo-plugin'
+        Write-TestFile (Join-Path $pluginDir 'paseo-plugin.json') '{ "id": "aos" }'
+        $script:pluginList = '[]'
+        Mock Get-AosPaseoPluginDir -ModuleName aos { $pluginDir }
+        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'paseo' }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = $script:pluginList } } -ParameterFilter { $CommandLine -eq 'paseo plugin ls --json' }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = 'ok' } } -ParameterFilter { $CommandLine -like 'paseo plugin install *' -or $CommandLine -eq 'paseo plugin remove aos' }
+        foreach ($f in 'Write-AosOk', 'Write-AosDry', 'Write-AosWarn') { Mock $f -ModuleName aos { } }
+    }
+
+    It 'installs the plugin from nar-tools when Paseo does not have it' {
+        InModuleScope aos { Sync-AosPaseoPlugin }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -eq ('paseo plugin install "' + $pluginDir + '"') }
+    }
+
+    It 'does nothing when Paseo already runs it from that folder' {
+        $script:pluginList = '[ { "id": "aos", "path": "' + $pluginDir.Replace('\', '\\') + '\\", "enabled": true } ]'
+        InModuleScope aos { Sync-AosPaseoPlugin }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'paseo plugin install *' -or $CommandLine -eq 'paseo plugin remove aos' }
+    }
+
+    It 'moves it when Paseo runs it from another folder, and leaves other plugins alone' {
+        $script:pluginList = '[ { "id": "other", "path": "C:\\x" }, { "id": "aos", "path": "C:\\old\\paseo-plugin" } ]'
+        InModuleScope aos { Sync-AosPaseoPlugin }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -eq 'paseo plugin remove aos' }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -like 'paseo plugin install *' }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like '*remove other*' }
+    }
+
+    It 'changes nothing in DryRun' {
+        InModuleScope aos { Sync-AosPaseoPlugin -DryRun }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'paseo plugin install *' }
+        Should -Invoke Write-AosDry -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'paseo plugin install' }
+    }
+
+    It 'warns when nar-tools has no plugin folder' {
+        Mock Get-AosPaseoPluginDir -ModuleName aos { Join-Path $caseRoot 'missing' }
+        InModuleScope aos { Sync-AosPaseoPlugin }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly
+    }
+
+    It 'runs from aos install phone' {
+        Mock Get-AosPackages -ModuleName aos { @{ phone_npm = @() } }
+        foreach ($f in 'Install-AosNpmTools', 'Sync-AosPaseo', 'Sync-AosPaseoPlugin') { Mock $f -ModuleName aos { } }
+        InModuleScope aos { Install-AosPhone -DryRun }
+        Should -Invoke Sync-AosPaseoPlugin -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
     }
 }
 
