@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, mkdir, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { searchFiles, readText } from './aos-file-tools.ts';
+import { searchFiles, readText, inspectPc } from './aos-file-tools.ts';
 
 test('reads an explicit outside-project path and limits text lines', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'aos-files-'));
@@ -17,6 +17,16 @@ test('reads an explicit outside-project path and limits text lines', async () =>
     await assert.rejects(readText(path, 0));
     await assert.rejects(readText(join(dir, 'missing.txt')));
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('PC inspection returns observed disk and memory facts without changing files', async () => {
+  const result = await inspectPc(tmpdir());
+  assert.ok(result.disk.totalBytes > 0);
+  assert.ok(result.disk.availableBytes >= 0);
+  assert.ok(result.memory.totalBytes > 0);
+  assert.ok(result.memory.freeBytes >= 0);
+  assert.equal(result.maintenancePerformed, false);
+  await assert.rejects(inspectPc(join(tmpdir(), 'does-not-exist-aos-health')));
 });
 
 test('skipped dependency folders do not stop searches and junctions are not followed', async () => {

@@ -1,6 +1,6 @@
-import { opendir, open, stat } from 'node:fs/promises';
+import { opendir, open, stat, statfs } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, freemem, totalmem, platform, release, uptime } from 'node:os';
 
 function target(path: string): string {
   if (typeof path !== 'string' || !path.trim() || path.includes('\0')) throw new Error('An explicit non-empty path is required');
@@ -62,7 +62,25 @@ export async function searchFiles(path: string, query: string, limit = 10, signa
   return { root, files, scanned: Math.min(scanned, 5000), truncated, errors: errors.slice(0, 10) };
 }
 
+export async function inspectPc(path: string) {
+  const actual = target(path);
+  const disk = await statfs(actual);
+  return { observedAt: new Date().toISOString(), platform: platform(), release: release(), uptimeSeconds: uptime(),
+    memory: { totalBytes: totalmem(), freeBytes: freemem() },
+    disk: { path: actual, totalBytes: disk.blocks * disk.bsize, availableBytes: disk.bavail * disk.bsize },
+    maintenancePerformed: false };
+}
+
 export default function register(pi: { registerTool(tool: Record<string, unknown>): void }) {
+  pi.registerTool({ name: 'pc_status', label: 'PC status', description: 'Inspect current OS, uptime, free memory and disk space for an explicit path. Reports observations; performs no maintenance.',
+    parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'], additionalProperties: false },
+    async execute(_id: string, params: { path: string }, signal?: AbortSignal) {
+      try {
+        signal?.throwIfAborted(); const result = await inspectPc(params.path); signal?.throwIfAborted();
+        return { content: [{ type: 'text', text: JSON.stringify(result) }], details: result };
+      } catch (error) { return { isError: true, content: [{ type: 'text', text: `NOT COMPLETED: ${error instanceof Error ? error.message : String(error)}` }] }; }
+    },
+  });
   for (const name of ['file_search', 'text_read']) {
     pi.registerTool({ name, label: name === 'file_search' ? 'Find files' : 'Read text',
       description: name === 'file_search' ? 'Find files by name below an explicit folder. Bounded search; returns actual paths and coverage.' : 'Read up to 200 lines of a text file at an explicit Windows path. No shell needed.',
