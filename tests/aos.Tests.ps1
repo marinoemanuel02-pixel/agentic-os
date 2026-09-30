@@ -1613,7 +1613,7 @@ Describe 'Agent model variant' {
     }
 
     It 'creates the variant from the local install entry point' {
-        foreach ($f in 'Install-AosWingetPackage', 'Install-AosNarTools', 'Install-AosNpmTools', 'Sync-AosPi') { Mock $f -ModuleName aos { } }
+        foreach ($f in 'Install-AosWingetPackage', 'Install-AosNarTools', 'Install-AosNpmTools', 'Sync-AosPi', 'Sync-AosPlaces') { Mock $f -ModuleName aos { } }
         InModuleScope aos { Install-AosLocal }
         Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -like 'ollama create aos-agent *' }
     }
@@ -1621,7 +1621,7 @@ Describe 'Agent model variant' {
     It 'refreshes the variant through brain sync with DryRun=<Preview>' -ForEach @(@{ Preview = $false }, @{ Preview = $true }) {
         foreach ($f in 'Set-AosJunction', 'Sync-AosClaudeSkills', 'Set-AosManagedBlock', 'Sync-AosCodexAgents',
                        'Sync-AosClaudeSettings', 'Sync-AosCodexProfiles', 'Sync-AosMcp', 'Sync-AosProfile', 'Sync-AosLocalState',
-                       'Sync-AosPi') {
+                       'Sync-AosPi', 'Sync-AosPlaces') {
             Mock $f -ModuleName aos { }
         }
         InModuleScope aos -Parameters @{ Preview = $Preview } { param($Preview) Sync-AosBrain -DryRun:$Preview }
@@ -1805,7 +1805,7 @@ Describe 'Brain sync includes the local state' {
     BeforeEach {
         foreach ($f in 'Set-AosJunction', 'Sync-AosClaudeSkills', 'Set-AosManagedBlock', 'Sync-AosCodexAgents',
                        'Sync-AosClaudeSettings', 'Sync-AosCodexProfiles', 'Sync-AosMcp', 'Sync-AosProfile', 'Sync-AosLocalState',
-                       'Sync-AosAgentModel', 'Sync-AosPi') {
+                       'Sync-AosAgentModel', 'Sync-AosPi', 'Sync-AosPlaces') {
             Mock $f -ModuleName aos { }
         }
     }
@@ -2484,7 +2484,7 @@ Describe 'Pi on the local model' {
     It 'runs from aos install local and aos sync' {
         foreach ($f in 'Install-AosWingetPackage', 'Install-AosNarTools', 'Install-AosNpmTools', 'Sync-AosLocalState', 'Sync-AosAgentModel',
                        'Set-AosJunction', 'Sync-AosClaudeSkills', 'Set-AosManagedBlock', 'Sync-AosCodexAgents', 'Sync-AosClaudeSettings',
-                       'Sync-AosCodexProfiles', 'Sync-AosMcp', 'Sync-AosProfile', 'Sync-AosPi') {
+                       'Sync-AosCodexProfiles', 'Sync-AosMcp', 'Sync-AosProfile', 'Sync-AosPi', 'Sync-AosPlaces') {
             Mock $f -ModuleName aos { }
         }
         Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'ollama' }
@@ -2493,6 +2493,64 @@ Describe 'Pi on the local model' {
         Should -Invoke Sync-AosPi -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
         InModuleScope aos { Install-AosLocal -DryRun }
         Should -Invoke Sync-AosPi -ModuleName aos -Times 2 -Exactly -ParameterFilter { $DryRun }
+    }
+}
+
+Describe 'Places registration' {
+    BeforeEach {
+        Mock Get-AosStateDir -ModuleName aos { $caseRoot }
+        Mock Get-AosPlaces -ModuleName aos { @([ordered]@{ name='repo'; kind='repo'; path=$caseRoot; exists=$true }) }
+        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'paseo' }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code=0; Text='[]' } } -ParameterFilter { $CommandLine -eq 'paseo project ls --json' }
+        Mock Register-AosPaseoPlace -ModuleName aos { $true }
+        Mock Write-AosWarn -ModuleName aos { }
+    }
+    It 'registers existing places and skips normalized known paths' {
+        InModuleScope aos { Sync-AosPlaces }
+        Should -Invoke Register-AosPaseoPlace -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Path -eq $caseRoot }
+        $knownJson = ConvertTo-Json -InputObject @(@{ path=($caseRoot.ToUpperInvariant()+'\') }) -Compress
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code=0; Text=$knownJson } } -ParameterFilter { $CommandLine -eq 'paseo project ls --json' }
+        InModuleScope aos { Sync-AosPlaces }
+        Should -Invoke Register-AosPaseoPlace -ModuleName aos -Times 1 -Exactly
+    }
+    It 'never registers missing folders or preview changes' {
+        Mock Get-AosPlaces -ModuleName aos { @([ordered]@{ name='gone'; kind='repo'; path=(Join-Path $caseRoot 'gone'); exists=$false }) }
+        InModuleScope aos { Sync-AosPlaces }
+        InModuleScope aos { Sync-AosPlaces -DryRun }
+        Should -Invoke Register-AosPaseoPlace -ModuleName aos -Times 0 -Exactly
+    }
+    It 'persists local discovery when the daemon cannot list projects' {
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code=1; Text='offline' } } -ParameterFilter { $CommandLine -eq 'paseo project ls --json' }
+        InModuleScope aos { Sync-AosPlaces }
+        Should -Invoke Register-AosPaseoPlace -ModuleName aos -Times 0 -Exactly
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'paseo project ls' }
+        Test-Path (Join-Path $caseRoot 'places.json') | Should -BeTrue
+    }
+    It 'refuses malformed listings and reports failed registration' {
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code=0; Text='invalid json' } } -ParameterFilter { $CommandLine -eq 'paseo project ls --json' }
+        InModuleScope aos { Sync-AosPlaces }
+        Should -Invoke Register-AosPaseoPlace -ModuleName aos -Times 0 -Exactly
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code=0; Text='[]' } } -ParameterFilter { $CommandLine -eq 'paseo project ls --json' }
+        Mock Register-AosPaseoPlace -ModuleName aos { $false }
+        InModuleScope aos { Sync-AosPlaces }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'registration failed' }
+    }
+    It 'skips external calls without Paseo and skips absent configuration' {
+        Mock Test-AosCommand -ModuleName aos { $false } -ParameterFilter { $Name -eq 'paseo' }
+        InModuleScope aos { Sync-AosPlaces }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly
+        Mock Get-AosPlaces -ModuleName aos { $null }
+        InModuleScope aos { Sync-AosPlaces }
+    }
+    It 'previews an existing unregistered folder without registering or writing it' {
+        InModuleScope aos { Sync-AosPlaces -DryRun }
+        Should -Invoke Register-AosPaseoPlace -ModuleName aos -Times 0 -Exactly
+        Test-Path (Join-Path $caseRoot 'places.json') | Should -BeFalse
+    }
+    It 'runs Places sync from brain sync and passes preview through' {
+        foreach ($f in 'Set-AosJunction','Sync-AosClaudeSkills','Set-AosManagedBlock','Sync-AosCodexAgents','Sync-AosClaudeSettings','Sync-AosCodexProfiles','Sync-AosLocalState','Sync-AosAgentModel','Sync-AosPi','Sync-AosMcp','Sync-AosProfile','Sync-AosPlaces') { Mock $f -ModuleName aos { } }
+        InModuleScope aos { Sync-AosBrain -DryRun }
+        Should -Invoke Sync-AosPlaces -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
     }
 }
 
