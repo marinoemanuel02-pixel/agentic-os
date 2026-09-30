@@ -2496,4 +2496,28 @@ Describe 'Pi on the local model' {
     }
 }
 
+Describe 'Places persistence' {
+    It 'creates only the Inbox and preserves an unchanged registry' {
+        Mock Get-AosStateDir -ModuleName aos { $caseRoot }
+        Mock Get-AosPlaces -ModuleName aos { @(
+            [ordered]@{ name='missing'; kind='repo'; path=(Join-Path $caseRoot 'missing'); exists=$false },
+            [ordered]@{ name='inbox'; kind='inbox'; path=(Join-Path $caseRoot 'Inbox'); exists=$false }
+        ) }
+        InModuleScope aos { Sync-AosPlaces }
+        (Test-Path (Join-Path $caseRoot 'missing')) | Should -BeFalse
+        (Test-Path (Join-Path $caseRoot 'Inbox')) | Should -BeTrue
+        $registry = Join-Path $caseRoot 'places.json'
+        $stamp = (Get-Item $registry).LastWriteTimeUtc
+        InModuleScope aos { Sync-AosPlaces }
+        (Get-Item $registry).LastWriteTimeUtc | Should -Be $stamp
+    }
+    It 'does not create folders or a registry during preview' {
+        Mock Get-AosStateDir -ModuleName aos { $caseRoot }
+        Mock Get-AosPlaces -ModuleName aos { @([ordered]@{ name='inbox'; kind='inbox'; path=(Join-Path $caseRoot 'Inbox'); exists=$false }) }
+        InModuleScope aos { Sync-AosPlaces -DryRun }
+        (Test-Path (Join-Path $caseRoot 'Inbox')) | Should -BeFalse
+        (Test-Path (Join-Path $caseRoot 'places.json')) | Should -BeFalse
+    }
+}
+
 }

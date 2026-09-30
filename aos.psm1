@@ -1868,3 +1868,20 @@ function aos {
 #endregion
 
 Export-ModuleMember -Function aos, Install-AosLayer, Sync-AosBrain, Get-AosStatus, Update-Aos, New-AosProject
+
+function Sync-AosPlaces([switch]$DryRun) {
+    $places = @(Get-AosPlaces)
+    if ($places.Count -eq 0) { return }
+    foreach ($place in $places) {
+        if ($place.kind -eq 'inbox' -and -not (Test-Path -LiteralPath $place.path -PathType Container)) {
+            if ($DryRun) { Write-AosDry "would create Inbox: $($place.path)" }
+            else { New-Item -ItemType Directory -Path $place.path -Force | Out-Null }
+        }
+        $place.exists = Test-Path -LiteralPath $place.path -PathType Container
+        if (-not $place.exists -and $place.kind -ne 'inbox') { Write-AosWarn "Place is missing; left absent: $($place.name)" }
+    }
+    $path = Join-Path (Get-AosStateDir) 'places.json'
+    $r = Read-AosJsonOrWarn $path
+    if (-not $r.Ok) { return }
+    Set-AosJsonFile -Path $path -Old $r.Value -New ([ordered]@{ places = @($places) }) -Label 'shared Places registry' -DryRun:$DryRun
+}
