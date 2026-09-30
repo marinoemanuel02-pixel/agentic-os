@@ -1569,6 +1569,8 @@ function Get-AosStatus {
     }
     if ($clean) { Write-AosOk 'no plaintext secrets found in PowerShell profiles' }
     Write-AosInfo 'Limits: /usage in Claude Code, /status in Codex, or aos usage for local history.'
+    Write-AosStep 'Places'
+    Show-AosPlacesStatus
 }
 
 function Update-Aos([switch]$DryRun) {
@@ -1714,6 +1716,7 @@ function New-AosProject([string]$Path) {
             else { Write-AosWarn "git init failed (exit $LASTEXITCODE)" }
         }
     }
+    $null = Add-AosPlace -Path $full -Kind repo
     Write-AosInfo 'Next: fill in the Commands section of AGENTS.md, then open the folder in Claude Code or Codex.'
 }
 
@@ -1832,6 +1835,8 @@ aos - agentic-os control
   aos usage                  local usage history for Claude Code and Codex
   aos test                   parse/ASCII checks + the Pester suite under PowerShell 5.1 and 7
   aos new <name>             new project in Desktop\1-Projects: AGENTS.md, CLAUDE.md (@AGENTS.md), .gitignore, git init
+  aos place ls [--json]      list shared places, including missing folders
+  aos place add <folder> [--name <n>] [--kind repo|vault|folder]   add a place, then sync
   aos refs                   clone/pull the reference repos in refs/repos.json (into ~\.aos\refs)
   aos secret set|get|list|remove <name>    keys encrypted to your Windows login (~\.aos\secrets)
   aos remote [folder]        let the Claude phone app start sessions here (default: Desktop); keep it open
@@ -1858,6 +1863,7 @@ function aos {
         'usage'   { Show-AosUsage }
         'test'    { Invoke-AosTest }
         'new'     { New-AosProject -Path $a1 }
+        'place'   { Invoke-AosPlace -Arguments @($Rest) -DryRun:$DryRun }
         'refs'    { Sync-AosRefs -DryRun:$DryRun }
         'secret'  { Invoke-AosSecret -Action $a1 -Name $a2 }
         'remote'  { Start-AosRemote -Dir $a1 -DryRun:$DryRun }
@@ -1930,4 +1936,98 @@ function Sync-AosPlaces([switch]$DryRun) {
     $r = Read-AosJsonOrWarn $path
     if (-not $r.Ok) { return }
     Set-AosJsonFile -Path $path -Old $r.Value -New ([ordered]@{ places = @($places) }) -Label 'shared Places registry' -DryRun:$DryRun
+}
+
+function Get-AosPlaceKind([string]$FullPath) {
+    if (Test-Path -LiteralPath (Join-Path $FullPath '.git')) { return 'repo' }
+    if (Test-Path -LiteralPath (Join-Path $FullPath '.obsidian')) { return 'vault' }
+    return 'folder'
+}
+
+function ConvertTo-AosPlacePath([string]$FullPath) {
+    # Longest root first ({{projects}} lives inside {{desktop}}); $null outside the home folder.
+    $full = [System.IO.Path]::GetFullPath($FullPath).TrimEnd('\')
+    foreach ($pair in @(@('{{projects}}', (Get-AosProjectsDir)), @('{{desktop}}', (Get-AosDesktopDir)), @('{{home}}', $HOME))) {
+        $root = ([string]$pair[1]).TrimEnd('\')
+        if ($full.StartsWith($root + '\', [System.StringComparison]::OrdinalIgnoreCase)) { return $pair[0] + $full.Substring($root.Length) }
+    }
+    return $null
+}
+
+function Add-AosPlace([string]$Path, [string]$Name, [string]$Kind, [switch]$DryRun) {
+    # Appends to config/places.json (the user commits it), then syncs. $true when added.
+    if (-not $Path) { Write-AosWarn 'usage: aos place add <folder> [--name <n>] [--kind repo|vault|folder]'; return $false }
+    try { $full = [System.IO.Path]::GetFullPath($Path) } catch { Write-AosWarn 'invalid folder path'; return $false }
+    if (-not (Test-Path -LiteralPath $full -PathType Container)) { Write-AosWarn "no folder at $full"; return $false }
+    if (-not $Kind) { $Kind = Get-AosPlaceKind $full }
+    if (@('repo', 'vault', 'folder') -notcontains $Kind) { Write-AosWarn "kind must be repo, vault or folder (the inbox is set in config/places.json)"; return $false }
+    if (-not $Name) { $Name = Split-Path -Leaf $full }
+    $stored = ConvertTo-AosPlacePath $full
+    if (-not $stored) { Write-AosWarn "$full is outside your home folder: not added (the repo holds no absolute paths)"; return $false }
+    $cfgPath = Get-AosPlacesConfigPath
+    $r = Read-AosJsonOrWarn $cfgPath
+    if (-not $r.Ok) { return $false }
+    $cfg = $r.Value
+    if (-not $cfg) { $cfg = [ordered]@{ places = @() } }
+    if ($cfg -isnot [Collections.IDictionary] -or ($cfg['places'] -is [string])) { Write-AosWarn 'invalid places configuration; left unchanged'; return $false }
+    $list = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($p in $cfg['places']) {
+        if (-not ($p -is [System.Collections.IDictionary])) { Write-AosWarn 'invalid place entry; configuration left unchanged'; return $false }
+        if ([string]$p['name'] -ieq $Name) { Write-AosWarn "a place named '$Name' already exists"; return $false }
+        $resolved = Resolve-AosPlacePath ([string]$p['path'])
+        if ($resolved -and $resolved.TrimEnd('\') -ieq $full.TrimEnd('\')) { Write-AosWarn "$full is already the place '$($p['name'])'"; return $false }
+        $list.Add($p)
+    }
+    $list.Add([ordered]@{ name = $Name; kind = $Kind; path = $stored })
+    $cfg['places'] = $list.ToArray()
+    if ($DryRun) { Write-AosDry "would add place '$Name' ($Kind, $stored)"; return $true }
+    if (Test-Path -LiteralPath $cfgPath) { $null = Backup-AosFile $cfgPath }
+    Write-AosText -Path $cfgPath -Text ((ConvertTo-Json -InputObject $cfg -Depth 6) + "`n")
+    Write-AosOk "added place '$Name' ($Kind, $stored) to config/places.json: commit it"
+    Sync-AosPlaces
+    return $true
+}
+
+function Show-AosPlaces([switch]$Json) {
+    $places = Get-AosPlaces
+    if ($null -eq $places) { Write-AosWarn 'no config/places.json'; return }
+    if ($Json) { return (ConvertTo-Json -InputObject ([ordered]@{ places = @($places) }) -Depth 5) }
+    foreach ($p in $places) {
+        $line = '{0,-16} {1,-7} {2}' -f $p['name'], $p['kind'], $p['path']
+        if ($p['exists']) { Write-AosOk $line } else { Write-AosWarn "$line  (missing)" }
+    }
+}
+
+function Show-AosPlacesStatus {
+    $places = Get-AosPlaces
+    if ($null -eq $places) { Write-AosInfo 'no config/places.json'; return }
+    $known = $null
+    if (Test-AosCommand paseo) { $known = Get-AosPaseoProjectPaths }
+    foreach ($p in $places) {
+        if (-not $p['exists']) { Write-AosWarn "$($p['name']) missing: $($p['path'])"; continue }
+        $inPaseo = ''
+        if ($null -ne $known) {
+            if ($known -contains ([string]$p['path']).TrimEnd('\').ToLowerInvariant()) { $inPaseo = ', in Paseo' } else { $inPaseo = ', not in Paseo (aos sync)' }
+        }
+        Write-AosOk "$($p['name']) ($($p['kind'])$inPaseo)"
+    }
+}
+
+function Invoke-AosPlace([string[]]$Arguments, [switch]$DryRun) {
+    $args2 = @($Arguments | Where-Object { $null -ne $_ })
+    if ($args2.Count -eq 0) { Write-AosWarn 'usage: aos place ls [--json] | aos place add <folder> [--name <n>] [--kind <k>]'; return }
+    $opts = @{}; $pos = New-Object 'System.Collections.Generic.List[string]'
+    for ($i = 1; $i -lt $args2.Count; $i++) {
+        if ($args2[$i] -eq '--json') { $opts['json'] = $true }
+        elseif ($args2[$i] -in @('--name', '--kind') -and $i + 1 -lt $args2.Count) { $opts[$args2[$i].Substring(2)] = $args2[$i + 1]; $i++ }
+        elseif ($args2[$i].StartsWith('--')) { Write-AosWarn "unknown or incomplete Places option: $($args2[$i])"; return }
+        else { $pos.Add($args2[$i]) }
+    }
+    if (($args2[0] -eq 'ls' -and ($pos.Count -gt 0 -or $opts.ContainsKey('name') -or $opts.ContainsKey('kind'))) -or
+        ($args2[0] -eq 'add' -and ($pos.Count -ne 1 -or $opts.ContainsKey('json')))) { Write-AosWarn 'invalid Places arguments; use aos place ls or aos place add <folder>'; return }
+    switch ($args2[0]) {
+        'ls'  { Show-AosPlaces -Json:([bool]$opts['json']) }
+        'add' { $null = Add-AosPlace -Path ($pos | Select-Object -First 1) -Name $opts['name'] -Kind $opts['kind'] -DryRun:$DryRun }
+        default { Write-AosWarn "unknown: aos place $($args2[0])" }
+    }
 }

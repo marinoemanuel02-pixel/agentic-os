@@ -655,6 +655,7 @@ Describe 'Test-AosCcBridge' {
 }
 
 Describe 'New-AosProject' {
+    BeforeEach { Mock Add-AosPlace -ModuleName aos { $true } }
     It 'creates all four template files, maps underscore names and substitutes the folder name' {
         $project = Join-Path $caseRoot 'project with spaces'
         New-AosProject -Path $project
@@ -2575,6 +2576,114 @@ Describe 'Places persistence' {
         InModuleScope aos { Sync-AosPlaces -DryRun }
         (Test-Path (Join-Path $caseRoot 'Inbox')) | Should -BeFalse
         (Test-Path (Join-Path $caseRoot 'places.json')) | Should -BeFalse
+    }
+}
+
+Describe 'Places commands' {
+    BeforeEach {
+        $desk = Join-Path $caseRoot 'Desktop'
+        $cfg = Join-Path $caseRoot 'places.json'
+        Write-TestFile $cfg '{ "places": [ { "name": "in", "kind": "inbox", "path": "{{desktop}}\\Inbox" } ] }'
+        foreach ($d in 'repo1\.git', 'vault1\.obsidian', 'plain') { New-Item -ItemType Directory -Force -Path (Join-Path $desk $d) | Out-Null }
+        Mock Get-AosDesktopDir -ModuleName aos { $desk }
+        Mock Get-AosProjectsDir -ModuleName aos { Join-Path $desk '1-Projects' }
+        Mock Get-AosPlacesConfigPath -ModuleName aos { $cfg }
+        Mock Sync-AosPlaces -ModuleName aos { }
+        foreach ($f in 'Write-AosOk', 'Write-AosWarn', 'Write-AosInfo') { Mock $f -ModuleName aos { } }
+    }
+
+    It 'detects <Kind> for <Dir>' -TestCases @(
+        @{ Dir = 'repo1'; Kind = 'repo' }, @{ Dir = 'vault1'; Kind = 'vault' }, @{ Dir = 'plain'; Kind = 'folder' }
+    ) {
+        param($Dir, $Kind)
+        InModuleScope aos -Parameters @{ P = (Join-Path $desk $Dir) } { param($P) Get-AosPlaceKind $P } | Should -Be $Kind
+    }
+
+    It 'stores a placeholder path: <Case>' -TestCases @(
+        @{ Case = 'projects before desktop'; Rel = '1-Projects\x'; Want = '{{projects}}\x' },
+        @{ Case = 'desktop'; Rel = 'plain'; Want = '{{desktop}}\plain' }
+    ) {
+        param($Case, $Rel, $Want)
+        InModuleScope aos -Parameters @{ P = (Join-Path $desk $Rel) } { param($P) ConvertTo-AosPlacePath $P } | Should -Be $Want
+    }
+
+    It 'adds a folder with its detected kind and syncs' {
+        InModuleScope aos -Parameters @{ P = (Join-Path $desk 'vault1') } { param($P) Add-AosPlace -Path $P } | Should -BeTrue
+        $saved = Get-Content $cfg -Raw | ConvertFrom-Json
+        $new = $saved.places | Where-Object name -eq 'vault1'
+        $new.kind | Should -Be 'vault'
+        $new.path | Should -Be '{{desktop}}\vault1'
+        Should -Invoke Sync-AosPlaces -ModuleName aos -Times 1 -Exactly
+    }
+
+    It 'refuses <Case>' -TestCases @(
+        @{ Case = 'a duplicate name'; Rel = 'plain'; Name = 'in'; Kind = '' },
+        @{ Case = 'a second inbox'; Rel = 'plain'; Name = ''; Kind = 'inbox' },
+        @{ Case = 'a missing folder'; Rel = 'nope'; Name = ''; Kind = '' },
+        @{ Case = 'an unknown kind'; Rel = 'plain'; Name = ''; Kind = 'weird' }
+    ) {
+        param($Case, $Rel, $Name, $Kind)
+        $before = Get-Content $cfg -Raw
+        InModuleScope aos -Parameters @{ P = (Join-Path $desk $Rel); N = $Name; K = $Kind } { param($P, $N, $K) Add-AosPlace -Path $P -Name $N -Kind $K } | Should -BeFalse
+        Get-Content $cfg -Raw | Should -BeExactly $before
+        Should -Invoke Sync-AosPlaces -ModuleName aos -Times 0 -Exactly
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1
+    }
+
+    It 'refuses a folder outside the home folder' {
+        Mock ConvertTo-AosPlacePath -ModuleName aos { $null }
+        InModuleScope aos -Parameters @{ P = (Join-Path $desk 'plain') } { param($P) Add-AosPlace -Path $P } | Should -BeFalse
+    }
+
+    It 'parses aos place add <folder> --name <n> --kind <k>' {
+        Mock Add-AosPlace -ModuleName aos { $true }
+        InModuleScope aos { Invoke-AosPlace -Arguments @('add', 'C:\x', '--name', 'n1', '--kind', 'folder') }
+        Should -Invoke Add-AosPlace -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Path -eq 'C:\x' -and $Name -eq 'n1' -and $Kind -eq 'folder' }
+    }
+    It 'rejects an unknown option without adding a place' {
+        Mock Add-AosPlace -ModuleName aos { $true }
+        InModuleScope aos { Invoke-AosPlace -Arguments @('add', 'x', '--typo') }
+        Should -Invoke Add-AosPlace -ModuleName aos -Times 0 -Exactly
+    }
+    It 'leaves malformed configuration byte-identical' {
+        Write-TestFile $cfg '{"places":["invalid"]}'
+        $before = Get-Content $cfg -Raw
+        InModuleScope aos -Parameters @{ P=(Join-Path $desk 'plain') } { param($P) Add-AosPlace -Path $P } | Should -BeFalse
+        Get-Content $cfg -Raw | Should -BeExactly $before
+    }
+    It 'previews adding a place without writing configuration or syncing' {
+        $before = Get-Content $cfg -Raw
+        InModuleScope aos -Parameters @{ P=(Join-Path $desk 'plain') } { param($P) Add-AosPlace -Path $P -DryRun } | Should -BeTrue
+        Get-Content $cfg -Raw | Should -BeExactly $before
+        Should -Invoke Sync-AosPlaces -ModuleName aos -Times 0 -Exactly
+    }
+    It 'refuses a duplicate path even under another name' {
+        $folder = Join-Path $desk 'plain'
+        InModuleScope aos -Parameters @{ P=$folder } { param($P) Add-AosPlace -Path $P } | Should -BeTrue
+        $before = Get-Content $cfg -Raw
+        InModuleScope aos -Parameters @{ P=$folder } { param($P) Add-AosPlace -Path $P -Name 'second' } | Should -BeFalse
+        Get-Content $cfg -Raw | Should -BeExactly $before
+    }
+
+    It 'prints JSON for aos place ls --json' {
+        $out = InModuleScope aos { Invoke-AosPlace -Arguments @('ls', '--json') }
+        (($out -join "`n") | ConvertFrom-Json).places[0].name | Should -Be 'in'
+    }
+
+    It 'adds a new project as a repo place' {
+        Mock Add-AosPlace -ModuleName aos { $true }
+        Mock Test-AosCommand -ModuleName aos { $false } -ParameterFilter { $Name -eq 'git' }
+        Mock Update-AosPath -ModuleName aos { }
+        Mock Write-AosStep -ModuleName aos { }
+        InModuleScope aos -Parameters @{ P = (Join-Path $desk '1-Projects\newproj') } { param($P) New-AosProject -Path $P }
+        Should -Invoke Add-AosPlace -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Kind -eq 'repo' -and $Path -like '*newproj' }
+    }
+
+    It 'shows each place and whether Paseo knows it in aos status' {
+        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'paseo' }
+        Mock Get-AosPaseoProjectPaths -ModuleName aos { ,@() }
+        InModuleScope aos { Show-AosPlacesStatus }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'in' -and $Text -match 'missing' }
     }
 }
 
