@@ -3,6 +3,15 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-09-30 - Make the local filesystem boundary explicit
+
+- The coordinator tells local Pi that its project directory is a starting location, not a repository
+  sandbox. Native tools run on the PC under the Paseo daemon's Windows account and may target any path
+  that account can access; Windows ACLs and phone approval remain the boundaries.
+- The coordinator repeats this verified scope on every dispatch, including turns sent to an existing
+  persisted child whose original system prompt may be stale. The model must verify paths outside the
+  project before changing them.
+
 ## 2026-09-30 - A bounded web search tool for Pi
 
 - The local Pi agent now receives a small `web_search` extension through `aos sync`. It queries a

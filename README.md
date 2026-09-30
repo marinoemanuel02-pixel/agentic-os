@@ -94,6 +94,9 @@ sends prompts and approvals.
 
 The local model in Paseo (Pi) asks before every command or file change it wants to make: the question
 shows up in the app as Allow / Deny, and nothing runs until you answer. Reading files needs no approval.
+Its project directory is only the starting location, not a repository sandbox: native tools run on the PC
+under the Paseo daemon's Windows account and can target other user-accessible paths. Windows ACLs and the
+phone approval gate remain the boundaries, so the model must verify paths outside the project before changing them.
 The synced Pi extension also provides a small permission-gated `web_search` tool that returns public
 search results with source URLs; it is a search operation, not a browser or desktop-control bridge.
 It is a 4B model with a 16K context: good for small, well-defined tasks; it can misreport what happened,
