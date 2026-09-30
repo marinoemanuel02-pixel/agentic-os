@@ -23,6 +23,7 @@ const gated: Array<[string, Record<string, unknown>, string]> = [
   ["write", { path: "notes.txt", content: "x" }, "notes.txt"],
   ["edit", { path: "src/a.ts", oldText: "a", newText: "b" }, "src/a.ts"],
   ["some_extension_tool", { anything: 1 }, "some_extension_tool"],
+  ["web_search", { query: "Ollama documentation" }, "Ollama documentation"],
 ];
 
 for (const [tool, input, shown] of gated) {
