@@ -1316,6 +1316,19 @@ function Sync-AosPi([switch]$DryRun) {
         Write-AosOk "installed $dest"
     }
 
+    $src = Join-Path $script:Root 'config\pi\extensions\aos-file-tools.ts'
+    $dest = Join-Path $dir 'extensions\aos-file-tools.ts'
+    $want = [System.IO.File]::ReadAllText($src)
+    $have = $null
+    if (Test-Path -LiteralPath $dest) { $have = [System.IO.File]::ReadAllText($dest) }
+    if ($have -ceq $want) { Write-AosOk 'Pi file tools up to date' }
+    elseif ($DryRun) { Write-AosDry "would install $dest" }
+    else {
+        if ($null -ne $have) { $null = Backup-AosFile $dest }
+        Write-AosText -Path $dest -Text $want
+        Write-AosOk "installed $dest"
+    }
+
     $src = Join-Path $script:Root 'config\pi\extensions\aos-web-search.ts'
     $dest = Join-Path $dir 'extensions\aos-web-search.ts'
     $want = [System.IO.File]::ReadAllText($src)

@@ -2417,7 +2417,7 @@ Describe 'Pi on the local model' {
     It 'writes nothing in DryRun' {
         InModuleScope aos { Sync-AosPi -DryRun }
         Test-Path -LiteralPath $piDir | Should -BeFalse
-        Should -Invoke Write-AosDry -ModuleName aos -Times 4 -Exactly
+        Should -Invoke Write-AosDry -ModuleName aos -Times 5 -Exactly
     }
 
     It 'leaves a file it cannot parse alone and warns' {
@@ -2438,6 +2438,17 @@ Describe 'Pi on the local model' {
     It 'the web search extension returns sources using a controlled fixture (node --test)' {
         $ErrorActionPreference = 'Continue'
         $test = Join-Path $PSScriptRoot '..\config\pi\extensions\aos-web-search.test.ts'
+        $out = & node --no-warnings --experimental-strip-types --test $test 2>&1
+        $LASTEXITCODE | Should -Be 0 -Because (($out | Out-String).Trim())
+    }
+
+    It 'installs bounded file tools and verifies retrieval fixtures' {
+        InModuleScope aos { Sync-AosPi }
+        $src = Join-Path $PSScriptRoot '..\config\pi\extensions\aos-file-tools.ts'
+        $dest = Join-Path $piDir 'extensions\aos-file-tools.ts'
+        [System.IO.File]::ReadAllText($dest) | Should -BeExactly ([System.IO.File]::ReadAllText($src))
+        $ErrorActionPreference = 'Continue'
+        $test = Join-Path $PSScriptRoot '..\config\pi\extensions\aos-file-tools.test.ts'
         $out = & node --no-warnings --experimental-strip-types --test $test 2>&1
         $LASTEXITCODE | Should -Be 0 -Because (($out | Out-String).Trim())
     }
