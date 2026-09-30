@@ -1,0 +1,11 @@
+{
+  "_readme": "Shared places for all agents and phone projects. Paths resolve at runtime; missing places are never recreated except the Inbox.",
+  "places": [
+    { "name": "agentic-os", "kind": "repo", "path": "{{desktop}}\\agentic-os" },
+    { "name": "nar-tools", "kind": "repo", "path": "{{projects}}\\nar-tools" },
+    { "name": "tala", "kind": "vault", "path": "{{desktop}}\\tala" },
+    { "name": "duda15", "kind": "vault", "path": "{{desktop}}\\duda15" },
+    { "name": "meta-cognizione", "kind": "folder", "path": "{{desktop}}\\meta-cognizione" },
+    { "name": "inbox", "kind": "inbox", "path": "{{desktop}}\\Inbox" }
+  ]
+}

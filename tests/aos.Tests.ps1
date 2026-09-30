@@ -2162,6 +2162,28 @@ Describe 'Logon task state' {
 }
 
 Describe 'Pi directory resolution' {
+    It 'resolves place roots and skips unknown placeholders' {
+        Mock Get-AosDesktopDir -ModuleName aos { $caseRoot }
+        InModuleScope aos -Parameters @{ Root = $caseRoot } {
+            param($Root)
+            Resolve-AosPlacePath '{{desktop}}\project' | Should -Be (Join-Path $Root 'project')
+            Resolve-AosPlacePath '{{unknown}}\project' | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'validates places, keeps missing folders absent and warns on duplicate names' {
+        $cfg = Join-Path $caseRoot 'places.json'
+        Mock Get-AosPlacesConfigPath -ModuleName aos { $cfg }
+        Mock Get-AosDesktopDir -ModuleName aos { $caseRoot }
+        Mock Write-AosWarn -ModuleName aos { }
+        Write-TestFile $cfg '{"places":[{"name":"repo","kind":"repo","path":"{{desktop}}\\missing"},{"name":"repo","kind":"folder","path":"{{desktop}}\\other"},{"name":"inbox","kind":"inbox","path":"{{desktop}}\\Inbox"}]}'
+        $places = @(InModuleScope aos { Get-AosPlaces })
+        $places.Count | Should -Be 2
+        $places[0].exists | Should -BeFalse
+        Test-Path (Join-Path $caseRoot 'missing') | Should -BeFalse
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -Exactly
+    }
+
     BeforeEach { $savedPiDir = $env:PI_CODING_AGENT_DIR }
     AfterEach { $env:PI_CODING_AGENT_DIR = $savedPiDir }
 

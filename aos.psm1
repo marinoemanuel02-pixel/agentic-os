@@ -804,6 +804,37 @@ function Get-AosProjectsDir {
 
 function Get-AosNarVenv { return (Join-Path (Get-AosStateDir) 'venvs\nar-tools') }
 
+function Get-AosDesktopDir { return [Environment]::GetFolderPath('Desktop') }
+function Get-AosPlacesConfigPath { return (Join-Path $script:Root 'config\places.json') }
+
+function Resolve-AosPlacePath([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
+    $out = $Path.Replace('{{desktop}}', (Get-AosDesktopDir)).Replace('{{projects}}', (Get-AosProjectsDir)).Replace('{{home}}', $HOME)
+    if ($out -match '\{\{[^}]*\}\}' -or -not [IO.Path]::IsPathRooted($out)) { return $null }
+    try { return [IO.Path]::GetFullPath($out) } catch { return $null }
+}
+
+function Get-AosPlaces {
+    $cfgPath = Get-AosPlacesConfigPath
+    if (-not (Test-Path -LiteralPath $cfgPath)) { return $null }
+    $r = Read-AosJsonOrWarn $cfgPath
+    if (-not $r.Ok) { return $null }
+    $seen = @{}
+    $inboxes = 0
+    foreach ($p in $r.Value['places']) {
+        if (-not ($p -is [Collections.IDictionary])) { Write-AosWarn 'invalid place entry (skipped)'; continue }
+        $name = [string]$p['name']; $kind = [string]$p['kind']
+        $path = Resolve-AosPlacePath ([string]$p['path'])
+        if ([string]::IsNullOrWhiteSpace($name) -or $seen.ContainsKey($name) -or
+            @('repo', 'vault', 'folder', 'inbox') -notcontains $kind -or -not $path -or
+            ($kind -eq 'inbox' -and $inboxes -gt 0)) { Write-AosWarn "invalid or duplicate place '$name' (skipped)"; continue }
+        $seen[$name] = $true
+        if ($kind -eq 'inbox') { $inboxes++ }
+        [ordered]@{ name = $name; kind = $kind; path = $path; exists = (Test-Path -LiteralPath $path -PathType Container) }
+    }
+    if ($inboxes -eq 0) { Write-AosWarn 'places: no inbox configured' }
+}
+
 function Get-AosNarHome {
     if ($env:NAR_HOME) { return $env:NAR_HOME }
     return (Join-Path (Get-AosStateDir) 'nar')
