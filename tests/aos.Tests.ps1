@@ -2338,6 +2338,7 @@ Describe 'Pi on the local model' {
         $modelsPath = Join-Path $piDir 'models.json'
         $settingsPath = Join-Path $piDir 'settings.json'
         $gatePath = Join-Path $piDir 'extensions\aos-permission-gate.ts'
+        $searchPath = Join-Path $piDir 'extensions\aos-web-search.ts'
         Mock Get-AosPiDir -ModuleName aos { $piDir }
         Mock Get-AosLocalConfig -ModuleName aos {
             [ordered]@{ default = 'qwen3.5:4b'; agent_model = 'aos-agent'; agent_num_ctx = 16384; ollama_url = 'http://127.0.0.1:11434/' }
@@ -2398,6 +2399,12 @@ Describe 'Pi on the local model' {
         [System.IO.File]::ReadAllText($gatePath) | Should -BeExactly $want
     }
 
+    It 'installs the web search extension from the repo' {
+        InModuleScope aos { Sync-AosPi }
+        $want = [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\config\pi\extensions\aos-web-search.ts'))
+        [System.IO.File]::ReadAllText($searchPath) | Should -BeExactly $want
+    }
+
     It 'changes nothing on a second run' {
         InModuleScope aos { Sync-AosPi }
         $before = Get-TestTreeState $piDir
@@ -2410,7 +2417,7 @@ Describe 'Pi on the local model' {
     It 'writes nothing in DryRun' {
         InModuleScope aos { Sync-AosPi -DryRun }
         Test-Path -LiteralPath $piDir | Should -BeFalse
-        Should -Invoke Write-AosDry -ModuleName aos -Times 3 -Exactly
+        Should -Invoke Write-AosDry -ModuleName aos -Times 4 -Exactly
     }
 
     It 'leaves a file it cannot parse alone and warns' {
@@ -2424,6 +2431,13 @@ Describe 'Pi on the local model' {
         # Enforcement, not just installation: Pi runs a tool only when every tool_call handler allows it.
         $ErrorActionPreference = 'Continue'
         $test = Join-Path $PSScriptRoot '..\config\pi\extensions\aos-permission-gate.test.ts'
+        $out = & node --no-warnings --experimental-strip-types --test $test 2>&1
+        $LASTEXITCODE | Should -Be 0 -Because (($out | Out-String).Trim())
+    }
+
+    It 'the web search extension returns sources using a controlled fixture (node --test)' {
+        $ErrorActionPreference = 'Continue'
+        $test = Join-Path $PSScriptRoot '..\config\pi\extensions\aos-web-search.test.ts'
         $out = & node --no-warnings --experimental-strip-types --test $test 2>&1
         $LASTEXITCODE | Should -Be 0 -Because (($out | Out-String).Trim())
     }

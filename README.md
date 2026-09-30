@@ -94,6 +94,8 @@ sends prompts and approvals.
 
 The local model in Paseo (Pi) asks before every command or file change it wants to make: the question
 shows up in the app as Allow / Deny, and nothing runs until you answer. Reading files needs no approval.
+The synced Pi extension also provides a small permission-gated `web_search` tool that returns public
+search results with source URLs; it is a search operation, not a browser or desktop-control bridge.
 It is a 4B model with a 16K context: good for small, well-defined tasks; it can misreport what happened,
 so check its claims. Voice input in Paseo is off: turning it on downloads about 1 GB of speech models
 (`paseo daemon config set features.dictation.enabled true`; for Italian also set

@@ -3,6 +3,16 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-09-30 - A bounded web search tool for Pi
+
+- The local Pi agent now receives a small `web_search` extension through `aos sync`. It queries a
+  public search endpoint and returns a bounded set of titles, snippets and source URLs.
+- The existing permission gate asks before each search because network access is an external
+  operation. The extension does not expose arbitrary page navigation, browser control or desktop
+  input. Those remain separate Paseo capabilities that must be proven in their actual runtime.
+- The coordinator discovers the extension at runtime before describing local tools to a native child,
+  so it does not claim web search when the extension is absent.
+
 ## 2026-09-29 - Phone access through Paseo; Pi as the local agent
 
 - **Paseo for the phone** (spec step 5; replaces "not installed yet" in the README): its daemon runs
