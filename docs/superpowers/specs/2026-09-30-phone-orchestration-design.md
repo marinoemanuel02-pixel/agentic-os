@@ -1,6 +1,6 @@
 # Phone orchestration: one conversation, three providers
 
-Date: 2026-09-30. Status: draft for the user's review; implementation is not approved by this document.
+Date: 2026-09-30. Status: user approved the design and implementation in this session. The phone coordinator increment is installed; subsequent tool, Places and computer-use systems remain work to do.
 
 ## User intent
 
