@@ -17,6 +17,7 @@ vendor-maintained bridges. The reasons for each choice are in [docs/decisions.md
 | **bridges** | Claude calls Codex (`/codex:*`), Codex calls Claude (`$cc:*`), superpowers in both | plugins |
 | **refs** | shallow clones of the repos worth reading | `refs/repos.json` -> `~\.aos\refs` |
 | **local** | Ollama and the local model; the `nar` tools (calibrated single-pass scoring); Pi, the agent harness on the local model | `config/local.json`, `Desktop\1-Projects\nar-tools`; models in `~\.ollama` |
+| **media** | free media tools the agents drive from the command line: ffmpeg, ImageMagick, pandoc, yt-dlp, DuckDB, Inkscape, Blender, OBS, Audacity, Kdenlive, GIMP, Krita, LMMS (about 1.3 GB). Opt-in: `aos install media`, never part of `all`. Not in it: Playwright browsers, Whisper models, ComfyUI (large, your choice) | `packages.json` (winget); `agents-home/skills/media-tools` |
 | **phone** | Paseo: its daemon runs Claude Code, Codex and Pi on this PC for the Paseo Android app | `packages.json` (npm); state in `~\.paseo` |
 | **aos** | `aos status / sync / update / usage / new / secret / remote` | `aos.psm1` |
 

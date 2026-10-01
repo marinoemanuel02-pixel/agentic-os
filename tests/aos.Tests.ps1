@@ -2514,6 +2514,67 @@ Describe 'Pi on the local model' {
     }
 }
 
+Describe 'Media layer' {
+    BeforeEach {
+        Mock Install-AosWingetPackage -ModuleName aos { }
+        Mock Update-AosPath -ModuleName aos { }
+    }
+
+    It 'is an opt-in install layer after local' {
+        InModuleScope aos {
+            $script:Layers | Should -Contain 'media'
+            [array]::IndexOf($script:Layers, 'media') | Should -BeGreaterThan ([array]::IndexOf($script:Layers, 'local'))
+        }
+        (Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\bootstrap.ps1') -Raw) | Should -Match "ValidateSet\([^)]*'media'"
+    }
+
+    It 'installs every media package, passing DryRun and the skip-dependencies flag through' {
+        Mock Get-AosPackages -ModuleName aos {
+            @{ media = @(
+                @{ id = 'Gyan.FFmpeg'; why = 't' },
+                @{ id = 'yt-dlp.yt-dlp'; why = 't'; skipDependencies = $true }
+            ) }
+        }
+        InModuleScope aos { Install-AosMedia -DryRun }
+        Should -Invoke Install-AosWingetPackage -ModuleName aos -Times 2 -Exactly -ParameterFilter { $DryRun }
+        Should -Invoke Install-AosWingetPackage -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Id -eq 'yt-dlp.yt-dlp' -and $SkipDependencies }
+        Should -Invoke Install-AosWingetPackage -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Id -eq 'Gyan.FFmpeg' -and -not $SkipDependencies }
+    }
+
+    It 'is left out of aos install all, and installed when named' {
+        foreach ($f in 'Install-AosBase', 'Install-AosEngines', 'Sync-AosBrain', 'Install-AosBridges', 'Sync-AosRefs', 'Install-AosLocal',
+                       'Install-AosPhone', 'Install-AosMedia', 'Show-AosNextSteps') { Mock $f -ModuleName aos { } }
+        InModuleScope aos { Install-AosLayer -Layer all -DryRun }
+        Should -Invoke Install-AosMedia -ModuleName aos -Times 0 -Exactly
+        Should -Invoke Install-AosLocal -ModuleName aos -Times 1 -Exactly
+        InModuleScope aos { Install-AosLayer -Layer media -DryRun }
+        Should -Invoke Install-AosMedia -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
+        Should -Invoke Install-AosLocal -ModuleName aos -Times 1 -Exactly
+    }
+
+    It 'lists each package once, with an id and a reason, none already in another layer' {
+        $pkgs = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\packages.json') -Raw | ConvertFrom-Json
+        $ids = @($pkgs.media | ForEach-Object { $_.id })
+        $ids.Count | Should -BeGreaterThan 0
+        ($ids | Select-Object -Unique).Count | Should -Be $ids.Count
+        foreach ($p in $pkgs.media) { $p.why | Should -Not -BeNullOrEmpty -Because $p.id }
+        $others = @($pkgs.base) + @($pkgs.local) | ForEach-Object { $_.id }
+        foreach ($id in $ids) { $others | Should -Not -Contain $id }
+        $ids | Should -Contain 'Gyan.FFmpeg'
+    }
+}
+
+Describe 'Winget skip-dependencies' {
+    It 'previews winget with --skip-dependencies when asked, and without it otherwise' {
+        Mock Test-AosWinget -ModuleName aos { $false }
+        Mock Write-AosDry -ModuleName aos { }
+        InModuleScope aos { Install-AosWingetPackage -Id 'x.y' -Why 't' -DryRun -SkipDependencies }
+        Should -Invoke Write-AosDry -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Text -match 'winget install --id x\.y -e .*--skip-dependencies' }
+        InModuleScope aos { Install-AosWingetPackage -Id 'x.z' -Why 't' -DryRun }
+        Should -Invoke Write-AosDry -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Text -match 'x\.z' -and $Text -notmatch 'skip-dependencies' }
+    }
+}
+
 Describe 'Places registration' {
     BeforeEach {
         Mock Get-AosStateDir -ModuleName aos { $caseRoot }

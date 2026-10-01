@@ -3,6 +3,23 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-01 - Media layer: a free stack, command lines before MCP servers
+
+- The user wants a free stack: any paid dependency is out (DaVinci Resolve Studio, Figma, Adobe, paid image
+  APIs, Ableton/REAPER) except the Claude and Codex subscriptions. Replacements: Kdenlive (projects are
+  MLT text, render with `melt`), Blender, Remotion (free for individuals and up to 3 employees, a licence
+  condition to revisit), Penpot, GIMP/Krita/Inkscape, LMMS/Audacity, local ComfyUI.
+- Ways to drive a program, best first: a command line, a scripting API, an MCP server, computer use. The
+  first two cost no context until used and work the same from Claude and Codex, so the layer installs
+  programs and one shared skill (`media-tools`) documents the commands; no new MCP server was added.
+- `media` is an opt-in layer: `aos install media` installs it, `aos install` / `all` does not (about
+  1.3 GB). `yt-dlp` installs with `--skip-dependencies` because winget would add a second ffmpeg; Deno,
+  its other dependency, is listed on its own.
+- Left out on purpose: Playwright browsers, Whisper models and ComfyUI (measured, large, chosen one by
+  one). Resolve's MCP servers need the paid Studio edition, so none is installed.
+- FFmpeg lives here, not in `local`, for now. The video-process plan wanted it in `local`; whoever builds
+  video-kit moves it and changes the test that keeps the two lists disjoint.
+
 ## 2026-10-01 - Coordination: aos-native claims, guard hooks and delegation receipts
 
 - Research by both vendors in parallel (`docs/superpowers/research/2026-10-01-coordination-*.md`).

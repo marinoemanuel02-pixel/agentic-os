@@ -25,6 +25,22 @@
   "local": [
     { "id": "Ollama.Ollama",              "why": "local model runtime (CUDA on the GTX 1660 Ti); models live in ~\\.ollama" }
   ],
+  "media": [
+    { "id": "Gyan.FFmpeg",                "why": "ffmpeg/ffprobe full build: cut, convert, loudness, subtitles (about 250 MB)" },
+    { "id": "ImageMagick.ImageMagick",    "why": "magick: resize, convert and batch images (about 25 MB)" },
+    { "id": "JohnMacFarlane.Pandoc",      "why": "pandoc: markdown, docx, html, epub conversion (about 40 MB)" },
+    { "id": "yt-dlp.yt-dlp",              "skipDependencies": true, "why": "yt-dlp: fetch reference media; --skip-dependencies avoids a second ffmpeg (about 17 MB)" },
+    { "id": "DenoLand.Deno",              "why": "deno: the JS runtime yt-dlp needs for some YouTube sites (about 95 MB)" },
+    { "id": "DuckDB.cli",                 "why": "duckdb: SQL over CSV, JSON and Parquet with no server (about 12 MB)" },
+    { "id": "Inkscape.Inkscape",          "why": "inkscape: vector graphics with a full command line (about 165 MB)" },
+    { "id": "BlenderFoundation.Blender",  "why": "blender: 3D and motion, scriptable with blender -b --python (about 350 MB)" },
+    { "id": "OBSProject.OBSStudio",       "why": "obs: scripted screen recording over its WebSocket (about 150 MB)" },
+    { "id": "Audacity.Audacity",          "why": "audacity: quick audio edits (about 50 MB)" },
+    { "id": "KDE.Kdenlive",               "why": "kdenlive: video editor whose projects are text and render with melt (about 135 MB)" },
+    { "id": "GIMP.GIMP.3",                "why": "gimp: raster image editor (about 180 MB)" },
+    { "id": "KDE.Krita",                  "why": "krita: digital painting (about 160 MB)" },
+    { "id": "LMMS.LMMS",                  "why": "lmms: music production, projects render from the command line (about 35 MB)" }
+  ],
   "local_npm": [
     { "name": "@earendil-works/pi-coding-agent", "bin": "pi", "why": "Pi: the agent harness on the local model, run by Paseo's pi provider (config in ~\\.pi\\agent)" }
   ],

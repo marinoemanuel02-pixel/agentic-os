@@ -7,7 +7,8 @@
 $script:Root = $PSScriptRoot
 $script:Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $script:Utf8Bom = New-Object System.Text.UTF8Encoding($true)
-$script:Layers = @('base', 'engines', 'brain', 'bridges', 'refs', 'local', 'phone')
+$script:Layers = @('base', 'engines', 'brain', 'bridges', 'refs', 'local', 'media', 'phone')
+$script:OptInLayers = @('media')   # big downloads: installed only when named, never by `aos install` / `all`
 
 # Windows PowerShell 5.1 serializes some arrays as {"value":[...],"Count":n} unless this is removed.
 if ($PSVersionTable.PSVersion.Major -lt 6) { Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue }
@@ -280,7 +281,7 @@ function Test-AosInstalledAsMsix([string]$Id) {
     try { return [bool](Get-AppxPackage -Name $Id -ErrorAction Stop) } catch { return $false }
 }
 
-function Install-AosWingetPackage([string]$Id, [string]$Why, [string]$InstallerType, [switch]$DryRun) {
+function Install-AosWingetPackage([string]$Id, [string]$Why, [string]$InstallerType, [switch]$SkipDependencies, [switch]$DryRun) {
     if (Test-AosWinget $Id) {
         if ((@('wix', 'msi') -contains $InstallerType) -and (Test-AosInstalledAsMsix $Id)) {
             Write-AosWarn "$Id is installed as the MSIX package but must be the $InstallerType edition. Migrate: winget uninstall --id $Id -e, then aos install base"
@@ -290,6 +291,7 @@ function Install-AosWingetPackage([string]$Id, [string]$Why, [string]$InstallerT
     }
     $extra = @()
     if ($InstallerType) { $extra = @('--installer-type', $InstallerType) }
+    if ($SkipDependencies) { $extra += '--skip-dependencies' }   # e.g. yt-dlp would pull a second ffmpeg
     if ($DryRun) { Write-AosDry "winget install --id $Id -e $($extra -join ' ')   ($Why)"; return }
     Write-AosInfo "installing $Id - $Why"
     winget install --id $Id -e @extra --silent --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Host
@@ -1090,6 +1092,17 @@ function Install-AosLocal([switch]$DryRun) {
     Sync-AosPi -DryRun:$DryRun
 }
 
+function Install-AosMedia([switch]$DryRun) {
+    # Free media tools the agents drive from the command line (the media-tools skill documents each one).
+    # Opt-in: `aos install media`. Playwright browsers, Whisper models and ComfyUI are not installed here.
+    Update-AosPath
+    Write-AosStep 'Media tools (free; command-line tools and apps, about 1.3 GB in all)'
+    foreach ($p in (Get-AosPackages)['media']) {
+        Install-AosWingetPackage -Id $p['id'] -Why $p['why'] -SkipDependencies:([bool]$p['skipDependencies']) -DryRun:$DryRun
+    }
+    Update-AosPath
+}
+
 function Install-AosPhone([switch]$DryRun) {
     # Paseo: its daemon runs the agents on this PC; the Paseo Android app pairs with it by QR code.
     Update-AosPath
@@ -1444,7 +1457,7 @@ function Show-AosNextSteps {
 
 function Install-AosLayer {
     param([string[]]$Layer = @('all'), [switch]$DryRun)
-    if ($Layer -contains 'all') { $Layer = $script:Layers }
+    if ($Layer -contains 'all') { $Layer = @($script:Layers | Where-Object { $script:OptInLayers -notcontains $_ }) }
     Update-AosPath   # a terminal opened before an install still gets the new tools
     foreach ($l in $Layer) {
         if ($script:Layers -notcontains $l) { Write-AosWarn "unknown layer '$l' (choose from: $($script:Layers -join ', '), all)"; return }
@@ -1459,6 +1472,7 @@ function Install-AosLayer {
             'bridges' { Install-AosBridges -DryRun:$DryRun }
             'refs'    { Sync-AosRefs -DryRun:$DryRun }
             'local'   { Install-AosLocal -DryRun:$DryRun }
+            'media'   { Install-AosMedia -DryRun:$DryRun }
             'phone'   { Install-AosPhone -DryRun:$DryRun }
         }
     }
@@ -1854,7 +1868,7 @@ function Show-AosHelp {
 aos - agentic-os control
 
   aos status                 what is installed, linked, logged in and in sync
-  aos install [layers]       base | engines | brain | bridges | refs | local | all   (add -DryRun to preview)
+  aos install [layers]       base | engines | brain | bridges | refs | local | media | all   (add -DryRun to preview; media is opt-in, not in all)
   aos sync                   re-apply shared AGENTS.md, skills links, settings, Codex block, MCP
   aos update                 upgrade everything (winget, Claude Code, plugins, npm tools, refs), then sync
   aos usage                  local usage history for Claude Code and Codex
