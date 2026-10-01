@@ -1,0 +1,11 @@
+# Video rules (read at every stage; retrospectives add to the end)
+
+- Never start production before the user approves the definition of good, a style frame and the animatic.  (from agi-race 2026-09-29)
+- No slideshow pacing: every shot has motion inside it and a purpose; cuts land on the beat.  (from agi-race 2026-09-29)
+- No generic generated imagery as the default: generative engines are opt-in and must pass the anti-slop gate.  (from agi-race 2026-09-29)
+- Anti-slop gate: reject generic stock look, visuals that do not carry their line, AI artifacts, style drift, motion that goes nowhere.  (from agi-race 2026-09-29)
+- The voice is part of the style lock: send a short audition of 3-4 voices with the style frame, because no agent can judge a voice by ear; never ship a voice the user has not heard.  (from agi-race-2 2026-10-01)
+- Freeze line slots in beats once picture work starts; a new voice must fit the slots, not move the cuts.  (from agi-race-2 2026-10-01)
+- Review every delegated shot on a contact sheet (first, middle, last frame) before merging its look into the film; a passing verify only proves it renders.  (from agi-race-2 2026-10-01)
+- A tool or service is tested with one real call when it is added; a connector that needs credits is a paid dependency.  (from agi-race-2 2026-10-01)
+- Research: open the page for every claim in the script; search-result summaries are leads, not sources.  (from agi-race-2 2026-10-01)

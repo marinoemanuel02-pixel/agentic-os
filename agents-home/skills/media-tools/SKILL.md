@@ -51,6 +51,33 @@ server: they cost no context until used. Quote paths (spaces, Italian names) and
   canvas, so `FontSize=22` is about 8% of a 1080p frame: too big; 11 reads well at 1080p. Inter is not installed:
   libass falls back to Arial silently. Check one extracted frame before the full render.
 
+## Code-driven motion design (Remotion + three.js), from the agi-race-2 video
+
+Read `~\.agents\video\video-rules.md` first. A working project to copy from: `Desktop\1-Projects\videos\agi-race-2`
+(`AGENTS.md` there lists its commands).
+
+- **Layout:** code in the OneDrive project; render from `~\.aos\video\<name>\app`, which holds junctions
+  `node_modules` -> the shared install `~\.aos\scratch\video-agi-race\node_modules` (Remotion 4, three r186, r3f 9;
+  no npm install needed) and `src` -> the project's `src`. `remotion.config.ts` adds the app's absolute
+  `node_modules` to webpack `resolve.modules`, so files reached through the junction still resolve.
+- **Speed (this PC, `--gl=angle`, concurrency 4):** a 3D shot with shadows, bloom and grain renders about 4 frames
+  a second at 1080p (198 frames in 48 s); a still with a cached bundle about 8 s.
+- **Gotchas:** a thin flat emissive strip turns dashed at grazing camera angles (use a thin tube); `<Freeze>` does
+  not reach inside `@remotion/three`'s canvas (pass the frame in as a prop); full `transmission` glass over a
+  near-black scene renders as one smeared highlight (use low opacity, clear coat, lit edges); Remotion's h264 is
+  full range `yuvj420p` (JPEG frames): convert with `scale=in_range=pc:out_range=tv,format=yuv420p` on the final
+  encode; the system fonts Sitka and Bahnschrift work by family name after `document.fonts.load` in a `delayRender`.
+- **Voice:** Kokoro v1.0 (`~\.aos\models\kokoro-multi-lang-v1_0`, sherpa-onnx from Paseo's install; `lexicon`,
+  `dictDir` and `lang: "en-us"` in the config); speaker 3 is `af_heart`, the voice its authors grade highest. The
+  v0.19 model in `~\.paseo\models` (bm_george) was rejected as "terrible". It also has Italian voices (`if_sara`,
+  `im_nicola`). Audition voices as a short MP3 for the user at the style-frame gate; an agent cannot judge a voice.
+- **Music and effects without downloads:** synthesise in Node (oscillators, a state-variable filter, a Schroeder
+  reverb; the project's `tools/audio.mts`), then duck the music under the voice with `sidechaincompress` and run
+  `loudnorm` twice (measure, then `linear=true`): a 6.6 s clip landed at -14.1 LUFS, -1.4 dBTP.
+- **Delegating shots to Codex:** its sandbox cannot start Chrome, so `--verify` must be a host command that bundles
+  and renders stills from the worktree (`tools/verify.mjs`). Give each builder its own registry and events files so
+  parallel batches never touch the same file, and ask for readable code (batch A came back minified).
+
 ## When the tool is missing or fails
 
 Report the exact command and its error; do not install anything to fix it without asking. A tool that cannot be
