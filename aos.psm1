@@ -583,7 +583,10 @@ function Sync-AosMcp([switch]$DryRun) {
             $cmd = @(Expand-AosPlaceholders ([string]$s['command'])) + @(@($s['args']) | Where-Object { $null -ne $_ } | ForEach-Object { Expand-AosPlaceholders ([string]$_) })
             $needles = $cmd
         }
-        foreach ($agent in @('claude', 'codex')) {
+        # Optional "agents": ["claude"] keeps a server out of the other agent (default: both).
+        $targets = @('claude', 'codex')
+        if ($s.Contains('agents')) { $targets = @($targets | Where-Object { @($s['agents']) -contains $_ }) }
+        foreach ($agent in $targets) {
             if (-not (Test-AosCommand $agent)) { Write-AosWarn "$agent missing; $name not registered there"; continue }
             $getCmd = "claude mcp get $name"
             if ($agent -eq 'codex') { $getCmd = "codex mcp get $name --json" }

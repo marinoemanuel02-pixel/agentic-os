@@ -3,6 +3,22 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-01 - Perplexity for research, Claude only; one tool catalog for every agent
+
+- The user connected Perplexity (`perplexity-computer`, a remote HTTP MCP) and wants it available as a tool
+  wherever it helps. It needs a paid Perplexity plan and "Computer" tasks spend credits, so it is the one
+  deliberate exception to the free-stack rule: optional, used only where it beats `context7` and plain web
+  fetches, and ask-first for long or account-touching calls (the `research` skill). Its tool names were not
+  inspected when this was written; the skill tells agents to list them at first use.
+- Claude only for now: Codex's quota is the scarce one and Codex already has direct web access. Codex and Pi
+  hand research to Claude through `aos delegate claude` or `$cc:rescue`. A server entry in `config/mcp.json`
+  may now carry `"agents": ["claude"]`; without it a server goes to both agents as before.
+- Awareness is a skill, not more prompt: `tool-catalog` lists every shared skill, MCP server, CLI, media app and
+  agent with the first one to try, and the global contract points to it in two lines. A test fails when a skill
+  or server exists that the catalog does not mention, so the list cannot drift.
+- Capability MCP servers may be added on first need (the old "only after it recurs" rule now applies to
+  convenience tools only).
+
 ## 2026-10-01 - Media layer: a free stack, command lines before MCP servers
 
 - The user wants a free stack: any paid dependency is out (DaVinci Resolve Studio, Figma, Adobe, paid image

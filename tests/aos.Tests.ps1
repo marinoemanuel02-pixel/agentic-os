@@ -1756,6 +1756,57 @@ Describe 'MCP placeholders and nar registration' {
         InModuleScope aos { Sync-AosMcp }
         Should -Invoke Add-AosMcpServer -ModuleName aos -Times 0 -Exactly
     }
+
+    It 'registers a server only in the agents its manifest entry lists' {
+        Mock Get-AosMcpManifest -ModuleName aos {
+            [ordered]@{ servers = [ordered]@{ research = [ordered]@{
+                transport = 'http'; url = 'https://example.test/mcp'; agents = @('claude') } } }
+        }
+        InModuleScope aos { Sync-AosMcp }
+        Should -Invoke Add-AosMcpServer -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Agent -eq 'claude' -and $Http }
+        Should -Invoke Add-AosMcpServer -ModuleName aos -Times 0 -Exactly -ParameterFilter { $Agent -eq 'codex' }
+    }
+
+    It 'does not even query Codex for a Claude-only server' {
+        Mock Get-AosMcpManifest -ModuleName aos {
+            [ordered]@{ servers = [ordered]@{ research = [ordered]@{
+                transport = 'http'; url = 'https://example.test/mcp'; agents = @('claude') } } }
+        }
+        InModuleScope aos { Sync-AosMcp }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'codex mcp *' }
+    }
+
+    It 'registers a server with no agents list in both agents' {
+        Mock Get-AosMcpManifest -ModuleName aos {
+            [ordered]@{ servers = [ordered]@{ both = [ordered]@{ transport = 'http'; url = 'https://example.test/both' } } }
+        }
+        InModuleScope aos { Sync-AosMcp }
+        Should -Invoke Add-AosMcpServer -ModuleName aos -Times 2 -Exactly
+    }
+}
+
+Describe 'Shared tool awareness' {
+    BeforeAll { $skills = Join-Path $PSScriptRoot '..\agents-home\skills' }
+    It 'has valid frontmatter and a short description for <name>' -ForEach @(@{ name = 'research' }, @{ name = 'tool-catalog' }) {
+        $path = Join-Path $skills "$name\SKILL.md"
+        Test-Path -LiteralPath $path | Should -BeTrue
+        $m = [regex]::Match([IO.File]::ReadAllText($path), "(?s)^---\r?\nname: $name\r?\ndescription: (?<d>[^\r\n]+)\r?\n---")
+        $m.Success | Should -BeTrue
+        $m.Groups['d'].Value.Length | Should -BeLessOrEqual 250
+    }
+    It 'lists every shared skill and every registered MCP server in the catalog' {
+        $catalog = [IO.File]::ReadAllText((Join-Path $skills 'tool-catalog\SKILL.md'))
+        foreach ($dir in Get-ChildItem -LiteralPath $skills -Directory) {
+            $catalog.Contains($dir.Name) | Should -BeTrue -Because "skill $($dir.Name) must be in the catalog"
+        }
+        $manifest = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\config\mcp.json')) | ConvertFrom-Json
+        foreach ($server in $manifest.servers.PSObject.Properties.Name) {
+            $catalog.Contains($server) | Should -BeTrue -Because "MCP server $server must be in the catalog"
+        }
+    }
+    It 'points both agents at the catalog from the global contract' {
+        [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\agents-home\AGENTS.md')).Contains('tool-catalog') | Should -BeTrue
+    }
 }
 
 Describe 'aos local adopt' {

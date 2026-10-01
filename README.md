@@ -149,7 +149,8 @@ Claude Code and Codex share one coordination layer in `~\.aos\coord` (outside On
 | Claude-only rules | `config/claude/CLAUDE.md` | `aos sync` |
 | Claude settings | `config/claude/settings.json` | `aos sync` (merged into yours) |
 | Codex profiles | `config/codex/<name>.config.toml` (top-level keys) | `aos sync`, then `codex --profile <name>` |
-| MCP server for both | `config/mcp.json` | `aos sync` |
+| MCP server for both (or one: add `"agents": ["claude"]`) | `config/mcp.json`, and a row in `agents-home/skills/tool-catalog/SKILL.md` | `aos sync` |
+| What the agents know they can use | `agents-home/skills/tool-catalog/SKILL.md` | `aos sync` |
 | A tool | `packages.json` | `aos install base` |
 | A reference repo | `refs/repos.json` | `aos refs` |
 | A plugin | install it, then add it to `Install-AosBridges` in `aos.psm1` | so a rebuild reproduces it |

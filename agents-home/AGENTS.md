@@ -94,6 +94,8 @@ then continue on the other vendor from that file.
   once, then run `aos sync` so Claude gets a link too. Never a second copy per vendor.
   `~/.claude/skills/synced` belongs to the Claude app; leave it alone.
 - A procedure is callable only as a `SKILL.md`. A note that describes a procedure is not.
+- Before saying a capability is missing, or choosing among tools, read the `tool-catalog` skill: it
+  lists every skill, MCP server, CLI, media app and agent here, and which one to try first.
 - Prefer CLIs (`gh`, `rg`, `git`) over MCP servers when both work: tool schemas are loaded on
-  every request. Add an MCP server only for a need that has already repeated.
+  every request. A new capability tool may be added on first need; a convenience one waits for the need to repeat.
 - Use subagents for broad searches so the main context stays small.
