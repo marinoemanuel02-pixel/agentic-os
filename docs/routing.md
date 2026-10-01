@@ -14,7 +14,7 @@ Defaults, not laws: say "claude only" or "codex only" and they yield.
 | Tests, mechanical refactors, renames | Codex (`--profile quick` for trivial ones) | cheap, checkable work |
 | Review of anything risky | the other vendor | independence is the point |
 | Long or background runs | Codex app worktree or Codex cloud | runs while you do other things |
-| Scoring a choice among known options; private or offline quick checks | the local model (`nar` tools, `ollama run`) | free, private, works offline; much weaker |
+| Scoring a choice among known options; private or offline quick checks | the local model (`nar` tools, `ollama run`) | free, private, works offline; much weaker. A hint only: on 2026-10-01 it filed AI-video tests into an unrelated vault folder at 0.94 and rated every review finding "low" |
 | Small, well-defined repo tasks with no quota left, or on private files | Pi on the local model (Paseo, model `aos/aos-agent`) | costs neither subscription; 16K context, asks before every command or write; check its claims |
 
 ## The patterns that pay for the second subscription
@@ -30,7 +30,13 @@ Defaults, not laws: say "claude only" or "codex only" and they yield.
    Claude for a second opinion on the plan file).
 4. **Failover.** A limit is a handoff, not a stop: `handoff` skill, then the other agent
    continues from `HANDOFF.md`. From Claude Code, `/codex:transfer` also works.
-5. **Review gate (optional).** `/codex:setup --enable-review-gate` makes Codex review before
+5. **Delegate with a receipt.** `aos delegate codex|claude --task <file>` (read-only) or with
+   `--write --verify <cmd> [--allow <glob>]`: the model and tools are checked first, a writer works
+   in its own worktree, the host commits and verifies, and `~/.aos/coord/delegations/<id>/receipt.json`
+   records model, tokens, outcome and the verify exit code. Merge `delegate/<id>` after reading the diff.
+6. **One writer per checkout.** Edits claim the checkout through a hook in both agents; a second
+   session is blocked until the first ends or its claim expires (60 min without edits). `aos who`.
+7. **Review gate (optional).** `/codex:setup --enable-review-gate` makes Codex review before
    Claude finishes a turn. Strong, but it spends Codex quota on every turn; turn it on for
    risky repos only.
 

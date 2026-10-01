@@ -3,6 +3,25 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-01 - Coordination: aos-native claims, guard hooks and delegation receipts
+
+- Research by both vendors in parallel (`docs/superpowers/research/2026-10-01-coordination-*.md`).
+  Beads (27.6k stars) was not adopted: a 54 MB download, an embedded Dolt database that admits one
+  writer at a time, and `bd init` rewrites AGENTS.md. MCP Agent Mail neither: Python 3.14 via uv, a
+  curl|bash installer, advisory leases. A2A, swarm frameworks and Docker sandboxes: no benefit shown
+  for three agents and one user. The user chose a small aos-native layer with the same semantics.
+- Claims are enforced at write time by PreToolUse hooks in Claude and Codex (Codex runs hooks on the
+  host, so sandboxed sessions claim too), renewed on every edit, released at session end. The guard
+  fails open: a broken guard must never block all edits. A file lock, not a mutex: Local\ mutexes
+  are per logon session, and the Paseo daemon and scheduled tasks may run in another.
+- Delegates never commit: Codex's workspace-write sandbox keeps `.git` read-only (measured), so the
+  host commits on `delegate/<id>` and runs the verify command itself; the delegate's own test claims
+  stay labelled as claims in the receipt.
+- The plan was attacked by Codex before any code (16 findings, 10 high; `...-plan-critique-codex.md`),
+  which replaced the session mutex, the notice-only hook and in-sandbox commits.
+- The cc plugin's hooks failed on every Codex run (`$PLUGIN_ROOT` is empty in PowerShell); aos now
+  rewrites them to `${PLUGIN_ROOT}`, which Codex substitutes itself, and the user re-trusts them.
+
 ## 2026-10-01 - One fresh vault replaces tala, duda15 and meta-cognizione
 
 - The user said the tala and duda15 vaults are not theirs and were mixed in by mistake. Both folders went

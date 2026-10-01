@@ -16,7 +16,10 @@ Goal: the next agent resumes from `HANDOFF.md` alone, with no chat history.
    - `git status --short`
    - `git log --oneline -5`
    - `git diff --stat` and `git diff --staged --stat`
-3. Write `HANDOFF.md` at the root, replacing any previous one, with exactly these sections:
+3. Check who holds the checkout: `aos who`. If another live session (not yours) holds it, do not
+   touch its `HANDOFF.md`: leave `aos note "<handoff summary>" --as <claude|codex>` instead and tell
+   the user. A scheduled or background run that finds the checkout held stops here.
+4. Write `HANDOFF.md` at the root, replacing any previous one, with exactly these sections:
    - **Goal** — the request in the user's words, and what "done" means.
    - **State** — branch; what is committed; what is uncommitted (from step 2); what works right now.
    - **Verified** — commands you actually ran in this session, with their result. Nothing else.
@@ -24,9 +27,9 @@ Goal: the next agent resumes from `HANDOFF.md` alone, with no chat history.
    - **Next steps** — numbered, smallest first, with exact commands and file paths.
    - **Traps** — what wasted time: flaky tests, wrong paths, environment quirks.
    - **Written by** — vendor and local date/time, e.g. `Claude Code, 2026-09-27 18:40`.
-4. Check it: re-read the file. Every line under **Verified** must match a command you ran in this
+5. Check it: re-read the file. Every line under **Verified** must match a command you ran in this
    session. Delete any that don't. No secrets, tokens or `.env` contents anywhere in the file.
-5. Tell the user how to resume, in one short block:
+6. Tell the user how to resume, in one short block:
    - In Codex (CLI or app, same folder): `Read HANDOFF.md and continue from Next steps.`
    - In Claude Code (same folder): `Read HANDOFF.md and continue from Next steps.`
    - From Claude Code, the user can also type `/codex:transfer` (a user-only command) to move the

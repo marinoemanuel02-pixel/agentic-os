@@ -123,6 +123,22 @@ After a lost reply, the panel keeps your text: refresh the recent list before sa
 For photos or other files, use Android Share -> OneDrive -> Desktop/Inbox; OneDrive syncs them separately.
 The shared `inbox` skill can propose filing items into configured vaults and waits for confirmation before moving them.
 
+## Several agents at once
+
+Claude Code and Codex share one coordination layer in `~\.aos\coord` (outside OneDrive):
+
+- **Claims.** The first edit in a checkout claims it for that session (a hook in both agents); another
+  session's edits there are blocked with the holder's name until the claim ends (session end) or
+  expires (60 minutes without edits). `aos who` lists claims and recent events; `aos note <text> --as
+  <agent>` leaves a message there; `aos claim|release [<path>] --as <agent>` do it by hand.
+- **Delegation.** `aos delegate codex --task task.md` (read-only) or `aos delegate codex --task task.md
+  --write --verify "<test command>" [--allow <glob>]`. The model is probed once a day, the verify tool
+  is checked inside the delegate's sandbox, a writer works in `~\.aos\worktrees\<repo>-<id>` on
+  `delegate/<id>`, the host commits and verifies, and the receipt says accepted or why not.
+  `aos delegate ls | show <id> | clean <id>`.
+- After `aos sync` changes Codex hooks (also after a cc plugin update, which aos repairs), trust them
+  once in Codex with `/hooks`.
+
 ## Changing it
 
 | Change | Edit | Then |

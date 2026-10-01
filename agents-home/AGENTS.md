@@ -79,6 +79,15 @@ other vendor critique it before code exists. That is the cheapest place to catch
 **Capacity** — when a limit is close, don't stall: run the `handoff` skill (writes `HANDOFF.md`),
 then continue on the other vendor from that file.
 
+## Coordination (one PC, several agents)
+
+- Edits claim the checkout for your session (a guard hook). A blocked edit means another live session
+  holds it: tell the user or work in a worktree; never work around the guard. `aos who` shows claims.
+- Hand work to the other vendor with `aos delegate codex|claude --task <file>` (add `--write --verify
+  <cmd>` for changes). Accept it only from its receipt plus your own read of the diff and tests.
+- Parallel agents read and review; one writer per checkout; you integrate. `aos note` leaves a message.
+- Local-model output (nar, Pi) is a hint: check it against the files or tests before acting on or relaying it.
+
 ## Skills and tools
 
 - Shared skills live in `~/.agents/skills` (the repo's `agents-home/skills`). Add a skill there

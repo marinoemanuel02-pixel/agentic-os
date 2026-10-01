@@ -21,8 +21,12 @@ Give it the change and the goal — not your findings. Independence is the point
 
 | You are in  | Review                                   | Challenge the design                          | Delegate (e.g. write a failing test) |
 |-------------|------------------------------------------|-----------------------------------------------|--------------------------------------|
-| Claude Code | `codex exec --profile review "<PROMPT>"` | same, with an adversarial `<PROMPT>`          | `/codex:rescue <task>` or the `codex-rescue` subagent |
-| Codex       | `$cc:review`                             | `$cc:adversarial-review <focus>`              | `$cc:rescue <task>`                  |
+| Claude Code | `aos delegate codex --task <file>`       | same, with an adversarial task file           | `aos delegate codex --task <file> --write --verify <cmd>` |
+| Codex       | `aos delegate claude --task <file>` or `$cc:review` | `$cc:adversarial-review <focus>`   | `aos delegate claude --task <file> --write --verify <cmd>` |
+
+`aos delegate` checks the model and tools first, runs a writer in its own worktree, commits there on
+the host, verifies on the host and writes a receipt (`aos delegate show <id>`); read the diff before
+merging the `delegate/<id>` branch. The raw commands below remain the fallback.
 
 In Claude Code, `/codex:review` and `/codex:adversarial-review` are user-only commands (the plugin
 sets `disable-model-invocation`): you cannot call them. Suggest them to the user when a richer
@@ -63,5 +67,7 @@ before applying it — the reviewer can be wrong too.
 - 2026-09-27 — Claude Code row corrected: `/codex:review` and `/codex:adversarial-review` are
   user-only; the agent reviews through `codex exec --profile review` and delegates via `/codex:rescue`.
   Found by asking Claude what it had loaded after install.
+- 2026-10-01 — `aos delegate` is the default route (preflight, receipts, host verify); found while
+  a hand-typed `codex exec` used a model the account rejects and its delegate could not run its tests.
 - 2026-09-27 — `</dev/null` added to the Bash form: a review launched from Git Bash hung at
   "Reading additional input from stdin" and never started.
