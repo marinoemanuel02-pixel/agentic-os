@@ -965,7 +965,18 @@ Describe 'Round 3: secret name validation' {
 }
 
 Describe 'Round 3: DPAPI secret files' {
+    BeforeAll {
+        $dpapiAvailable = $true
+        try {
+            $probe = [byte[]](1, 2, 3)
+            [void][System.Security.Cryptography.ProtectedData]::Protect($probe, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+        } catch { $dpapiAvailable = $false }
+    }
     BeforeEach {
+        if (-not $dpapiAvailable) {
+            Set-ItResult -Skipped -Because 'current-user DPAPI unavailable (sandboxed run)'
+            return
+        }
         $savedSecrets = $env:AOS_SECRETS
         $secretsDir = Join-Path $caseRoot 'isolated secrets'
         $env:AOS_SECRETS = $secretsDir
@@ -2163,6 +2174,11 @@ Describe 'Logon task state' {
 }
 
 Describe 'Pi directory resolution' {
+    BeforeEach {
+        $savedProjectsForPi = $env:AOS_PROJECTS
+        $env:AOS_PROJECTS = Join-Path $caseRoot 'projects'
+    }
+    AfterEach { $env:AOS_PROJECTS = $savedProjectsForPi }
     It 'resolves place roots and skips unknown placeholders' {
         Mock Get-AosDesktopDir -ModuleName aos { $caseRoot }
         InModuleScope aos -Parameters @{ Root = $caseRoot } {
@@ -2696,6 +2712,465 @@ Describe 'Inbox skill' {
         $frontmatter.Success | Should -BeTrue
         # Pi lists every skill's description in its 16K prompt.
         $frontmatter.Groups['d'].Value.Length | Should -BeLessOrEqual 250
+    }
+}
+
+Describe 'Desktop folder fallback' {
+    It 'uses OneDrive Desktop when the shell folder is empty and it exists' {
+        $old = $env:OneDrive
+        try {
+            $env:OneDrive = New-TestFolder (Join-Path $caseRoot 'OneDrive')
+            $desktop = New-TestFolder (Join-Path $env:OneDrive 'Desktop')
+            if (InModuleScope aos { Get-Command Get-AosShellFolder -ErrorAction SilentlyContinue }) { Mock Get-AosShellFolder -ModuleName aos { '' } }
+            InModuleScope aos { Get-AosDesktopDir } | Should -BeExactly $desktop
+        } finally { $env:OneDrive = $old }
+    }
+    It 'uses HOME Desktop when the shell folder and OneDrive Desktop are absent' {
+        $old = $env:OneDrive
+        try {
+            $env:OneDrive = Join-Path $caseRoot 'missing'
+            if (InModuleScope aos { Get-Command Get-AosShellFolder -ErrorAction SilentlyContinue }) { Mock Get-AosShellFolder -ModuleName aos { '' } }
+            InModuleScope aos { Get-AosDesktopDir } | Should -BeExactly (Join-Path $HOME 'Desktop')
+        } finally { $env:OneDrive = $old }
+    }
+    It 'builds projects from the mockable desktop unless overridden' {
+        $old = $env:AOS_PROJECTS
+        try {
+            $env:AOS_PROJECTS = $null
+            Mock Get-AosDesktopDir -ModuleName aos { 'C:\fixture desk' }
+            InModuleScope aos { Get-AosProjectsDir } | Should -BeExactly 'C:\fixture desk\1-Projects'
+            $env:AOS_PROJECTS = Join-Path $caseRoot 'projects'
+            InModuleScope aos { Get-AosProjectsDir } | Should -BeExactly $env:AOS_PROJECTS
+        } finally { $env:AOS_PROJECTS = $old }
+    }
+}
+
+Describe 'cc bridge hooks' {
+    BeforeEach {
+        $plugins = New-TestFolder (Join-Path $caseRoot 'plugins')
+        $hook = Join-Path $plugins 'sendbird\cc\1.5.0\hooks\hooks.json'
+        Mock Write-AosWarn -ModuleName aos { }
+        Mock Write-AosOk -ModuleName aos { }
+    }
+    It 'repairs every command field and preserves valid JSON and unrelated text' {
+        Write-TestFile $hook '{"hooks":{"SessionStart":[{"hooks":[{"command":"node $PLUGIN_ROOT/a.js","commandWindows":"node $PLUGIN_ROOT/b.js","note":"$PLUGIN_ROOT"},{"command":"echo ${PLUGIN_ROOT} $env:PLUGIN_ROOT"}]}]},"other":1}'
+        InModuleScope aos -Parameters @{ P=$plugins } { param($P) Repair-AosCcHooks -PluginsRoot $P }
+        $j = Get-Content $hook -Raw | ConvertFrom-Json
+        $j.hooks.SessionStart[0].hooks[0].command | Should -BeExactly 'node ${PLUGIN_ROOT}/a.js'
+        $j.hooks.SessionStart[0].hooks[0].commandWindows | Should -BeExactly 'node ${PLUGIN_ROOT}/b.js'
+        $j.hooks.SessionStart[0].hooks[0].note | Should -BeExactly '$PLUGIN_ROOT'
+        $j.hooks.SessionStart[0].hooks[1].command | Should -BeExactly 'echo ${PLUGIN_ROOT} $env:PLUGIN_ROOT'
+        $j.other | Should -Be 1
+        @(Get-ChildItem $env:AOS_BACKUPS -Recurse -File).Count | Should -BeGreaterThan 0
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'cc hooks changed: trust them once in Codex' }
+    }
+    It 'does not rewrite fixed hooks or warn again' {
+        Write-TestFile $hook '{"command":"${PLUGIN_ROOT}/run"}'
+        $before = (Get-Item $hook).LastWriteTimeUtc
+        InModuleScope aos -Parameters @{ P=$plugins } { param($P) Repair-AosCcHooks -PluginsRoot $P }
+        (Get-Item $hook).LastWriteTimeUtc | Should -Be $before
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 0 -Exactly
+    }
+    It 'previews without writing and tolerates an absent plugin' {
+        Write-TestFile $hook '{"command":"$PLUGIN_ROOT/run"}'
+        $before = Get-Content $hook -Raw
+        InModuleScope aos -Parameters @{ P=$plugins } { param($P) Repair-AosCcHooks -PluginsRoot $P -DryRun }
+        Get-Content $hook -Raw | Should -BeExactly $before
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 0 -Exactly
+        InModuleScope aos -Parameters @{ P=(Join-Path $caseRoot 'empty') } { param($P) Repair-AosCcHooks -PluginsRoot $P } | Out-Null
+    }
+}
+
+Describe 'Coordination ledger' {
+    BeforeEach { $env:AOS_COORD = Join-Path $caseRoot 'coord' }
+    It 'creates the folder and appends compact ordered UTF-8 events' {
+        InModuleScope aos { Add-AosLedgerEvent -Event @{ type='first'; note='caf' }; Add-AosLedgerEvent -Event @{ type='second' } }
+        $lines = @(Get-Content (Join-Path $env:AOS_COORD 'ledger.jsonl'))
+        $lines.Count | Should -Be 2
+        $lines[0] | Should -Match '"type":"first"'
+        $lines[0] | Should -Match '"ts":"[^"]+"'
+        [System.IO.File]::ReadAllBytes((Join-Path $env:AOS_COORD 'ledger.jsonl'))[0] | Should -Not -Be 239
+        @(InModuleScope aos { Get-AosLedger -Last 1 })[0].type | Should -Be 'second'
+    }
+    It 'skips malformed lines and round-trips a UTF-8 note' {
+        Write-TestFile (Join-Path $env:AOS_COORD 'ledger.jsonl') "garbage`n"
+        InModuleScope aos { Add-AosLedgerEvent -Event @{ type='note'; text=([char]0x00e9 + 'cole') } }
+        @(InModuleScope aos { Get-AosLedger })[0].text | Should -BeExactly ([char]0x00e9 + 'cole')
+    }
+    It 'times out on a held lock and releases it after a throwing body' {
+        New-TestFolder $env:AOS_COORD | Out-Null
+        $path = Join-Path $env:AOS_COORD 'coord.lock'
+        $stream = [IO.File]::Open($path, 'OpenOrCreate', 'ReadWrite', 'None')
+        try { { InModuleScope aos { Invoke-AosCoordLocked -Body { 1 } -TimeoutMs 100 } } | Should -Throw '*coordination lock busy*' }
+        finally { $stream.Dispose() }
+        { InModuleScope aos { Invoke-AosCoordLocked -Body { throw 'body failed' } } } | Should -Throw '*body failed*'
+        InModuleScope aos { Invoke-AosCoordLocked -Body { 42 } } | Should -Be 42
+    }
+}
+
+Describe 'Coordination claims' {
+    BeforeEach {
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        $repo = New-TestFolder (Join-Path $caseRoot 'repo space')
+        & git -C $repo init -q
+    }
+    It 'uses a stable checkout key for a spaced accented path and resolves a file' {
+        $sub = New-TestFolder (Join-Path $repo ([char]0x00e9 + 'cole'))
+        $file = Join-Path $sub 'a.txt'
+        Write-TestFile $file 'x'
+        $checkout = InModuleScope aos -Parameters @{ P=$file } { param($P) Get-AosCheckout -Path $P }
+        $checkout | Should -BeExactly $repo
+        $key = InModuleScope aos -Parameters @{ P=$checkout } { param($P) Get-AosClaimKey -Checkout $P }
+        $key | Should -Match '^[0-9a-f]{16}$'
+    }
+    It 'creates, renews and refuses another session with a holder' {
+        $first = InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosClaim -Path $P -Agent 'codex' -Session 's1' }
+        $first.Ok | Should -BeTrue
+        $first.Action | Should -Be 'created'
+        $first.Claim.checkout | Should -BeExactly $repo
+        foreach ($field in 'agent','session','note','since','renewed','expires','host_pid') { $first.Claim.Contains($field) | Should -BeTrue }
+        $again = InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosClaim -Path $P -Agent 'codex' -Session 's1' }
+        $again.Action | Should -Be 'renewed'
+        $again.Claim.since | Should -Be $first.Claim.since
+        $other = InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosClaim -Path $P -Agent 'codex' -Session 's2' }
+        $other.Action | Should -Be 'refused'
+        $other.Holder.agent | Should -Be 'codex'
+    }
+    It 'releases only the owner and records release' {
+        InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosClaim -Path $P -Agent 'codex' -Session 's1' } | Out-Null
+        InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosRelease -Path $P -Agent 'codex' -Session 's2' } | Out-Null
+        @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 1
+        InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosRelease -Path $P -Agent 'codex' -Session 's1' } | Out-Null
+        @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 0
+        @(InModuleScope aos { Get-AosLedger } | Where-Object type -eq 'release').Count | Should -Be 1
+    }
+    It 'rejects invalid agents and TTLs without a claim file' {
+        foreach ($inputCase in @(@{ A='Bad!'; T=60 }, @{ A='codex'; T=0 }, @{ A='codex'; T=1441 })) {
+            $r = InModuleScope aos -Parameters @{ P=$repo; A=$inputCase.A; T=$inputCase.T } { param($P,$A,$T) Invoke-AosClaim -Path $P -Agent $A -Session 's1' -TtlMinutes $T }
+            $r.Ok | Should -BeFalse
+        }
+        @(Get-ChildItem $env:AOS_COORD -Filter '*.json' -Recurse -ErrorAction SilentlyContinue).Count | Should -Be 0
+    }
+    It 'refuses a young unreadable claim and takes over one older than 24 hours' {
+        InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosClaim -Path $P -Agent 'codex' -Session 'old' } | Out-Null
+        $file = @(Get-ChildItem $env:AOS_COORD -Filter '*.json' -Recurse | Where-Object { $_.Name -ne 'models.json' })[0].FullName
+        Write-TestFile $file ''
+        $young = InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosClaim -Path $P -Agent 'claude' -Session 'new' }
+        $young.Action | Should -Be 'refused'
+        $young.Message | Should -Match ([regex]::Escape($file))
+        (Get-Item $file).LastWriteTimeUtc = [DateTime]::UtcNow.AddHours(-25)
+        $old = InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosClaim -Path $P -Agent 'claude' -Session 'new' }
+        $old.Action | Should -Be 'taken-over'
+        @(InModuleScope aos { Get-AosLedger } | Where-Object type -eq 'claim-takeover').Count | Should -Be 1
+    }
+    It 'takes over an expired claim and records the old holder' {
+        $first = InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosClaim -Path $P -Agent 'codex' -Session 'old' }
+        $file = @(Get-ChildItem $env:AOS_COORD -Filter '*.json' -Recurse | Where-Object { $_.Name -ne 'models.json' })[0].FullName
+        $claim = Get-Content $file -Raw | ConvertFrom-Json
+        $claim.expires = [DateTime]::UtcNow.AddMinutes(-1).ToString('o')
+        Write-TestFile $file ($claim | ConvertTo-Json -Compress)
+        $next = InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosClaim -Path $P -Agent 'claude' -Session 'new' }
+        $next.Action | Should -Be 'taken-over'
+        $next.Holder.agent | Should -Be 'codex'
+    }
+    It 'prints live claims and notes through the CLI' {
+        InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosClaim -Path $P -Agent 'codex' -Session 's1' } | Out-Null
+        $listing = InModuleScope aos { aos who --json } | Out-String | ConvertFrom-Json
+        @($listing.claims).Count | Should -Be 1
+        InModuleScope aos { aos note 'fixture note' --as codex } | Out-Null
+        @(InModuleScope aos { Get-AosLedger } | Where-Object type -eq 'note').Count | Should -Be 1
+    }
+}
+
+Describe 'Process runner' {
+    It 'quotes Windows arguments including trailing slashes and quotes' {
+        $cases = @(
+            @{ A='a b'; W='"a b"' }, @{ A='C:\p q\'; W='"C:\p q\\"' },
+            @{ A='say "hi"'; W='"say \"hi\""' }, @{ A=''; W='""' },
+            @{ A=([char]0x00e9 + 'cole'); W=([char]0x00e9 + 'cole') }
+        )
+        foreach ($c in $cases) {
+            InModuleScope aos -Parameters @{ A=$c.A } { param($A) ConvertTo-AosArgString -Arguments @($A) } | Should -BeExactly $c.W
+        }
+    }
+    It 'returns a nonzero code for a missing where.exe target' {
+        $r = InModuleScope aos -Parameters @{ P=$caseRoot } { param($P) Invoke-AosProcess -Exe 'where.exe' -Arguments @('aos-test-no-such-command-987') -WorkingDirectory $P }
+        $r.Code | Should -Not -Be 0
+        $r.TimedOut | Should -BeFalse
+    }
+    It 'honours a working directory with spaces' {
+        $dir = New-TestFolder (Join-Path $caseRoot 'work space')
+        $out = Join-Path $caseRoot 'cd.txt'
+        $r = InModuleScope aos -Parameters @{ P=$dir; O=$out } { param($P,$O) Invoke-AosProcess -Exe 'cmd.exe' -Arguments @('/d','/c','cd') -WorkingDirectory $P -StdoutFile $O }
+        $r.Code | Should -Be 0
+        (Get-Content $out -Raw).Trim() | Should -BeExactly $dir
+    }
+    It 'times out and kills a sleeping PowerShell process' {
+        $r = InModuleScope aos -Parameters @{ P=$caseRoot } { param($P) Invoke-AosProcess -Exe 'powershell.exe' -Arguments @('-NoProfile','-Command','Start-Sleep 30') -WorkingDirectory $P -TimeoutSeconds 1 }
+        $r.TimedOut | Should -BeTrue
+        $r.KillFailed | Should -BeFalse
+    }
+    It 'refuses a cmd script target' {
+        $script = Join-Path $caseRoot 'a.cmd'
+        Write-TestFile $script '@echo off'
+        InModuleScope aos { Get-Command Invoke-AosProcess -ErrorAction Stop | Out-Null }
+        { InModuleScope aos -Parameters @{ P=$script; W=$caseRoot } { param($P,$W) Invoke-AosProcess -Exe $P -WorkingDirectory $W } } | Should -Throw
+    }
+}
+
+Describe 'Delegation preflight' {
+    BeforeEach { $env:AOS_COORD = Join-Path $caseRoot 'coord' }
+    It 'accepts Claude without probing a model' {
+        $r = InModuleScope aos { Resolve-AosDelegateModel -Vendor 'claude' -Model '' }
+        $r.Ok | Should -BeTrue
+        $r.Model | Should -BeExactly ''
+    }
+    It 'uses a fresh cached Codex model without a process' {
+        $cache = Join-Path $env:AOS_COORD 'models.json'
+        Write-TestFile $cache ('{"codex":{"model":"fixture-model","checked":"' + [DateTime]::UtcNow.ToString('o') + '"}}')
+        if (InModuleScope aos { Get-Command Invoke-AosProcess -ErrorAction SilentlyContinue }) { Mock Invoke-AosProcess -ModuleName aos { throw 'unexpected probe' } }
+        $r = InModuleScope aos { Resolve-AosDelegateModel -Vendor 'codex' -Model '' }
+        $r.Ok | Should -BeTrue
+        $r.Model | Should -Be 'fixture-model'
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
+    }
+    It 'stops after a usage limit error event and records quota' {
+        if (InModuleScope aos { Get-Command Get-AosCodexModelCandidates -ErrorAction SilentlyContinue }) { Mock Get-AosCodexModelCandidates -ModuleName aos { @('first','second') } }
+        Mock Invoke-AosProcess -ModuleName aos {
+            Write-TestFile $StdoutFile '{"type":"error","message":"You have hit your usage limit"}'
+            @{ Code=0; TimedOut=$false; KillFailed=$false }
+        }
+        $r = InModuleScope aos { Resolve-AosDelegateModel -Vendor 'codex' -Model '' }
+        $r.Ok | Should -BeFalse
+        $r.Category | Should -Be 'quota'
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly
+        Test-Path (Join-Path $env:AOS_COORD 'models.json') | Should -BeFalse
+    }
+    It 'does not treat normal agent text saying usage limit as an error' {
+        if (InModuleScope aos { Get-Command Get-AosCodexModelCandidates -ErrorAction SilentlyContinue }) { Mock Get-AosCodexModelCandidates -ModuleName aos { @('first') } }
+        Mock Invoke-AosProcess -ModuleName aos {
+            Write-TestFile $StdoutFile "{`"type`":`"item.completed`",`"item`":{`"type`":`"agent_message`",`"text`":`"usage limit PONG`"}}`n{`"type`":`"turn.completed`",`"usage`":{`"input_tokens`":3,`"output_tokens`":2}}"
+            @{ Code=0; TimedOut=$false; KillFailed=$false }
+        }
+        (InModuleScope aos { Resolve-AosDelegateModel -Vendor 'codex' -Model '' }).Ok | Should -BeTrue
+    }
+    It 'tries a second visible model only after not-supported and caches success' {
+        if (InModuleScope aos { Get-Command Get-AosCodexModelCandidates -ErrorAction SilentlyContinue }) { Mock Get-AosCodexModelCandidates -ModuleName aos { @('first','second') } }
+        Mock Invoke-AosProcess -ModuleName aos {
+            if ($Arguments -contains 'first') { Write-TestFile $StdoutFile '{"type":"error","message":"model not supported"}' }
+            else { Write-TestFile $StdoutFile "{`"type`":`"item.completed`",`"item`":{`"type`":`"agent_message`",`"text`":`"PONG`"}}`n{`"type`":`"turn.completed`",`"usage`":{`"input_tokens`":2,`"output_tokens`":1}}" }
+            @{ Code=0; TimedOut=$false; KillFailed=$false }
+        }
+        $r = InModuleScope aos { Resolve-AosDelegateModel -Vendor 'codex' -Model '' }
+        $r.Ok | Should -BeTrue
+        $r.Model | Should -Be 'second'
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 2 -Exactly
+        (Get-Content (Join-Path $env:AOS_COORD 'models.json') -Raw | ConvertFrom-Json).codex.model | Should -Be 'second'
+        @(InModuleScope aos { Get-AosLedger } | Where-Object type -eq 'model-probe').Count | Should -Be 2
+    }
+    It 'does not switch away from a failing explicit model' {
+        if (InModuleScope aos { Get-Command Get-AosCodexModelCandidates -ErrorAction SilentlyContinue }) { Mock Get-AosCodexModelCandidates -ModuleName aos { @('other') } }
+        Mock Invoke-AosProcess -ModuleName aos {
+            Write-TestFile $StdoutFile '{"type":"error","message":"model not supported"}'
+            @{ Code=1; TimedOut=$false; KillFailed=$false }
+        }
+        $r = InModuleScope aos { Resolve-AosDelegateModel -Vendor 'codex' -Model 'explicit' }
+        $r.Ok | Should -BeFalse
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly
+    }
+    It 'reports a missing verify executable in the Codex sandbox' {
+        Mock Test-AosCommand -ModuleName aos { $true }
+        if (InModuleScope aos { Get-Command Resolve-AosDelegateModel -ErrorAction SilentlyContinue }) { Mock Resolve-AosDelegateModel -ModuleName aos { @{ Ok=$true; Model='fixture-model' } } }
+        if (InModuleScope aos { Get-Command Invoke-AosProcess -ErrorAction SilentlyContinue }) { Mock Invoke-AosProcess -ModuleName aos { @{ Code=1; TimedOut=$false; KillFailed=$false } } }
+        $r = InModuleScope aos -Parameters @{ W=$caseRoot } { param($W) Test-AosDelegatePreflight -Vendor 'codex' -Model '' -Needs @() -Verify 'missing-tool --version' -WorkDir $W }
+        $r.Ok | Should -BeFalse
+        ($r.Reasons -join ' ') | Should -Match 'missing-tool'
+    }
+    It 'reports a failing needs command and accepts passing commands' {
+        Mock Test-AosCommand -ModuleName aos { $true }
+        if (InModuleScope aos { Get-Command Resolve-AosDelegateModel -ErrorAction SilentlyContinue }) { Mock Resolve-AosDelegateModel -ModuleName aos { @{ Ok=$true; Model='fixture-model' } } }
+        if (InModuleScope aos { Get-Command Invoke-AosProcess -ErrorAction SilentlyContinue }) { Mock Invoke-AosProcess -ModuleName aos { @{ Code=1; TimedOut=$false; KillFailed=$false } } }
+        $bad = InModuleScope aos -Parameters @{ W=$caseRoot } { param($W) Test-AosDelegatePreflight -Vendor 'codex' -Model '' -Needs @('tool --check') -Verify '' -WorkDir $W }
+        $bad.Ok | Should -BeFalse
+        ($bad.Reasons -join ' ') | Should -Match 'tool --check'
+        if (InModuleScope aos { Get-Command Invoke-AosProcess -ErrorAction SilentlyContinue }) { Mock Invoke-AosProcess -ModuleName aos { @{ Code=0; TimedOut=$false; KillFailed=$false } } }
+        (InModuleScope aos -Parameters @{ W=$caseRoot } { param($W) Test-AosDelegatePreflight -Vendor 'codex' -Model '' -Needs @('tool --check') -Verify '' -WorkDir $W }).Ok | Should -BeTrue
+    }
+}
+
+Describe 'Write guard' {
+    BeforeEach {
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        $repo = New-TestFolder (Join-Path $caseRoot 'repo space')
+        & git -C $repo init -q
+    }
+    It 'claims a free checkout and renews the same session without output' {
+        $inputJson = @{ cwd=$repo; session_id='s1'; tool_name='Write'; tool_input=@{ file_path=(Join-Path $repo 'a.txt') } } | ConvertTo-Json -Compress
+        $r = InModuleScope aos -Parameters @{ J=$inputJson } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson $J }
+        $r.Exit | Should -Be 0
+        $r.Stderr | Should -BeNullOrEmpty
+        @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 1
+        (InModuleScope aos -Parameters @{ J=$inputJson } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson $J }).Exit | Should -Be 0
+    }
+    It 'blocks a different holder with the required message' {
+        InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosClaim -Path $P -Agent 'codex' -Session 'other' -Note 'working' } | Out-Null
+        $j = @{ cwd=$repo; session_id='s1'; tool_name='Edit'; tool_input=@{ file_path=(Join-Path $repo 'a.txt') } } | ConvertTo-Json -Compress
+        $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson $J }
+        $r.Exit | Should -Be 2
+        $r.Stderr | Should -Match 'aos: .* is held by codex \(other\).*Do not edit here; coordinate \(aos who\) or use a worktree\.'
+    }
+    It 'fails open for invalid JSON and a busy lock' {
+        $r = InModuleScope aos { Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson '{' }
+        $r.Exit | Should -Be 0
+        $r.Stderr | Should -Match 'aos guard: .* \(edit allowed\)'
+        New-TestFolder $env:AOS_COORD | Out-Null
+        $stream = [IO.File]::Open((Join-Path $env:AOS_COORD 'coord.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+        try {
+            $j = @{ cwd=$repo; session_id='s1'; tool_name='Write'; tool_input=@{ file_path=(Join-Path $repo 'a.txt') } } | ConvertTo-Json -Compress
+            $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson $J }
+            $r.Exit | Should -Be 0
+            $r.Stderr | Should -Match 'edit allowed'
+        } finally { $stream.Dispose() }
+    }
+    It 'shows another session at start and releases only its own claims at end' {
+        InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosClaim -Path $P -Agent 'codex' -Session 'other' } | Out-Null
+        $j = @{ cwd=$repo; session_id='s1' } | ConvertTo-Json -Compress
+        $start = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'session-start' -InputJson $J }
+        $start.Stdout | Should -Match '^Note: aos:'
+        InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'session-end' -InputJson $J } | Out-Null
+        @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 1
+    }
+    It 'claims both checkouts named by Codex apply_patch including an accented folder' {
+        $other = New-TestFolder (Join-Path $caseRoot ([char]0x00e9 + 'cole repo'))
+        & git -C $other init -q
+        $patch = "*** Begin Patch`n*** Add File: " + (Join-Path $repo 'a.txt') + "`n*** Update File: " + (Join-Path $other 'b.txt') + "`n*** End Patch"
+        $j = @{ cwd=$repo; session_id='s1'; tool_name='apply_patch'; tool_input=$patch } | ConvertTo-Json -Compress
+        (InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'codex' -Event 'pre-edit' -InputJson $J }).Exit | Should -Be 0
+        @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 2
+    }
+}
+
+Describe 'Presence hooks sync' {
+    It 'declares both vendor hook events with the required matchers and timeouts' {
+        $claude = Get-Content (Join-Path $PSScriptRoot '..\config\claude\settings.json') -Raw | ConvertFrom-Json
+        $codex = Get-Content (Join-Path $PSScriptRoot '..\config\codex\hooks.json') -Raw | ConvertFrom-Json
+        $claude.hooks.PreToolUse[0].matcher | Should -Be 'Edit|Write|MultiEdit|NotebookEdit'
+        $codex.PreToolUse[0].matcher | Should -Be 'apply_patch|Edit|Write'
+        foreach ($hooks in @($claude.hooks, $codex)) {
+            foreach ($event in 'PreToolUse','SessionStart','SessionEnd') {
+                @($hooks.$event).Count | Should -BeGreaterThan 0
+                $entry = @($hooks.$event)[0].hooks[0]
+                $entry.command | Should -Match 'aos guard'
+                $entry.commandWindows | Should -Match 'aos guard'
+                if ($event -eq 'SessionEnd') { $entry.timeout | Should -Be 5 }
+                else { $entry.timeout | Should -Be 10 }
+            }
+        }
+    }
+    It 'merges a user hook, replaces stale owned hooks and stays byte-identical on second sync' {
+        $target = Join-Path $caseRoot 'codex hooks.json'
+        Write-TestFile $target '{"SessionStart":[{"hooks":[{"type":"command","command":"echo user"}]},{"hooks":[{"type":"command","command":"old aos guard codex session-start"}]}]}'
+        if (InModuleScope aos { Get-Command Get-AosCodexHooksPath -ErrorAction SilentlyContinue }) { Mock Get-AosCodexHooksPath -ModuleName aos { $target } }
+        Mock Write-AosWarn -ModuleName aos { }
+        InModuleScope aos { Sync-AosCodexHooks }
+        $one = Get-Content $target -Raw
+        $one | Should -Match 'echo user'
+        $one | Should -Not -Match 'old aos guard'
+        $one | Should -Match 'Import-Module'
+        $one | Should -Not -Match '\{\{aos\}\}'
+        InModuleScope aos { Sync-AosCodexHooks }
+        Get-Content $target -Raw | Should -BeExactly $one
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'Codex hooks changed: trust them once' }
+    }
+    It 'creates Codex hooks when missing and previews without writing' {
+        $target = Join-Path $caseRoot 'hooks.json'
+        if (InModuleScope aos { Get-Command Get-AosCodexHooksPath -ErrorAction SilentlyContinue }) { Mock Get-AosCodexHooksPath -ModuleName aos { $target } }
+        InModuleScope aos { Sync-AosCodexHooks -DryRun }
+        Test-Path $target | Should -BeFalse
+        InModuleScope aos { Sync-AosCodexHooks }
+        Test-Path $target | Should -BeTrue
+    }
+}
+
+Describe 'aos delegate' {
+    BeforeEach {
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        $repo = New-TestFolder (Join-Path $caseRoot 'repo space')
+        & git -C $repo init -q
+        & git -C $repo -c user.name=Fixture -c user.email=fixture@example.invalid commit --allow-empty -qm initial
+        $task = Join-Path $caseRoot 'task file.md'
+        Write-TestFile $task 'Write a fixture file'
+        if (InModuleScope aos { Get-Command Test-AosDelegatePreflight -ErrorAction SilentlyContinue }) {
+            if (InModuleScope aos { Get-Command Test-AosDelegatePreflight -ErrorAction SilentlyContinue }) { Mock Test-AosDelegatePreflight -ModuleName aos { @{ Ok=$true; Model='fixture-model'; Reasons=@() } } }
+        }
+    }
+    It 'publishes the exact result schema contract' {
+        $schema = Get-Content (Join-Path $PSScriptRoot '..\config\delegate\result.schema.json') -Raw | ConvertFrom-Json
+        $schema.type | Should -Be 'object'
+        $schema.additionalProperties | Should -BeFalse
+        @($schema.required) -join '|' | Should -Be 'status|summary|files_changed|tests_run|unverified'
+        @($schema.properties.status.enum) -join '|' | Should -Be 'done|blocked|failed'
+        $schema.properties.tests_run.items.properties.exit_code.type | Should -Be 'integer'
+    }
+    It 'accepts a read-only Codex result and sums measured usage' {
+        Mock Invoke-AosProcess -ModuleName aos {
+            Write-TestFile $StdoutFile "{`"type`":`"thread.started`",`"thread_id`":`"thread-1`"}`n{`"type`":`"item.completed`",`"item`":{`"type`":`"agent_message`",`"text`":`"done`"}}`n{`"type`":`"turn.completed`",`"usage`":{`"input_tokens`":12,`"cached_input_tokens`":4,`"output_tokens`":3}}"
+            $result = Join-Path (Split-Path $StdoutFile -Parent) 'result.json'
+            Write-TestFile $result '{"status":"done","summary":"done","files_changed":[],"tests_run":[],"unverified":[]}'
+            @{ Code=0; TimedOut=$false; KillFailed=$false }
+        }
+        $receipt = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate -Vendor 'codex' -TaskFile $T -Repo $R }
+        $receipt.accepted | Should -BeTrue
+        $receipt.outcome | Should -Be 'accepted'
+        $receipt.thread_id | Should -Be 'thread-1'
+        $receipt.usage.input | Should -Be 12
+        $receipt.usage.cached | Should -Be 4
+        $receipt.usage.output | Should -Be 3
+        $global:LASTEXITCODE | Should -Be 0
+        Test-Path (Join-Path $env:AOS_COORD "delegations\$($receipt.id)\receipt.json") | Should -BeTrue
+        @(InModuleScope aos { Get-AosLedger } | Where-Object type -eq 'delegate').Count | Should -Be 1
+    }
+    It 'fails a quota error event even with exit zero' {
+        Mock Invoke-AosProcess -ModuleName aos {
+            Write-TestFile $StdoutFile "{`"type`":`"error`",`"message`":`"You've hit your usage limit`"}`n{`"type`":`"turn.failed`",`"error`":{`"message`":`"usage limit`"}}"
+            @{ Code=0; TimedOut=$false; KillFailed=$false }
+        }
+        $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate -Vendor 'codex' -TaskFile $T -Repo $R }
+        $r.accepted | Should -BeFalse
+        $r.outcome | Should -Be 'failed'
+        $r.error.category | Should -Be 'quota'
+        $global:LASTEXITCODE | Should -Be 1
+    }
+    It 'refuses write mode without verify before launching a process' {
+        if (InModuleScope aos { Get-Command Invoke-AosProcess -ErrorAction SilentlyContinue }) { Mock Invoke-AosProcess -ModuleName aos { throw 'unexpected process' } }
+        $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate -Vendor 'codex' -TaskFile $T -Repo $R -Write }
+        $r.accepted | Should -BeFalse
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
+    }
+    It 'keeps the claim and avoids a commit if timeout killing fails' {
+        if (InModuleScope aos { Get-Command Invoke-AosProcess -ErrorAction SilentlyContinue }) { Mock Invoke-AosProcess -ModuleName aos { @{ Code=1; TimedOut=$true; KillFailed=$true } } }
+        $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate -Vendor 'codex' -TaskFile $T -Repo $R -Write -Verify 'cmd.exe /c exit 0' }
+        $r.outcome | Should -Be 'needs-inspection'
+        $r.commit | Should -BeNullOrEmpty
+        @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 1
+        $global:LASTEXITCODE | Should -Be 1
+    }
+    It 'fails Claude is_error even when subtype says success and exit is zero' {
+        Mock Invoke-AosProcess -ModuleName aos {
+            Write-TestFile $StdoutFile '{"is_error":true,"subtype":"success","session_id":"claude-1","structured_output":{"status":"done","summary":"done","files_changed":[],"tests_run":[],"unverified":[]}}'
+            @{ Code=0; TimedOut=$false; KillFailed=$false }
+        }
+        $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate -Vendor 'claude' -TaskFile $T -Repo $R }
+        $r.outcome | Should -Be 'failed'
+        $r.accepted | Should -BeFalse
+    }
+    It 'reports preflight failure without leaving a worktree branch' {
+        if (InModuleScope aos { Get-Command Test-AosDelegatePreflight -ErrorAction SilentlyContinue }) { Mock Test-AosDelegatePreflight -ModuleName aos { @{ Ok=$false; Model=''; Reasons=@('missing CLI') } } }
+        if (InModuleScope aos { Get-Command Invoke-AosProcess -ErrorAction SilentlyContinue }) { Mock Invoke-AosProcess -ModuleName aos { throw 'unexpected delegate process' } }
+        $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate -Vendor 'codex' -TaskFile $T -Repo $R -Write -Verify 'cmd.exe /c exit 0' }
+        $r.outcome | Should -Be 'preflight-failed'
+        @(& git -C $repo branch --list 'delegate/*').Count | Should -Be 0
+        @(& git -C $repo worktree list).Count | Should -Be 1
     }
 }
 }
