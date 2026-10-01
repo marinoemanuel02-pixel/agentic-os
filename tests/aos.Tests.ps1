@@ -967,9 +967,10 @@ Describe 'Round 3: secret name validation' {
 Describe 'Round 3: DPAPI secret files' {
     BeforeAll {
         $dpapiAvailable = $true
+        # Probe with the same mechanism aos uses (ConvertFrom-SecureString). [ProtectedData] is not
+        # loaded in Windows PowerShell 5.1, which silently skipped all of these tests there.
         try {
-            $probe = [byte[]](1, 2, 3)
-            [void][System.Security.Cryptography.ProtectedData]::Protect($probe, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+            $null = ConvertFrom-SecureString -SecureString (ConvertTo-SecureString 'probe' -AsPlainText -Force) -ErrorAction Stop
         } catch { $dpapiAvailable = $false }
     }
     BeforeEach {
