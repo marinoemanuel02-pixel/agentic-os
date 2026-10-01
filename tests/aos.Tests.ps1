@@ -3031,8 +3031,9 @@ Describe 'Write guard' {
             $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'codex' -Event 'pre-edit' -InputJson $J }
             $r.Exit | Should -Be 0
             $env:AOS_DELEGATE_ID = $null
+            # No fallback (Codex review of pass A, finding 1): another same-vendor session is blocked.
             $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'codex' -Event 'pre-edit' -InputJson $J }
-            $r.Exit | Should -Be 0
+            $r.Exit | Should -Be 2
             $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson $J }
             $r.Exit | Should -Be 2
         } finally { $env:AOS_DELEGATE_ID = $saved }
@@ -3362,6 +3363,116 @@ Describe 'aos delegate' {
             Test-Path -LiteralPath $r.workdir | Should -BeFalse
             @(& git -C $repo worktree list).Count | Should -Be 1
         }
+    }
+}
+
+# Tests for Codex's review of pass A (delegation 20261001-145522). Written by Claude because Codex hit
+# its usage limit before it could write them (same-vendor tests: weaker than split authorship).
+Describe 'Pass A review fixes' {
+    BeforeEach {
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        $repo = New-TestFolder (Join-Path $caseRoot 'repo space')
+        & git -C $repo init -q
+        Write-TestFile (Join-Path $repo 'tracked.txt') 'base'
+        & git -C $repo add tracked.txt
+        & git -C $repo -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm initial
+        $task = Join-Path $caseRoot 'task file.md'
+        Write-TestFile $task 'Write a fixture file'
+    }
+    It 'fails a delegate whose process exits nonzero despite a done result (finding 2)' {
+        Mock Test-AosDelegatePreflight -ModuleName aos { @{ Ok=$true; Model='fixture-model'; Reasons=@() } }
+        Mock Invoke-AosProcess -ModuleName aos {
+            Write-TestFile $StdoutFile "{`"type`":`"turn.completed`",`"usage`":{`"input_tokens`":1,`"cached_input_tokens`":0,`"output_tokens`":1}}"
+            Write-TestFile (Join-Path (Split-Path $StdoutFile -Parent) 'result.json') '{"status":"done","summary":"done","files_changed":[],"tests_run":[],"unverified":[]}'
+            @{ Code=1; TimedOut=$false; KillFailed=$false }
+        }
+        $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate -Vendor 'codex' -TaskFile $T -Repo $R }
+        $r.accepted | Should -BeFalse
+        $r.outcome | Should -Be 'failed'
+        $global:LASTEXITCODE | Should -Be 1
+    }
+    It 'keeps the claim through verify and rejects a verify that changes the tree (finding 3)' {
+        Mock Test-AosDelegatePreflight -ModuleName aos { @{ Ok=$true; Model='fixture-model'; Reasons=@() } }
+        $global:aosTestClaimsDuringVerify = -1
+        Mock Invoke-AosProcess -ModuleName aos {
+            if ($Exe -eq 'cmd.exe') {
+                $global:aosTestClaimsDuringVerify = @(& (Get-Module aos) { Get-AosClaims }).Count
+                Write-TestFile (Join-Path $WorkingDirectory 'tracked.txt') 'rewritten by verify'
+                return @{ Code=0; TimedOut=$false; KillFailed=$false }
+            }
+            Write-TestFile (Join-Path $WorkingDirectory 'new.txt') 'delegate edit'
+            Write-TestFile $StdoutFile "{`"type`":`"turn.completed`",`"usage`":{`"input_tokens`":1,`"cached_input_tokens`":0,`"output_tokens`":1}}"
+            Write-TestFile (Join-Path (Split-Path $StdoutFile -Parent) 'result.json') '{"status":"done","summary":"edit","files_changed":["new.txt"],"tests_run":[],"unverified":[]}'
+            @{ Code=0; TimedOut=$false; KillFailed=$false }
+        }
+        $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate -Vendor 'codex' -TaskFile $T -Repo $R -Write -Verify 'echo ok' }
+        $global:aosTestClaimsDuringVerify | Should -Be 1
+        $r['verify_changed_tree'] | Should -BeTrue
+        $r.outcome | Should -Be 'rejected'
+        @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 0
+    }
+    It 'refuses to clean a worktree with uncommitted partial edits unless forced (finding 4)' {
+        Mock Test-AosDelegatePreflight -ModuleName aos { @{ Ok=$true; Model='fixture-model'; Reasons=@() } }
+        Mock Invoke-AosProcess -ModuleName aos {
+            Write-TestFile (Join-Path $WorkingDirectory 'partial.txt') 'half done'
+            @{ Code=-1; TimedOut=$true; KillFailed=$false }
+        }
+        $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate -Vendor 'codex' -TaskFile $T -Repo $R -Write -Verify 'echo ok' }
+        $r.outcome | Should -Be 'timed-out'
+        Test-Path (Join-Path $r.workdir 'partial.txt') | Should -BeTrue
+        InModuleScope aos -Parameters @{ I=$r.id } { param($I) Remove-AosDelegation -Id $I }
+        $global:LASTEXITCODE | Should -Be 1
+        Test-Path (Join-Path $r.workdir 'partial.txt') | Should -BeTrue
+        InModuleScope aos -Parameters @{ I=$r.id } { param($I) Remove-AosDelegation -Id $I -Force }
+        $global:LASTEXITCODE | Should -Be 0
+        Test-Path $r.workdir | Should -BeFalse
+    }
+    It 'unlinks junctions inside a worktree before removing it, leaving their targets intact' {
+        Mock Test-AosDelegatePreflight -ModuleName aos { @{ Ok=$true; Model='fixture-model'; Reasons=@() } }
+        $shared = New-TestFolder (Join-Path $caseRoot 'shared deps')
+        Write-TestFile (Join-Path $shared 'keep.txt') 'shared'
+        Mock Invoke-AosProcess -ModuleName aos {
+            if ($Exe -eq 'cmd.exe') { return @{ Code=0; TimedOut=$false; KillFailed=$false } }
+            Write-TestFile (Join-Path $WorkingDirectory 'new.txt') 'x'
+            Write-TestFile $StdoutFile "{`"type`":`"turn.completed`",`"usage`":{`"input_tokens`":1,`"cached_input_tokens`":0,`"output_tokens`":1}}"
+            Write-TestFile (Join-Path (Split-Path $StdoutFile -Parent) 'result.json') '{"status":"done","summary":"x","files_changed":[],"tests_run":[],"unverified":[]}'
+            @{ Code=0; TimedOut=$false; KillFailed=$false }
+        }
+        $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate -Vendor 'codex' -TaskFile $T -Repo $R -Write -Verify 'echo ok' }
+        New-Item -ItemType Junction -Path (Join-Path $r.workdir 'deps') -Target $shared | Out-Null
+        InModuleScope aos -Parameters @{ I=$r.id } { param($I) Remove-AosDelegation -Id $I -Force }
+        Test-Path $r.workdir | Should -BeFalse
+        Test-Path (Join-Path $shared 'keep.txt') | Should -BeTrue
+    }
+    It 'gives two delegations started in the same second different folders (finding 7)' {
+        Mock Test-AosDelegatePreflight -ModuleName aos { @{ Ok=$true; Model='fixture-model'; Reasons=@() } }
+        Mock Get-Date -ModuleName aos { '20261001-120000' }
+        Mock Invoke-AosProcess -ModuleName aos {
+            Write-TestFile $StdoutFile "{`"type`":`"turn.completed`",`"usage`":{`"input_tokens`":1,`"cached_input_tokens`":0,`"output_tokens`":1}}"
+            Write-TestFile (Join-Path (Split-Path $StdoutFile -Parent) 'result.json') '{"status":"done","summary":"x","files_changed":[],"tests_run":[],"unverified":[]}'
+            @{ Code=0; TimedOut=$false; KillFailed=$false }
+        }
+        $a = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate -Vendor 'codex' -TaskFile $T -Repo $R }
+        $b = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate -Vendor 'codex' -TaskFile $T -Repo $R }
+        $a.id | Should -Not -Be $b.id
+        Test-Path (Join-Path $env:AOS_COORD "delegations\$($a.id)\receipt.json") | Should -BeTrue
+        Test-Path (Join-Path $env:AOS_COORD "delegations\$($b.id)\receipt.json") | Should -BeTrue
+    }
+    It 'passes an explicit model to the model check (finding 6)' {
+        Mock Test-AosCommand -ModuleName aos { $true }
+        Mock Resolve-AosDelegateModel -ModuleName aos { [pscustomobject]@{ Ok=$true; Model=$Model; Category='ok'; Reason='' } }
+        $r = InModuleScope aos -Parameters @{ W=$repo } { param($W) Test-AosDelegatePreflight -Vendor 'codex' -Model 'explicit-m' -WorkDir $W }
+        Should -Invoke Resolve-AosDelegateModel -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Model -eq 'explicit-m' }
+        $r.Model | Should -Be 'explicit-m'
+    }
+    It 'times out a child that never reads a large stdin (finding 5)' {
+        $big = Join-Path $caseRoot 'big stdin.txt'
+        [IO.File]::WriteAllText($big, ('x' * 2MB))
+        $sw = [Diagnostics.Stopwatch]::StartNew()
+        $r = InModuleScope aos -Parameters @{ F=$big } { param($F) Invoke-AosProcess -Exe 'powershell.exe' -Arguments @('-NoProfile', '-Command', 'Start-Sleep 30') -StdinFile $F -TimeoutSeconds 2 }
+        $sw.Stop()
+        $r.TimedOut | Should -BeTrue
+        $sw.Elapsed.TotalSeconds | Should -BeLessThan 15
     }
 }
 }

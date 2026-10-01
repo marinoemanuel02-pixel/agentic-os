@@ -2232,19 +2232,24 @@ function Start-AosProcessCore {
     [void]$p.Start()
     $outTask = $p.StandardOutput.ReadToEndAsync()
     $errTask = $p.StandardError.ReadToEndAsync()
+    $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(1, $TimeoutSeconds))
+    $stdinStuck = $false
     try {
         if ($StdinFile) {
-            # Raw UTF-8 bytes: Windows PowerShell 5.1 cannot set the stdin encoding.
+            # Raw UTF-8 bytes (Windows PowerShell 5.1 cannot set the stdin encoding), written asynchronously
+            # inside the deadline: a child that never reads stdin must not block us past the timeout.
             $bytes = [System.IO.File]::ReadAllBytes($StdinFile)
-            $p.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length)
-            $p.StandardInput.BaseStream.Flush()
+            $write = $p.StandardInput.BaseStream.WriteAsync($bytes, 0, $bytes.Length)
+            $left = [int][Math]::Max(1, ($deadline - [DateTime]::UtcNow).TotalMilliseconds)
+            if ($write.Wait($left)) { $p.StandardInput.BaseStream.Flush() } else { $stdinStuck = $true }
         }
     }
     catch { }
-    try { $p.StandardInput.Close() } catch { }
+    if (-not $stdinStuck) { try { $p.StandardInput.Close() } catch { } }
     $timedOut = $false
     $killFailed = $false
-    if (-not $p.WaitForExit([Math]::Max(1, $TimeoutSeconds) * 1000)) {
+    $remaining = [int][Math]::Max(0, ($deadline - [DateTime]::UtcNow).TotalMilliseconds)
+    if ($stdinStuck -or -not $p.WaitForExit($remaining)) {
         $timedOut = $true
         $null = cmd /c "taskkill /T /F /PID $($p.Id) 2>&1"
         if (-not $p.WaitForExit(10000)) { $killFailed = $true }
@@ -2477,9 +2482,6 @@ function Invoke-AosGuard([string]$Agent, [string]$Event, [string]$InputJson) {
                     $r = Invoke-AosClaim -Path $co -Agent $Agent -Session $session -TtlMinutes 60 -Note 'auto (first edit)' -KeepNote
                     if (-not $r.Ok) {
                         if ($null -eq $r.Holder) { throw $r.Message }
-                        # Fallback when the vendor does not pass AOS_DELEGATE_ID to hooks: the wrapper's claim on a
-                        # delegate worktree admits the same agent.
-                        if ($r.Holder['agent'] -eq $Agent -and ([string]$r.Holder['note']).StartsWith('aos delegate ')) { continue }
                         $res.Exit = 2
                         $res.Stderr = 'aos: ' + (Format-AosClaimHolder $r.Holder) + ' Do not edit here; coordinate (aos who) or use a worktree.'
                         break
@@ -2758,10 +2760,11 @@ function Test-AosDelegatePreflight([string]$Vendor, [string]$Model, [string[]]$N
     $exe = 'codex'
     if ($Vendor -eq 'claude') { $exe = 'claude' }
     if (-not (Test-AosCommand $exe)) { $reasons.Add("$exe is not installed") }
-    $model = ''
+    # Not $model: PowerShell names are case-insensitive, and that would overwrite the -Model parameter.
+    $resolvedModel = ''
     if ($reasons.Count -eq 0) {
         $m = Resolve-AosDelegateModel -Vendor $Vendor -Model $Model
-        if ($m.Ok) { $model = $m.Model } else { $reasons.Add($m.Reason) }
+        if ($m.Ok) { $resolvedModel = $m.Model } else { $reasons.Add($m.Reason) }
     }
     if ($reasons.Count -eq 0) {
         $sandbox = @('sandbox')
@@ -2790,7 +2793,7 @@ function Test-AosDelegatePreflight([string]$Vendor, [string]$Model, [string[]]$N
             Remove-Item -LiteralPath $log -Force -ErrorAction SilentlyContinue
         }
     }
-    return [pscustomobject]@{ Ok = ($reasons.Count -eq 0); Model = $model; Reasons = $reasons.ToArray() }
+    return [pscustomobject]@{ Ok = ($reasons.Count -eq 0); Model = $resolvedModel; Reasons = $reasons.ToArray() }
 }
 
 function Get-AosDelegateSlug([string]$Text) {
@@ -2850,9 +2853,19 @@ function Invoke-AosDelegate {
     $repoDir = $Repo
     if (-not $repoDir) { $repoDir = (Get-Location).ProviderPath }
     $repoDir = Get-AosCheckout $repoDir
-    $id = (Get-Date -Format 'yyyyMMdd-HHmmss') + "-$Vendor-" + (Get-AosDelegateSlug $taskText)
-    $dir = Join-Path (Join-Path (Get-AosCoordDir) 'delegations') $id
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $delegations = Join-Path (Get-AosCoordDir) 'delegations'
+    if (-not (Test-Path -LiteralPath $delegations)) { New-Item -ItemType Directory -Force -Path $delegations | Out-Null }
+    $id = $null
+    $dir = $null
+    for ($try = 0; $try -lt 20 -and -not $id; $try++) {
+        # Seconds alone can collide (same vendor, same first line): add a random suffix, create exclusively.
+        $candidate = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 4) + "-$Vendor-" + (Get-AosDelegateSlug $taskText)
+        $path = Join-Path $delegations $candidate
+        if (Test-Path -LiteralPath $path) { continue }
+        try { [void][System.IO.Directory]::CreateDirectory($path) } catch { continue }
+        if (@(Get-ChildItem -LiteralPath $path -Force).Count -eq 0) { $id = $candidate; $dir = $path }
+    }
+    if (-not $id) { return (& $refuse 'could not create a unique delegation folder') }
     Write-AosText -Path (Join-Path $dir 'task.md') -Text $taskText
     $started = [DateTime]::UtcNow
     $receipt = [ordered]@{ id = $id; vendor = $Vendor; model = ''; mode = 'read'; repo = $repoDir; workdir = $repoDir; branch = ''; base = ''; commit = ''
@@ -2962,6 +2975,9 @@ function Invoke-AosDelegate {
         elseif (-not $run.TimedOut) { $receipt.error = [ordered]@{ category = 'other'; message = "no JSON from claude (exit $($run.Code))" } }
     }
     $receipt.exit_code = $run.Code
+    if ($null -eq $receipt.error -and -not $run.TimedOut -and $run.Code -ne 0) {
+        $receipt.error = [ordered]@{ category = 'other'; message = "delegate process exited with code $($run.Code)" }
+    }
     $receipt.timed_out = [bool]$run.TimedOut
     $receipt.kill_failed = [bool]$run.KillFailed
     if ($result -is [System.Collections.IDictionary]) {
@@ -2988,18 +3004,29 @@ function Invoke-AosDelegate {
             $cm = Invoke-AosGit -Dir $workdir -Arguments @('commit', '-q', '-m', "delegate ${id}: $summary")
             if ($cm.Code -eq 0) { $receipt.commit = (Invoke-AosGit -Dir $workdir -Arguments @('rev-parse', 'HEAD')).Out }
         }
-        if ($claimed) { $null = Invoke-AosRelease -Path $workdir -Agent $Vendor -Session $id }
     }
     if ($Verify -and -not $run.TimedOut) {
+        # Still under the delegate's claim, so no other session edits what is being verified.
         $vlog = Join-Path $dir 'verify.log'
         $vr = Invoke-AosProcess -Exe 'cmd.exe' -ArgumentString ('/d /s /c "' + $Verify + '"') -WorkingDirectory $workdir -StdoutFile $vlog -StderrFile (Join-Path $dir 'verify.err.log') -TimeoutSeconds 1800
         $receipt.verify = [ordered]@{ command = $Verify; exit_code = $vr.Code }
+        if ($Write) {
+            # The verified tree must be the recorded commit: a verify step that rewrites files proves nothing.
+            $after = Invoke-AosGit -Dir $workdir -Arguments @('status', '--porcelain')
+            $head = (Invoke-AosGit -Dir $workdir -Arguments @('rev-parse', 'HEAD')).Out
+            $receipt['verify_changed_tree'] = ([bool]$after.Out -or ($receipt.commit -and $head -ne $receipt.commit))
+        }
     }
+    if ($Write -and $claimed) { $null = Invoke-AosRelease -Path $workdir -Agent $Vendor -Session $id }
     $outcome = 'rejected'
     if ($run.TimedOut) { $outcome = 'timed-out' }
     elseif ($null -ne $receipt.error) { $outcome = 'failed' }
     else {
         $ok = ($null -ne $receipt.delegate -and $receipt.delegate.status -eq 'done')
+        # The process must end cleanly too; for Codex, a completed turn is required evidence.
+        if ($run.Code -ne 0) { $ok = $false }
+        if ($Vendor -eq 'codex' -and -not $ev.Completed) { $ok = $false }
+        if ($receipt.Contains('verify_changed_tree') -and $receipt['verify_changed_tree']) { $ok = $false }
         if ($Verify -and ($null -eq $receipt.verify -or $receipt.verify.exit_code -ne 0)) { $ok = $false }
         if ($Write -and (-not $receipt.commit -or @($receipt.outside_allow).Count -gt 0)) { $ok = $false }
         if ($ok) { $outcome = 'accepted' }
@@ -3033,10 +3060,35 @@ function Remove-AosDelegation([string]$Id, [switch]$Force) {
     $repo = [string]$r['repo']
     $merged = (Invoke-AosGit -Dir $repo -Arguments @('branch', '--merged', 'HEAD', '--list', $r['branch'])).Out
     if (-not $merged -and -not $Force) { Write-AosWarn "$($r['branch']) is not merged into the current branch of $repo; use --force to drop it"; $global:LASTEXITCODE = 1; return }
-    $null = Invoke-AosGit -Dir $repo -Arguments @('worktree', 'remove', '--force', $r['workdir'])
-    $null = Invoke-AosGit -Dir $repo -Arguments @('branch', '-D', $r['branch'])
+    $workdir = [string]$r['workdir']
+    if ((Test-Path -LiteralPath $workdir) -and -not $Force) {
+        # A timed-out delegate leaves uncommitted partial edits on a branch that still points at base.
+        $dirty = (Invoke-AosGit -Dir $workdir -Arguments @('status', '--porcelain')).Out
+        if ($dirty) { Write-AosWarn "$workdir has uncommitted changes; inspect them, or use --force to drop them"; $global:LASTEXITCODE = 1; return }
+    }
+    # --setup may have linked shared folders (node_modules) into the worktree: unlink them first, so a
+    # recursive removal can never reach the shared target.
+    if (Test-Path -LiteralPath $workdir) {
+        $pending = New-Object System.Collections.Stack
+        $pending.Push(@{ Path = $workdir; Depth = 0 })
+        while ($pending.Count -gt 0) {
+            $node = $pending.Pop()
+            foreach ($d in @(Get-ChildItem -LiteralPath $node.Path -Directory -Force -ErrorAction SilentlyContinue)) {
+                if ($d.Name -eq '.git') { continue }
+                if ($d.LinkType) { [System.IO.Directory]::Delete($d.FullName, $false); continue }
+                if ($node.Depth -lt 3) { $pending.Push(@{ Path = $d.FullName; Depth = $node.Depth + 1 }) }
+            }
+        }
+    }
+    $removeArgs = @('worktree', 'remove')
+    if ($Force) { $removeArgs += '--force' }
+    $wr = Invoke-AosGit -Dir $repo -Arguments ($removeArgs + @($workdir))
+    if ($wr.Code -ne 0 -and (Test-Path -LiteralPath $workdir)) { Write-AosWarn "could not remove ${workdir}: $($wr.Err)"; $global:LASTEXITCODE = 1; return }
+    $br = Invoke-AosGit -Dir $repo -Arguments @('branch', '-D', $r['branch'])
+    if ($br.Code -ne 0) { Write-AosWarn "removed $workdir, but not $($r['branch']): $($br.Err)"; $global:LASTEXITCODE = 1; return }
     Add-AosLedgerEvent ([ordered]@{ type = 'delegate-clean'; id = $Id; branch = $r['branch'] })
-    Write-AosOk "removed $($r['workdir']) and $($r['branch'])"
+    Write-AosOk "removed $workdir and $($r['branch'])"
+    $global:LASTEXITCODE = 0
 }
 
 #endregion
