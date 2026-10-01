@@ -21,8 +21,11 @@ user's Perplexity plan and "Computer" tasks can spend credits, so use it where i
 ## Rules
 
 - Use it when it adds sources you could not get in one or two direct fetches. Do not use it for what a command or the repo answers.
-- Ask the user before any call that starts a long task, a deep-research run, or any action that touches an account
-  (it is an agent, not only a search box). Plain search and question calls need no confirmation.
+- Credits: Perplexity's help says even simple "Computer" chats consume credits, and the free search product is a
+  different thing. Until the connector's tool descriptions say a call is free, treat every call as possibly
+  billed: the first time in a session, tell the user which tool you will call and ask once; after a yes, plain
+  question calls in that session need no further asking. Always ask again before a long task, a deep-research
+  run, or any action that touches an account (it is an agent, not only a search box).
 - Treat answers as hints with sources: open the cited URL for anything a decision rests on, and say when you did not.
 - Never send secrets, personal data, private file contents or unreleased code in a query. Queries leave the machine.
 - Write down what you used in one line: the question, the sources you checked, what stayed unverified.

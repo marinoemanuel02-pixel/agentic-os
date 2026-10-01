@@ -1776,6 +1776,26 @@ Describe 'MCP placeholders and nar registration' {
         Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'codex mcp *' }
     }
 
+    It 'names the agents a manifest entry targets: both by default, the listed ones otherwise' {
+        InModuleScope aos {
+            @(Get-AosMcpTargets ([ordered]@{ transport = 'http' })) -join ',' | Should -BeExactly 'claude,codex'
+            @(Get-AosMcpTargets ([ordered]@{ agents = @('claude') })) -join ',' | Should -BeExactly 'claude'
+            @(Get-AosMcpTargets ([ordered]@{ agents = @('codex') })) -join ',' | Should -BeExactly 'codex'
+        }
+    }
+
+    It 'does not warn in aos status that a Claude-only server is missing from Codex' {
+        Mock Get-AosMcpManifest -ModuleName aos {
+            [ordered]@{ servers = [ordered]@{ research = [ordered]@{
+                transport = 'http'; url = 'https://example.test/mcp'; agents = @('claude') } } }
+        }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = 'research: https://example.test/mcp' } } -ParameterFilter { $CommandLine -eq 'claude mcp list' }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = '' } } -ParameterFilter { $CommandLine -eq 'codex mcp list' }
+        Mock Write-AosWarn -ModuleName aos { }
+        InModuleScope aos { Show-AosMcpStatus }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 0 -Exactly -ParameterFilter { $Text -match 'codex: research' }
+    }
+
     It 'registers a server with no agents list in both agents' {
         Mock Get-AosMcpManifest -ModuleName aos {
             [ordered]@{ servers = [ordered]@{ both = [ordered]@{ transport = 'http'; url = 'https://example.test/both' } } }

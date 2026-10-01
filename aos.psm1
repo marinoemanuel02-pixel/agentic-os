@@ -567,6 +567,13 @@ function Add-AosMcpServer([string]$Agent, [string]$Name, [bool]$Http, [string]$U
     return ($LASTEXITCODE -eq 0)
 }
 
+function Get-AosMcpTargets($Server) {
+    # Optional "agents": ["claude"] keeps a server out of the other agent (default: both).
+    $targets = @('claude', 'codex')
+    if ($Server.Contains('agents')) { $targets = @($targets | Where-Object { @($Server['agents']) -contains $_ }) }
+    return $targets
+}
+
 function Sync-AosMcp([switch]$DryRun) {
     # Registered = present AND pointing where the manifest says; a changed URL or command is re-added.
     $manifest = Get-AosMcpManifest
@@ -583,10 +590,7 @@ function Sync-AosMcp([switch]$DryRun) {
             $cmd = @(Expand-AosPlaceholders ([string]$s['command'])) + @(@($s['args']) | Where-Object { $null -ne $_ } | ForEach-Object { Expand-AosPlaceholders ([string]$_) })
             $needles = $cmd
         }
-        # Optional "agents": ["claude"] keeps a server out of the other agent (default: both).
-        $targets = @('claude', 'codex')
-        if ($s.Contains('agents')) { $targets = @($targets | Where-Object { @($s['agents']) -contains $_ }) }
-        foreach ($agent in $targets) {
+        foreach ($agent in @(Get-AosMcpTargets $s)) {
             if (-not (Test-AosCommand $agent)) { Write-AosWarn "$agent missing; $name not registered there"; continue }
             $getCmd = "claude mcp get $name"
             if ($agent -eq 'codex') { $getCmd = "codex mcp get $name --json" }
@@ -602,6 +606,26 @@ function Sync-AosMcp([switch]$DryRun) {
             if (Add-AosMcpServer -Agent $agent -Name $name -Http $isHttp -Url ([string]$s['url']) -Command $cmd) { Write-AosOk "${agent}: added $name" }
             else { Write-AosWarn "${agent}: adding $name failed" }
         }
+    }
+}
+
+function Show-AosMcpStatus {
+    $manifest = Get-AosMcpManifest
+    $claudeList = ''; $codexList = ''
+    $haveCodex = Test-AosCommand codex
+    if (Test-AosCommand claude) { $claudeList = (Invoke-AosCapture 'claude mcp list').Text }
+    if ($haveCodex) { $codexList = (Invoke-AosCapture 'codex mcp list').Text }
+    else { Write-AosWarn 'codex is not on PATH here: its MCP and plugin checks are skipped' }
+    foreach ($name in @($manifest['servers'].Keys)) {
+        $s = $manifest['servers'][$name]
+        if ($s.Contains('requires') -and -not (Test-Path -LiteralPath (Expand-AosPlaceholders ([string]$s['requires'])))) { Write-AosInfo "${name}: not set up yet"; continue }
+        $pattern = '(?im)^\W*' + [regex]::Escape($name) + '\b'
+        $targets = @(Get-AosMcpTargets $s)
+        if ($targets -contains 'claude') {
+            if ($claudeList -match $pattern) { Write-AosOk "claude: $name" } else { Write-AosWarn "claude: $name not registered (aos sync)" }
+        }
+        if (-not $haveCodex -or $targets -notcontains 'codex') { continue }
+        if ($codexList -match $pattern) { Write-AosOk "codex: $name" } else { Write-AosWarn "codex: $name not registered (aos sync)" }
     }
 }
 
@@ -1574,21 +1598,7 @@ function Get-AosStatus {
         else { Write-AosWarn "skill folder without SKILL.md: $($d.Name)" }
     }
 
-    Write-AosStep 'MCP servers'
-    $manifest = Get-AosMcpManifest
-    $claudeList = ''; $codexList = ''
-    $haveCodex = Test-AosCommand codex
-    if (Test-AosCommand claude) { $claudeList = (Invoke-AosCapture 'claude mcp list').Text }
-    if ($haveCodex) { $codexList = (Invoke-AosCapture 'codex mcp list').Text }
-    else { Write-AosWarn 'codex is not on PATH here: its MCP and plugin checks are skipped' }
-    foreach ($name in @($manifest['servers'].Keys)) {
-        $s = $manifest['servers'][$name]
-        if ($s.Contains('requires') -and -not (Test-Path -LiteralPath (Expand-AosPlaceholders ([string]$s['requires'])))) { Write-AosInfo "${name}: not set up yet"; continue }
-        $pattern = '(?im)^\W*' + [regex]::Escape($name) + '\b'
-        if ($claudeList -match $pattern) { Write-AosOk "claude: $name" } else { Write-AosWarn "claude: $name not registered (aos sync)" }
-        if (-not $haveCodex) { continue }
-        if ($codexList -match $pattern) { Write-AosOk "codex: $name" } else { Write-AosWarn "codex: $name not registered (aos sync)" }
-    }
+    Show-AosMcpStatus
 
     Write-AosStep 'Cross-vendor bridges'
     $enabled = Get-AosClaudePlugins
