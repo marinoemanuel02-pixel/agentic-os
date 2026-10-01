@@ -40,8 +40,11 @@ A link must be an `http://` or `https://` URL; write it JSON-quoted (escape `"` 
    folders are the only allowed destinations.
 3. For each item propose ONE destination (vault and folder). Read notes; for photos and other files use
    the name and type. If the `nar_choose` tool is available, call it with a one-line summary of the item
-   as the question and the candidate folders as the options; use its pick unless it is clearly wrong.
-   Otherwise judge. If nothing fits, mark the item "ask".
+   as the question and the candidate folders plus a last option `none: ask the user` as the options.
+   Its pick is only a hint: it sees folder names, not contents, and a shared word (e.g. "ai") can make it
+   confidently wrong. Before proposing a folder, list a few of its file names and check its topic fits
+   the item. A photo, video or other file with no text to read stays "ask" unless its name clearly
+   belongs to that topic. If nothing fits, mark the item "ask": the inbox is a fine place for it to stay.
 4. Show the whole proposal as a numbered list: `item -> vault/folder (reason in a few words)`. Then STOP.
    Do nothing until the user answers: all, some numbers, or changed destinations. A changed destination
    must be one of the allowed folders from step 2; refuse anything else (another path, `..`, a drive).

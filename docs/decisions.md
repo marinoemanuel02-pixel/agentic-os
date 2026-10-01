@@ -12,8 +12,12 @@ don't rewrite the old one: the record of what was rejected is the part that ages
 - aos creates only the inbox folder; a missing place is warned about, never recreated.
 - The panel's file name is built on the PC; the phone never sends a path.
 - The skill asks the local model (`nar_choose`) for a destination per item and always shows the whole
-  proposal before moving anything. First live run (6 items, read-only): it sent every AI-video test to
-  `tala/Test ai` (confidence 0.34-0.76) and kept the acceptance note in the Inbox (0.99).
+  proposal before moving anything. First live run (6 items, read-only): it sent five AI-video test files
+  to `tala/Test ai` (confidence 0.34-0.76), which the user rejected as unrelated, and kept the acceptance
+  note in the Inbox (0.99). Cause: the model sees only folder names and matched the word "ai". Adding a
+  `none: ask the user` option did not help (a re-run picked `Test ai` at 0.94), so a confidence threshold
+  was rejected. The skill now treats the pick as a hint: the agent checks the folder's files first, and
+  a file with no text to read stays in the Inbox ("ask") unless its name clearly fits.
 
 ## 2026-09-30 - Make the local filesystem boundary explicit
 
