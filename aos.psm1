@@ -2979,7 +2979,8 @@ function Invoke-AosDelegate {
         $changed = @(Get-AosPorcelainPaths $st.Out)
         $receipt.changed = $changed
         if (@($Allow | Where-Object { $_ }).Count -gt 0) { $receipt.outside_allow = @($changed | Where-Object { -not (Test-AosAllowed $_ $Allow) }) }
-        if ($changed.Count -gt 0) {
+        # A timed-out delegate's edits are partial: leave them uncommitted in the worktree for inspection.
+        if ($changed.Count -gt 0 -and -not $run.TimedOut) {
             $summary = 'changes'
             if ($receipt.delegate -and $receipt.delegate.summary) { $summary = (($receipt.delegate.summary -split "`r?`n")[0]) }
             if ($summary.Length -gt 72) { $summary = $summary.Substring(0, 72) }
