@@ -39,6 +39,8 @@ Import-Module $pester.Path -Force
 $env:AOS_BACKUPS = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-test-backups-' + [guid]::NewGuid().ToString('N'))
 # Coordination state (claims, ledger, delegations) likewise never touches ~/.aos/coord.
 $env:AOS_COORD = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-test-coord-' + [guid]::NewGuid().ToString('N'))
+# And Codex's home (hooks.json, plugin cache, models cache): a brain sync under test must never write ~/.codex.
+$env:CODEX_HOME = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-test-codex-' + [guid]::NewGuid().ToString('N'))
 # Same for Pi's agent directory: a test that reaches Sync-AosPi unmocked must never touch ~/.pi/agent.
 $env:PI_CODING_AGENT_DIR = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-test-pi-' + [guid]::NewGuid().ToString('N'))
 

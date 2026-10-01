@@ -520,7 +520,14 @@ function Sync-AosClaudeSettings([switch]$DryRun) {
         }
     }
     $before = ConvertTo-Json -InputObject $current -Depth 20 -Compress
+    $hooks = $null
+    if ($overlay.Contains('hooks')) { $hooks = Expand-AosHookTree $overlay['hooks']; $overlay.Remove('hooks') }
     Merge-AosTree $current $overlay
+    if ($null -ne $hooks) {
+        # Our hooks are replaced as a unit (also when the repo moved); the user's own are kept.
+        if (-not ($current['hooks'] -is [System.Collections.IDictionary])) { $current['hooks'] = [ordered]@{} }
+        Merge-AosOwnedHooks $current['hooks'] $hooks
+    }
     $after = ConvertTo-Json -InputObject $current -Depth 20 -Compress
     if ($before -eq $after) { Write-AosOk "$target already has these settings"; return }
     if ($DryRun) { Write-AosDry "would merge config/claude/settings.json into $target"; return }
@@ -724,6 +731,12 @@ function Sync-AosBrain([switch]$DryRun) {
         -End '<!-- <<< agentic-os <<< -->' -DryRun:$DryRun
     Sync-AosCodexAgents -DryRun:$DryRun
 
+    Write-AosStep 'Codex plugin repairs (cc hooks on Windows)'
+    Repair-AosCcHooks -DryRun:$DryRun
+
+    Write-AosStep 'Coordination hooks for Codex (~\.codex\hooks.json: write guard, presence)'
+    Sync-AosCodexHooks -DryRun:$DryRun
+
     Write-AosStep 'Claude Code settings (merged into yours, never replaced)'
     Sync-AosClaudeSettings -DryRun:$DryRun
 
@@ -782,6 +795,7 @@ function Install-AosBridges([switch]$DryRun) {
         npx -y cc-plugin-codex install | Out-Host
         if ($LASTEXITCODE -eq 0) { Write-AosOk 'cc-plugin-codex installed' } else { Write-AosWarn "cc-plugin-codex install failed (exit $LASTEXITCODE)" }
     }
+    Repair-AosCcHooks -DryRun:$DryRun
 
     Write-AosStep 'Codex plugin: superpowers (from the openai-curated-remote marketplace)'
     if (@(Get-AosCodexPlugins | Where-Object { $_ -like 'superpowers@*' }).Count -gt 0) { Write-AosOk 'superpowers' }
@@ -802,12 +816,23 @@ function Get-AosRefsDir {
 
 function Get-AosProjectsDir {
     if ($env:AOS_PROJECTS) { return $env:AOS_PROJECTS }
-    return (Join-Path ([Environment]::GetFolderPath('Desktop')) '1-Projects')
+    return (Join-Path (Get-AosDesktopDir) '1-Projects')
 }
 
 function Get-AosNarVenv { return (Join-Path (Get-AosStateDir) 'venvs\nar-tools') }
 
-function Get-AosDesktopDir { return [Environment]::GetFolderPath('Desktop') }
+function Get-AosShellFolder([string]$Name) { return [Environment]::GetFolderPath($Name) }
+
+function Get-AosDesktopDir {
+    # Codex's sandbox (a restricted token) reports no Desktop shell folder at all.
+    $d = Get-AosShellFolder 'Desktop'
+    if (-not [string]::IsNullOrWhiteSpace($d)) { return $d }
+    if ($env:OneDrive) {
+        $od = Join-Path $env:OneDrive 'Desktop'
+        if (Test-Path -LiteralPath $od) { return $od }
+    }
+    return (Join-Path $HOME 'Desktop')
+}
 function Get-AosPlacesConfigPath { return (Join-Path $script:Root 'config\places.json') }
 
 function Resolve-AosPlacePath([string]$Path) {
@@ -1843,6 +1868,11 @@ aos - agentic-os control
   aos local adopt <tag>      make a model the local default, only if the latest nar eval says it is no worse
   aos nar <args>             the nar CLI from its venv in ~\.aos (long options: --option, not -o)
   aos where                  path of this repo
+  aos who [--json]           live checkout claims and the latest coordination events
+  aos claim|release [<path>] --as <agent>   hold or free a checkout (edits claim automatically via hooks)
+  aos note <text> --as <agent>              leave a message other agents see in aos who
+  aos delegate codex|claude --task <file> [--write --verify <cmd>] [--needs <cmd>] [--allow <glob>]
+                             hand a task to the other vendor; receipt in ~\.aos\coord (ls | show <id> | clean <id>)
 '@
 }
 
@@ -1869,6 +1899,12 @@ function aos {
         'remote'  { Start-AosRemote -Dir $a1 -DryRun:$DryRun }
         'local'   { if ($a1 -eq 'adopt') { Invoke-AosLocalAdopt -Tag $a2 -DryRun:$DryRun } else { Write-AosWarn 'usage: aos local adopt <ollama tag>' } }
         'nar'     { Invoke-AosNar -Arguments @($Rest) }
+        'claim'   { Invoke-AosCoordCommand -Command 'claim' -Arguments @($Rest) }
+        'release' { Invoke-AosCoordCommand -Command 'release' -Arguments @($Rest) }
+        'who'     { Invoke-AosCoordCommand -Command 'who' -Arguments @($Rest) }
+        'note'    { Invoke-AosCoordCommand -Command 'note' -Arguments @($Rest) }
+        'delegate' { Invoke-AosCoordCommand -Command 'delegate' -Arguments @($Rest) }
+        'guard'   { Invoke-AosGuardHook -Agent $a1 -Event $a2 }
         'where'   { $script:Root }
         default   { Show-AosHelp }
     }
@@ -2031,3 +2067,1035 @@ function Invoke-AosPlace([string[]]$Arguments, [switch]$DryRun) {
         default { Write-AosWarn "unknown: aos place $($args2[0])" }
     }
 }
+
+#region coordination ------------------------------------------------------------------------
+# One writer per checkout (claims), an append-only ledger and delegation receipts: plain files in
+# ~\.aos\coord, outside OneDrive. Plan: docs/superpowers/plans/2026-10-01-agent-coordination.md.
+
+function Get-AosCoordDir {
+    if ($env:AOS_COORD) { return $env:AOS_COORD }
+    return (Join-Path (Get-AosStateDir) 'coord')
+}
+
+function Get-AosWorktreesDir {
+    # Delegate worktrees. Under a redirected AOS_COORD (tests) they stay beside it, never in ~\.aos.
+    if ($env:AOS_WORKTREES) { return $env:AOS_WORKTREES }
+    if ($env:AOS_COORD) { return (Join-Path $env:AOS_COORD 'worktrees') }
+    return (Join-Path (Get-AosStateDir) 'worktrees')
+}
+
+function Get-AosCodexHome {
+    if ($env:CODEX_HOME) { return $env:CODEX_HOME }
+    return (Join-Path $HOME '.codex')
+}
+
+function Get-AosUtcStamp { return [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ') }
+
+function ConvertFrom-AosUtcStamp([string]$Text) {
+    $d = [DateTime]::MinValue
+    $styles = [System.Globalization.DateTimeStyles]::AdjustToUniversal -bor [System.Globalization.DateTimeStyles]::AssumeUniversal
+    if ([DateTime]::TryParse($Text, [System.Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$d)) { return $d }
+    return $null
+}
+
+function Read-AosSharedText([string]$Path) {
+    # Reads while another process may be appending (the ledger): share read AND write.
+    $fs = New-Object System.IO.FileStream($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    try {
+        $sr = New-Object System.IO.StreamReader($fs, $script:Utf8NoBom)
+        return $sr.ReadToEnd()
+    }
+    finally { $fs.Dispose() }
+}
+
+function Invoke-AosCoordLocked([scriptblock]$Body, [int]$TimeoutMs = 5000) {
+    # A lock FILE, not a named mutex: Local\ mutexes are per logon session, and the Paseo daemon,
+    # scheduled tasks and hooks can run elsewhere. The OS drops the lock when its process dies.
+    # Re-entrant within one process (a claim writes ledger events while holding it).
+    if ($script:AosCoordLockHeld) { return (& $Body) }
+    $aosLockDir = Get-AosCoordDir
+    if (-not (Test-Path -LiteralPath $aosLockDir)) { New-Item -ItemType Directory -Force -Path $aosLockDir | Out-Null }
+    $aosLockPath = Join-Path $aosLockDir 'coord.lock'
+    $aosLockDeadline = [DateTime]::UtcNow.AddMilliseconds($TimeoutMs)
+    $aosLockStream = $null
+    while ($null -eq $aosLockStream) {
+        try {
+            $aosLockStream = New-Object System.IO.FileStream($aosLockPath, [System.IO.FileMode]::OpenOrCreate,
+                [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+        }
+        catch {
+            $inner = $_.Exception
+            while ($inner.InnerException) { $inner = $inner.InnerException }
+            if (-not ($inner -is [System.IO.IOException])) { throw }
+            if ([DateTime]::UtcNow -ge $aosLockDeadline) { throw "coordination lock busy: $aosLockPath" }
+            Start-Sleep -Milliseconds 50
+        }
+    }
+    $script:AosCoordLockHeld = $true
+    try { return (& $Body) }
+    finally {
+        $script:AosCoordLockHeld = $false
+        $aosLockStream.Dispose()
+    }
+}
+
+function Add-AosLedgerEvent([System.Collections.IDictionary]$Event) {
+    $e = [ordered]@{ ts = (Get-AosUtcStamp) }
+    foreach ($k in @($Event.Keys)) { if ($k -ne 'ts') { $e[$k] = $Event[$k] } }
+    $aosLedgerLine = (ConvertTo-Json -InputObject $e -Depth 10 -Compress) + "`n"
+    $aosLedgerPath = Join-Path (Get-AosCoordDir) 'ledger.jsonl'
+    $null = Invoke-AosCoordLocked { [System.IO.File]::AppendAllText($aosLedgerPath, $aosLedgerLine, $script:Utf8NoBom) }
+}
+
+function Get-AosLedger([int]$Last = 20) {
+    $path = Join-Path (Get-AosCoordDir) 'ledger.jsonl'
+    if (-not (Test-Path -LiteralPath $path)) { return @() }
+    $out = New-Object System.Collections.ArrayList
+    foreach ($line in ((Read-AosSharedText $path) -split "`r?`n")) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        try { [void]$out.Add((ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $line -ErrorAction Stop))) } catch { }
+    }
+    if ($Last -gt 0 -and $out.Count -gt $Last) { return $out.GetRange($out.Count - $Last, $Last).ToArray() }
+    return $out.ToArray()
+}
+
+#endregion
+#region processes -------------------------------------------------------------------------
+
+function ConvertTo-AosArgString([string[]]$Arguments) {
+    # One Windows command line for native programs (CommandLineToArgvW / MSVCRT rules).
+    $parts = New-Object System.Collections.Generic.List[string]
+    foreach ($a in @($Arguments)) {
+        if ($null -eq $a) { $a = '' }
+        if ($a.Length -gt 0 -and $a -notmatch '[\s"]') { $parts.Add($a); continue }
+        $sb = New-Object System.Text.StringBuilder
+        [void]$sb.Append('"')
+        $bs = 0
+        foreach ($ch in $a.ToCharArray()) {
+            if ($ch -eq [char]'\') { $bs++; continue }
+            if ($ch -eq [char]'"') { [void]$sb.Append('\' * (2 * $bs + 1)); [void]$sb.Append('"'); $bs = 0; continue }
+            if ($bs -gt 0) { [void]$sb.Append('\' * $bs); $bs = 0 }
+            [void]$sb.Append($ch)
+        }
+        if ($bs -gt 0) { [void]$sb.Append('\' * (2 * $bs)) }
+        [void]$sb.Append('"')
+        $parts.Add($sb.ToString())
+    }
+    return ($parts -join ' ')
+}
+
+function Resolve-AosExe([string]$Exe) {
+    $path = $Exe
+    if (-not [System.IO.Path]::IsPathRooted($path)) {
+        $cmd = Get-Command $Exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $cmd) { throw "not found: $Exe" }
+        $path = $cmd.Source
+    }
+    if ($path -match '(?i)\.(cmd|bat)$') { throw "refusing to start a batch file (its argument quoting is unreliable): $path" }
+    return $path
+}
+
+function Start-AosProcessCore {
+    # Native exe, UTF-8 output captured to strings, optional UTF-8 stdin, a hard timeout that kills
+    # the process tree and reports whether the kill worked.
+    param([string]$Exe, [string[]]$Arguments, [string]$ArgumentString, [string]$WorkingDirectory, [string]$StdinFile, [int]$TimeoutSeconds = 60)
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = Resolve-AosExe $Exe
+    if ($PSBoundParameters.ContainsKey('ArgumentString')) { $psi.Arguments = $ArgumentString } else { $psi.Arguments = ConvertTo-AosArgString $Arguments }
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    if ($WorkingDirectory) { $psi.WorkingDirectory = $WorkingDirectory }
+    $psi.RedirectStandardInput = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = $script:Utf8NoBom
+    $psi.StandardErrorEncoding = $script:Utf8NoBom
+    $p = New-Object System.Diagnostics.Process
+    $p.StartInfo = $psi
+    [void]$p.Start()
+    $outTask = $p.StandardOutput.ReadToEndAsync()
+    $errTask = $p.StandardError.ReadToEndAsync()
+    try {
+        if ($StdinFile) {
+            # Raw UTF-8 bytes: Windows PowerShell 5.1 cannot set the stdin encoding.
+            $bytes = [System.IO.File]::ReadAllBytes($StdinFile)
+            $p.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length)
+            $p.StandardInput.BaseStream.Flush()
+        }
+    }
+    catch { }
+    try { $p.StandardInput.Close() } catch { }
+    $timedOut = $false
+    $killFailed = $false
+    if (-not $p.WaitForExit([Math]::Max(1, $TimeoutSeconds) * 1000)) {
+        $timedOut = $true
+        $null = cmd /c "taskkill /T /F /PID $($p.Id) 2>&1"
+        if (-not $p.WaitForExit(10000)) { $killFailed = $true }
+    }
+    $out = ''
+    $err = ''
+    if (-not $killFailed) {
+        $p.WaitForExit()
+        if ($outTask.Wait(5000)) { $out = $outTask.Result }
+        if ($errTask.Wait(5000)) { $err = $errTask.Result }
+    }
+    $code = -1
+    if ($p.HasExited) { $code = $p.ExitCode }
+    return [pscustomobject]@{ Code = $code; TimedOut = $timedOut; KillFailed = $killFailed; Out = $out; Err = $err }
+}
+
+function Invoke-AosProcess {
+    # The one place aos starts a delegate or a verify command; tests mock it.
+    param([string]$Exe, [string[]]$Arguments, [string]$ArgumentString, [string]$WorkingDirectory, [string]$StdinFile,
+        [string]$StdoutFile, [string]$StderrFile, [int]$TimeoutSeconds = 60)
+    $core = @{ Exe = $Exe; WorkingDirectory = $WorkingDirectory; StdinFile = $StdinFile; TimeoutSeconds = $TimeoutSeconds }
+    if ($PSBoundParameters.ContainsKey('ArgumentString')) { $core['ArgumentString'] = $ArgumentString } else { $core['Arguments'] = $Arguments }
+    $r = Start-AosProcessCore @core
+    if ($StdoutFile) { Write-AosText -Path $StdoutFile -Text $r.Out }
+    if ($StderrFile) { Write-AosText -Path $StderrFile -Text $r.Err }
+    return [pscustomobject]@{ Code = $r.Code; TimedOut = $r.TimedOut; KillFailed = $r.KillFailed }
+}
+
+function Invoke-AosGit([string]$Dir, [string[]]$Arguments, [int]$TimeoutSeconds = 60) {
+    # git with UTF-8 output (paths with accents) and no console code page in between.
+    $r = Start-AosProcessCore -Exe 'git' -Arguments (@('-c', 'core.quotepath=false') + @($Arguments)) -WorkingDirectory $Dir -TimeoutSeconds $TimeoutSeconds
+    return [pscustomobject]@{ Code = $r.Code; Out = $r.Out.TrimEnd(); Err = $r.Err.TrimEnd() }
+}
+
+#endregion
+#region claims ----------------------------------------------------------------------------
+
+function Get-AosCheckout([string]$Path) {
+    # The git top level holding $Path (a file or folder, existing or about to be created); without git,
+    # the nearest existing folder.
+    if ([string]::IsNullOrWhiteSpace($Path)) { $Path = (Get-Location).ProviderPath }
+    $full = [System.IO.Path]::GetFullPath($Path).TrimEnd('\')
+    $dir = $full
+    while ($dir -and -not (Test-Path -LiteralPath $dir -PathType Container)) { $dir = Split-Path -Parent $dir }
+    if (-not $dir) { return $full }
+    $top = $null
+    try {
+        $g = Invoke-AosGit -Dir $dir -Arguments @('rev-parse', '--show-toplevel') -TimeoutSeconds 15
+        if ($g.Code -eq 0 -and $g.Out) { $top = ($g.Out -split "`r?`n")[0].Trim().Replace('/', '\') }
+    }
+    catch { }
+    if ($top) { return [System.IO.Path]::GetFullPath($top).TrimEnd('\') }
+    return [System.IO.Path]::GetFullPath($dir).TrimEnd('\')
+}
+
+function Get-AosClaimKey([string]$Checkout) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $hash = $sha.ComputeHash($script:Utf8NoBom.GetBytes($Checkout.ToLowerInvariant())) } finally { $sha.Dispose() }
+    return ((($hash | ForEach-Object { $_.ToString('x2') }) -join '').Substring(0, 16))
+}
+
+function Get-AosClaimPath([string]$Checkout) {
+    return (Join-Path (Join-Path (Get-AosCoordDir) 'claims') ((Get-AosClaimKey $Checkout) + '.json'))
+}
+
+function Read-AosClaimFile([string]$Path) {
+    # $null when missing; throws when present but unreadable or not a claim.
+    if (-not (Test-Path -LiteralPath $Path)) { return $null }
+    $text = [System.IO.File]::ReadAllText($Path)
+    if ([string]::IsNullOrWhiteSpace($text)) { throw "empty claim file $Path" }
+    $c = ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $text -ErrorAction Stop)
+    if (-not ($c -is [System.Collections.IDictionary]) -or -not $c['agent'] -or -not $c['expires']) { throw "not a claim: $Path" }
+    return $c
+}
+
+function Write-AosClaimFile([string]$Path, $Claim) {
+    $dir = Split-Path -Parent $Path
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    $tmp = $Path + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
+    [System.IO.File]::WriteAllText($tmp, (ConvertTo-Json -InputObject $Claim -Depth 5), $script:Utf8NoBom)
+    if (Test-Path -LiteralPath $Path) { [System.IO.File]::Replace($tmp, $Path, [System.Management.Automation.Language.NullString]::Value) }
+    else { [System.IO.File]::Move($tmp, $Path) }
+}
+
+function Test-AosClaimLive($Claim) {
+    $e = ConvertFrom-AosUtcStamp ([string]$Claim['expires'])
+    return ($null -ne $e -and $e -gt [DateTime]::UtcNow)
+}
+
+function Format-AosClaimHolder($Claim) {
+    $note = [string]$Claim['note']
+    if (-not $note) { $note = '(no note)' }
+    return ('{0} is held by {1} ({2}) since {3}, until {4}: {5}.' -f $Claim['checkout'], $Claim['agent'], $Claim['session'], $Claim['since'], $Claim['expires'], $note)
+}
+
+function Test-AosAgentName([string]$Agent) { return ($Agent -cmatch '^[a-z][a-z0-9:_-]{0,40}$') }
+
+function Invoke-AosClaim {
+    param([string]$Path, [string]$Agent, [string]$Session, [string]$Note = '', [int]$TtlMinutes = 60)
+    $fail = { param($m) [pscustomobject]@{ Ok = $false; Action = 'refused'; Claim = $null; Holder = $null; Message = $m } }
+    if (-not (Test-AosAgentName $Agent)) { return (& $fail "invalid agent name '$Agent' (lowercase letters, digits, : _ -)") }
+    if ([string]::IsNullOrWhiteSpace($Session)) { return (& $fail 'a session id is required') }
+    if ($TtlMinutes -lt 1 -or $TtlMinutes -gt 1440) { return (& $fail "TTL must be 1..1440 minutes, not $TtlMinutes") }
+    $aosClaimCheckout = Get-AosCheckout $Path
+    $aosClaimFile = Get-AosClaimPath $aosClaimCheckout
+    $aosClaimArgs = @{ Agent = $Agent; Session = $Session; Note = $Note; Ttl = $TtlMinutes }
+    return (Invoke-AosCoordLocked {
+        $now = [DateTime]::UtcNow
+        $nowText = $now.ToString('yyyy-MM-ddTHH:mm:ssZ')
+        $expires = $now.AddMinutes($aosClaimArgs.Ttl).ToString('yyyy-MM-ddTHH:mm:ssZ')
+        $old = $null
+        $action = 'created'
+        try { $old = Read-AosClaimFile $aosClaimFile }
+        catch {
+            $age = $now - (Get-Item -LiteralPath $aosClaimFile).LastWriteTimeUtc
+            if ($age.TotalHours -lt 24) {
+                return [pscustomobject]@{ Ok = $false; Action = 'refused'; Claim = $null; Holder = $null
+                    Message = "unreadable claim file $aosClaimFile ($($_.Exception.Message)); check it, then delete it if no session owns it" }
+            }
+            Add-AosLedgerEvent ([ordered]@{ type = 'claim-takeover'; checkout = $aosClaimCheckout; agent = $aosClaimArgs.Agent; session = $aosClaimArgs.Session; previous = 'unreadable claim file older than 24 h' })
+            $action = 'taken-over'
+        }
+        $since = $nowText
+        if ($null -ne $old) {
+            if ($old['agent'] -eq $aosClaimArgs.Agent -and $old['session'] -eq $aosClaimArgs.Session) {
+                $action = 'renewed'
+                if ($old['since']) { $since = [string]$old['since'] }
+            }
+            elseif (Test-AosClaimLive $old) {
+                Add-AosLedgerEvent ([ordered]@{ type = 'claim-refused'; checkout = $aosClaimCheckout; agent = $aosClaimArgs.Agent; session = $aosClaimArgs.Session; holder = $old['agent']; holder_session = $old['session'] })
+                return [pscustomobject]@{ Ok = $false; Action = 'refused'; Claim = $null; Holder = $old; Message = (Format-AosClaimHolder $old) }
+            }
+            else {
+                Add-AosLedgerEvent ([ordered]@{ type = 'claim-takeover'; checkout = $aosClaimCheckout; agent = $aosClaimArgs.Agent; session = $aosClaimArgs.Session; previous = ('{0} ({1}) expired {2}' -f $old['agent'], $old['session'], $old['expires']) })
+                $action = 'taken-over'
+            }
+        }
+        $note = $aosClaimArgs.Note
+        if ($action -eq 'renewed' -and -not $note) { $note = [string]$old['note'] }
+        $claim = [ordered]@{ checkout = $aosClaimCheckout; agent = $aosClaimArgs.Agent; session = $aosClaimArgs.Session; note = $note
+            since = $since; renewed = $nowText; expires = $expires; host_pid = $PID }
+        Write-AosClaimFile $aosClaimFile $claim
+        if ($action -ne 'renewed') {
+            Add-AosLedgerEvent ([ordered]@{ type = 'claim'; action = $action; checkout = $aosClaimCheckout; agent = $aosClaimArgs.Agent; session = $aosClaimArgs.Session; note = $note })
+        }
+        return [pscustomobject]@{ Ok = $true; Action = $action; Claim = $claim; Holder = $null; Message = '' }
+    })
+}
+
+function Invoke-AosRelease([string]$Path, [string]$Agent, [string]$Session) {
+    $aosRelCheckout = Get-AosCheckout $Path
+    $aosRelFile = Get-AosClaimPath $aosRelCheckout
+    $aosRelArgs = @{ Agent = $Agent; Session = $Session }
+    return (Invoke-AosCoordLocked {
+        $old = $null
+        try { $old = Read-AosClaimFile $aosRelFile } catch { }
+        if ($null -eq $old) { return [pscustomobject]@{ Ok = $false; Holder = $null; Message = "no readable claim on $aosRelCheckout" } }
+        if ($old['agent'] -ne $aosRelArgs.Agent -or $old['session'] -ne $aosRelArgs.Session) {
+            return [pscustomobject]@{ Ok = $false; Holder = $old; Message = (Format-AosClaimHolder $old) }
+        }
+        Remove-Item -LiteralPath $aosRelFile -Force
+        Add-AosLedgerEvent ([ordered]@{ type = 'release'; checkout = $aosRelCheckout; agent = $aosRelArgs.Agent; session = $aosRelArgs.Session })
+        return [pscustomobject]@{ Ok = $true; Holder = $null; Message = '' }
+    })
+}
+
+function Get-AosClaims {
+    $dir = Join-Path (Get-AosCoordDir) 'claims'
+    $out = New-Object System.Collections.ArrayList
+    foreach ($f in @(Get-ChildItem -LiteralPath $dir -Filter '*.json' -File -ErrorAction SilentlyContinue)) {
+        try { $c = Read-AosClaimFile $f.FullName } catch { continue }
+        if ($null -ne $c -and (Test-AosClaimLive $c)) { [void]$out.Add($c) }
+    }
+    return $out.ToArray()
+}
+
+#endregion
+#region guard -----------------------------------------------------------------------------
+
+function Get-AosHookStrings($Value) {
+    # Every string inside a hook's tool_input (apply_patch passes the patch as a string or object).
+    $out = New-Object System.Collections.Generic.List[string]
+    if ($null -eq $Value) { return $out }
+    if ($Value -is [string]) { $out.Add($Value); return $out }
+    if ($Value -is [System.Collections.IDictionary]) { foreach ($k in @($Value.Keys)) { foreach ($s in (Get-AosHookStrings $Value[$k])) { $out.Add($s) } }; return $out }
+    if (($Value -is [System.Collections.IEnumerable])) { foreach ($x in $Value) { foreach ($s in (Get-AosHookStrings $x)) { $out.Add($s) } } }
+    return $out
+}
+
+function Get-AosGuardPaths($HookInput) {
+    $cwd = [string]$HookInput['cwd']
+    $ti = $HookInput['tool_input']
+    $paths = New-Object System.Collections.Generic.List[string]
+    if ($ti -is [System.Collections.IDictionary]) {
+        foreach ($k in @('file_path', 'notebook_path', 'path')) { if ($ti[$k] -is [string] -and $ti[$k]) { $paths.Add($ti[$k]) } }
+    }
+    foreach ($s in (Get-AosHookStrings $ti)) {
+        foreach ($m in [regex]::Matches($s, '(?m)^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+?)\s*$')) { $paths.Add($m.Groups[1].Value) }
+    }
+    $full = New-Object System.Collections.Generic.List[string]
+    foreach ($p in $paths) {
+        if ([System.IO.Path]::IsPathRooted($p)) { $full.Add($p) }
+        elseif ($cwd) { $full.Add((Join-Path $cwd $p)) }
+    }
+    if ($full.Count -eq 0 -and $cwd) { $full.Add($cwd) }
+    return $full
+}
+
+function Invoke-AosGuard([string]$Agent, [string]$Event, [string]$InputJson) {
+    # Hook entry point for both vendors. Fails OPEN: a broken guard must never block every edit.
+    $res = [ordered]@{ Exit = 0; Stdout = ''; Stderr = '' }
+    try {
+        $in = ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $InputJson -ErrorAction Stop)
+        if (-not ($in -is [System.Collections.IDictionary])) { throw 'hook input is not a JSON object' }
+        $session = [string]$in['session_id']
+        if (-not $session) { throw 'no session_id in hook input' }
+        $cwd = [string]$in['cwd']
+        switch ($Event) {
+            'pre-edit' {
+                $done = @{}
+                foreach ($p in (Get-AosGuardPaths $in)) {
+                    $co = Get-AosCheckout $p
+                    if ($done.ContainsKey($co.ToLowerInvariant())) { continue }
+                    $done[$co.ToLowerInvariant()] = $true
+                    $r = Invoke-AosClaim -Path $co -Agent $Agent -Session $session -TtlMinutes 60 -Note 'auto (first edit)'
+                    if (-not $r.Ok) {
+                        if ($null -eq $r.Holder) { throw $r.Message }
+                        $res.Exit = 2
+                        $res.Stderr = 'aos: ' + (Format-AosClaimHolder $r.Holder) + ' Do not edit here; coordinate (aos who) or use a worktree.'
+                        break
+                    }
+                }
+            }
+            'session-start' {
+                if ($cwd) {
+                    $co = Get-AosCheckout $cwd
+                    foreach ($c in (Get-AosClaims)) {
+                        if ($c['checkout'] -ne $co) { continue }
+                        if ($c['agent'] -eq $Agent -and $c['session'] -eq $session) { continue }
+                        $res.Stdout = 'Note: ' + (Format-AosClaimHolder $c) + ' Do not edit here; coordinate (aos who) or use a worktree.'
+                    }
+                }
+            }
+            'session-end' {
+                foreach ($c in (Get-AosClaims)) {
+                    if ($c['agent'] -eq $Agent -and $c['session'] -eq $session) { $null = Invoke-AosRelease -Path $c['checkout'] -Agent $Agent -Session $session }
+                }
+            }
+            default { throw "unknown guard event '$Event'" }
+        }
+    }
+    catch {
+        $res.Exit = 0
+        $res.Stderr = "aos guard: $($_.Exception.Message) (edit allowed)"
+        try { Add-AosLedgerEvent ([ordered]@{ type = 'guard-error'; agent = $Agent; event = $Event; message = $_.Exception.Message }) } catch { }
+    }
+    return [pscustomobject]$res
+}
+
+function Invoke-AosGuardHook([string]$Agent, [string]$Event) {
+    # `aos guard <agent> <event>` from a hook: JSON on stdin, then exit with the guard's code.
+    $text = [Console]::In.ReadToEnd()
+    $r = Invoke-AosGuard -Agent $Agent -Event $Event -InputJson $text
+    if ($r.Stdout) { [Console]::Out.WriteLine($r.Stdout) }
+    if ($r.Stderr) { [Console]::Error.WriteLine($r.Stderr) }
+    exit $r.Exit
+}
+
+#endregion
+#region hooks sync ------------------------------------------------------------------------
+
+function Expand-AosHookTree($Value) {
+    # {{aos}} -> the full path of this module, in every string of a hook overlay.
+    $module = Join-Path $script:Root 'aos.psm1'
+    if ($Value -is [string]) { return $Value.Replace('{{aos}}', $module) }
+    if ($Value -is [System.Collections.IDictionary]) {
+        foreach ($k in @($Value.Keys)) { $Value[$k] = Expand-AosHookTree $Value[$k] }
+        return $Value
+    }
+    if (($Value -is [System.Collections.IEnumerable])) {
+        $list = New-Object System.Collections.ArrayList
+        foreach ($x in $Value) { [void]$list.Add((Expand-AosHookTree $x)) }
+        return , ($list.ToArray())
+    }
+    return $Value
+}
+
+function Test-AosOwnedHook($Hook) {
+    if (-not ($Hook -is [System.Collections.IDictionary])) { return $false }
+    foreach ($k in @('command', 'commandWindows', 'command_windows')) { if ([string]$Hook[$k] -match 'aos guard') { return $true } }
+    return $false
+}
+
+function Merge-AosOwnedHooks($Target, $Overlay) {
+    # $Target/$Overlay: { <Event>: [ { matcher?, hooks: [ {type, command, ...} ] } ] }. Our entries
+    # (recognised by 'aos guard') are removed everywhere, then the overlay's are added once; the user's
+    # own hooks are never touched.
+    foreach ($ev in @($Target.Keys)) {
+        $groups = New-Object System.Collections.ArrayList
+        foreach ($g in @($Target[$ev])) {
+            if (-not ($g -is [System.Collections.IDictionary])) { [void]$groups.Add($g); continue }
+            $kept = @(@($g['hooks']) | Where-Object { -not (Test-AosOwnedHook $_) })
+            if ($kept.Count -eq 0 -and @($g['hooks']).Count -gt 0) { continue }
+            $g['hooks'] = $kept
+            [void]$groups.Add($g)
+        }
+        if ($groups.Count -eq 0) { $Target.Remove($ev) } else { $Target[$ev] = $groups.ToArray() }
+    }
+    foreach ($ev in @($Overlay.Keys)) {
+        $list = New-Object System.Collections.ArrayList
+        if ($Target.Contains($ev)) { foreach ($g in @($Target[$ev])) { [void]$list.Add($g) } }
+        foreach ($g in @($Overlay[$ev])) { [void]$list.Add((Copy-AosTree $g)) }
+        $Target[$ev] = $list.ToArray()
+    }
+}
+
+function Sync-AosCodexHooks([switch]$DryRun, [string]$Path) {
+    $target = $Path
+    if (-not $target) { $target = Join-Path (Get-AosCodexHome) 'hooks.json' }
+    $overlay = Read-AosJson (Join-Path $script:Root 'config\codex\hooks.json')
+    if ($null -eq $overlay -or -not $overlay.Contains('hooks')) { Write-AosWarn 'config/codex/hooks.json missing or empty'; return }
+    $read = Read-AosJsonOrWarn $target
+    if (-not $read.Ok) { return }
+    $old = $read.Value
+    $new = Copy-AosTree $old
+    if (-not $new.Contains('hooks') -or -not ($new['hooks'] -is [System.Collections.IDictionary])) { $new['hooks'] = [ordered]@{} }
+    Merge-AosOwnedHooks $new['hooks'] (Expand-AosHookTree (Copy-AosTree $overlay['hooks']))
+    $a = ''
+    if ($null -ne $old) { $a = ConvertTo-Json -InputObject $old -Depth 20 -Compress }
+    $b = ConvertTo-Json -InputObject $new -Depth 20 -Compress
+    if ($a -ceq $b) { Write-AosOk "$target has the aos hooks"; return }
+    if ($DryRun) { Write-AosDry "would merge the aos hooks into $target"; return }
+    if (Test-Path -LiteralPath $target) { $null = Backup-AosFile $target }
+    Write-AosText -Path $target -Text ((ConvertTo-Json -InputObject $new -Depth 20) + "`n")
+    Write-AosOk "merged the aos hooks into $target"
+    Write-AosWarn 'Codex hooks changed: trust them once in Codex (/hooks)'
+}
+
+function Repair-AosCcHooks([switch]$DryRun, [string]$PluginsRoot) {
+    # cc-plugin-codex writes "$PLUGIN_ROOT" in its hook commands. Codex runs Windows hooks in
+    # PowerShell, where that is an empty variable, and substitutes only ${PLUGIN_ROOT} itself.
+    $root = $PluginsRoot
+    if (-not $root) { $root = Join-Path (Get-AosCodexHome) 'plugins\cache' }
+    $files = @()
+    if (Test-Path -LiteralPath $root) {
+        foreach ($m in @(Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue)) {
+            $cc = Join-Path $m.FullName 'cc'
+            if (-not (Test-Path -LiteralPath $cc)) { continue }
+            foreach ($v in @(Get-ChildItem -LiteralPath $cc -Directory -ErrorAction SilentlyContinue)) {
+                $h = Join-Path $v.FullName 'hooks\hooks.json'
+                if (Test-Path -LiteralPath $h) { $files += $h }
+            }
+        }
+    }
+    if ($files.Count -eq 0) { Write-AosOk 'no cc plugin hooks to repair'; return }
+    foreach ($f in $files) {
+        $text = [System.IO.File]::ReadAllText($f)
+        $new = [regex]::Replace($text, '(?<!\{)\$PLUGIN_ROOT(?![A-Za-z0-9_}])', '$${PLUGIN_ROOT}')
+        if ($new -ceq $text) { Write-AosOk "cc hooks use `${PLUGIN_ROOT} ($f)"; continue }
+        try { $null = ConvertFrom-Json -InputObject $new -ErrorAction Stop }
+        catch { Write-AosWarn "repairing $f would break its JSON; left alone"; continue }
+        if ($DryRun) { Write-AosDry "would change `$PLUGIN_ROOT to `${PLUGIN_ROOT} in $f"; continue }
+        $null = Backup-AosFile $f
+        Write-AosText -Path $f -Text $new
+        Write-AosOk "repaired $f (`${PLUGIN_ROOT})"
+        Write-AosWarn 'cc hooks changed: trust them once in Codex (/hooks)'
+    }
+}
+
+#endregion
+#region delegate --------------------------------------------------------------------------
+
+function Get-AosCodexModelCandidates {
+    $d = Read-AosJson (Join-Path (Get-AosCodexHome) 'models_cache.json')
+    if ($null -eq $d) { return @() }
+    $list = $d
+    if ($d -is [System.Collections.IDictionary]) { $list = $d['models'] }
+    $rows = @(@($list) | Where-Object { $_ -is [System.Collections.IDictionary] -and $_['slug'] -and $_['visibility'] -eq 'list' })
+    return @($rows | Sort-Object { [int]$_['priority'] } | ForEach-Object { [string]$_['slug'] })
+}
+
+function Get-AosErrorCategory([string]$Message) {
+    if ($Message -match '(?i)not supported') { return 'not-supported' }
+    if ($Message -match '(?i)usage limit|rate limit|\b429\b|quota') { return 'quota' }
+    if ($Message -match '(?i)\b401\b|unauthori[sz]ed|log ?in|not logged|authentication') { return 'auth' }
+    return 'other'
+}
+
+function Read-AosCodexEvents([string]$Path) {
+    # Facts from `codex exec --json` output. Errors come ONLY from error/turn.failed events.
+    $f = [ordered]@{ ThreadId = ''; Input = 0; Cached = 0; Output = 0; Completed = $false; Messages = @(); Errors = @() }
+    if (-not (Test-Path -LiteralPath $Path)) { return [pscustomobject]$f }
+    $msgs = New-Object System.Collections.Generic.List[string]
+    $errs = New-Object System.Collections.Generic.List[string]
+    foreach ($line in ([System.IO.File]::ReadAllText($Path) -split "`r?`n")) {
+        if (-not $line.StartsWith('{')) { continue }
+        $e = $null
+        try { $e = ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $line -ErrorAction Stop) } catch { continue }
+        switch ([string]$e['type']) {
+            'thread.started' { $f.ThreadId = [string]$e['thread_id'] }
+            'turn.completed' {
+                $f.Completed = $true
+                $u = $e['usage']
+                if ($u -is [System.Collections.IDictionary]) {
+                    $f.Input += [long]$u['input_tokens']; $f.Cached += [long]$u['cached_input_tokens']; $f.Output += [long]$u['output_tokens']
+                }
+            }
+            'item.completed' {
+                $it = $e['item']
+                if ($it -is [System.Collections.IDictionary] -and $it['type'] -eq 'agent_message') { $msgs.Add([string]$it['text']) }
+            }
+            'error' { $errs.Add([string]$e['message']) }
+            'turn.failed' {
+                $m = $e['error']
+                if ($m -is [System.Collections.IDictionary]) { $m = $m['message'] }
+                $errs.Add([string]$m)
+            }
+        }
+    }
+    $f.Messages = $msgs.ToArray()
+    $f.Errors = $errs.ToArray()
+    return [pscustomobject]$f
+}
+
+function Clear-AosDelegateModelCache([string]$Vendor) {
+    $path = Join-Path (Get-AosCoordDir) 'models.json'
+    $c = Read-AosJson $path
+    if ($null -eq $c -or -not $c.Contains($Vendor)) { return }
+    $c.Remove($Vendor)
+    Write-AosText -Path $path -Text ((ConvertTo-Json -InputObject $c -Depth 5) + "`n")
+}
+
+function Test-AosCodexModelProbe([string]$Model) {
+    $dir = Get-AosCoordDir
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    $id = [guid]::NewGuid().ToString('N')
+    $stdin = Join-Path $dir "probe-$id.txt"
+    $stdout = Join-Path $dir "probe-$id.jsonl"
+    Write-AosText -Path $stdin -Text 'Reply with exactly: PONG'
+    try {
+        $r = Invoke-AosProcess -Exe 'codex.exe' -Arguments @('exec', '-m', $Model, '--profile', 'review', '--json', '--skip-git-repo-check', '-') `
+            -WorkingDirectory $dir -StdinFile $stdin -StdoutFile $stdout -TimeoutSeconds 120
+        $ev = Read-AosCodexEvents $stdout
+    }
+    finally { Remove-Item -LiteralPath $stdin, $stdout -Force -ErrorAction SilentlyContinue }
+    $category = 'ok'
+    $message = ''
+    if ($ev.Errors.Count -gt 0) { $message = $ev.Errors[0]; $category = Get-AosErrorCategory $message }
+    elseif ($r.TimedOut) { $category = 'other'; $message = 'probe timed out' }
+    elseif (-not $ev.Completed -or -not (@($ev.Messages) -match 'PONG')) { $category = 'other'; $message = "probe gave no PONG (exit $($r.Code))" }
+    Add-AosLedgerEvent ([ordered]@{ type = 'model-probe'; vendor = 'codex'; model = $Model; category = $category; input = $ev.Input; message = $message })
+    return [pscustomobject]@{ Ok = ($category -eq 'ok'); Category = $category; Message = $message }
+}
+
+function Resolve-AosDelegateModel([string]$Vendor, [string]$Model) {
+    if ($Vendor -eq 'claude') { return [pscustomobject]@{ Ok = $true; Model = ''; Category = 'ok'; Reason = '' } }
+    $cachePath = Join-Path (Get-AosCoordDir) 'models.json'
+    $cache = Read-AosJson $cachePath
+    $cached = $null
+    if ($null -ne $cache -and $cache[$Vendor] -is [System.Collections.IDictionary]) {
+        $when = ConvertFrom-AosUtcStamp ([string]$cache[$Vendor]['checked'])
+        if ($null -ne $when -and ([DateTime]::UtcNow - $when).TotalHours -lt 24) { $cached = [string]$cache[$Vendor]['model'] }
+    }
+    $candidates = @()
+    if ($Model) {
+        if ($cached -eq $Model) { return [pscustomobject]@{ Ok = $true; Model = $Model; Category = 'ok'; Reason = '' } }
+        $candidates = @($Model)
+    }
+    elseif ($cached) { return [pscustomobject]@{ Ok = $true; Model = $cached; Category = 'ok'; Reason = '' } }
+    else { $candidates = @(Get-AosCodexModelCandidates | Select-Object -First 2) }
+    if ($candidates.Count -eq 0) { return [pscustomobject]@{ Ok = $false; Model = ''; Category = 'other'; Reason = 'no Codex model candidates (models_cache.json missing?); pass --model' } }
+    $last = $null
+    foreach ($m in $candidates) {
+        $p = Test-AosCodexModelProbe $m
+        if ($p.Ok) {
+            $c = $cache
+            if ($null -eq $c) { $c = [ordered]@{} }
+            $c[$Vendor] = [ordered]@{ model = $m; checked = (Get-AosUtcStamp) }
+            Write-AosText -Path $cachePath -Text ((ConvertTo-Json -InputObject $c -Depth 5) + "`n")
+            return [pscustomobject]@{ Ok = $true; Model = $m; Category = 'ok'; Reason = '' }
+        }
+        $last = $p
+        if ($p.Category -ne 'not-supported') { break }
+    }
+    return [pscustomobject]@{ Ok = $false; Model = ''; Category = $last.Category; Reason = "codex model check failed ($($last.Category)): $($last.Message)" }
+}
+
+function Get-AosCommandExe([string]$CommandLine) {
+    $t = $CommandLine.Trim()
+    if ($t.StartsWith('"')) { $end = $t.IndexOf('"', 1); if ($end -gt 0) { return $t.Substring(1, $end - 1) } }
+    return ($t -split '\s+')[0]
+}
+
+function Test-AosDelegatePreflight([string]$Vendor, [string]$Model, [string[]]$Needs, [string]$Verify, [string]$WorkDir, [switch]$Write) {
+    $reasons = New-Object System.Collections.Generic.List[string]
+    $exe = 'codex'
+    if ($Vendor -eq 'claude') { $exe = 'claude' }
+    if (-not (Test-AosCommand $exe)) { $reasons.Add("$exe is not installed") }
+    $model = ''
+    if ($reasons.Count -eq 0) {
+        $m = Resolve-AosDelegateModel -Vendor $Vendor -Model $Model
+        if ($m.Ok) { $model = $m.Model } else { $reasons.Add($m.Reason) }
+    }
+    if ($reasons.Count -eq 0) {
+        $sandbox = @('sandbox')
+        if ($Write) { $sandbox += @('-c', 'sandbox_mode="workspace-write"') }
+        if ($Verify) {
+            $vexe = Get-AosCommandExe $Verify
+            if ($Vendor -eq 'codex') {
+                $r = Invoke-AosProcess -Exe 'codex.exe' -Arguments ($sandbox + @('where.exe', $vexe)) -WorkingDirectory $WorkDir -TimeoutSeconds 60
+                if ($r.Code -ne 0) { $reasons.Add("verify needs '$vexe', which the delegate's sandbox cannot find") }
+            }
+            elseif (-not (Test-AosCommand $vexe)) { $reasons.Add("verify needs '$vexe', which is not installed") }
+        }
+        foreach ($n in @($Needs | Where-Object { $_ })) {
+            $log = Join-Path (Get-AosCoordDir) ('needs-' + [guid]::NewGuid().ToString('N') + '.log')
+            if ($Vendor -eq 'codex') {
+                $r = Invoke-AosProcess -Exe 'codex.exe' -Arguments ($sandbox + @('cmd.exe', '/d', '/s', '/c', $n)) -WorkingDirectory $WorkDir -StdoutFile $log -TimeoutSeconds 600
+            }
+            else {
+                $r = Invoke-AosProcess -Exe 'cmd.exe' -ArgumentString ('/d /s /c "' + $n + '"') -WorkingDirectory $WorkDir -StdoutFile $log -TimeoutSeconds 600
+            }
+            if ($r.Code -ne 0) {
+                $tail = ''
+                if (Test-Path -LiteralPath $log) { $tail = (@([System.IO.File]::ReadAllLines($log) | Where-Object { $_.Trim() }) | Select-Object -Last 1) }
+                $reasons.Add("needs failed: $n (exit $($r.Code)): $tail")
+            }
+            Remove-Item -LiteralPath $log -Force -ErrorAction SilentlyContinue
+        }
+    }
+    return [pscustomobject]@{ Ok = ($reasons.Count -eq 0); Model = $model; Reasons = $reasons.ToArray() }
+}
+
+function Get-AosDelegateSlug([string]$Text) {
+    $first = (($Text -split "`r?`n") | Where-Object { $_.Trim() } | Select-Object -First 1)
+    if (-not $first) { $first = 'task' }
+    $s = ([regex]::Replace($first.ToLowerInvariant(), '[^a-z0-9]+', '-')).Trim('-')
+    if ($s.Length -gt 30) { $s = $s.Substring(0, 30).Trim('-') }
+    if (-not $s) { $s = 'task' }
+    return $s
+}
+
+function Get-AosPorcelainPaths([string]$Text) {
+    $out = New-Object System.Collections.Generic.List[string]
+    foreach ($line in ($Text -split "`r?`n")) {
+        if ($line.Length -lt 4) { continue }
+        $p = $line.Substring(3)
+        $arrow = $p.IndexOf(' -> ')
+        if ($arrow -ge 0) { $p = $p.Substring($arrow + 4) }
+        $p = $p.Trim().Trim('"')
+        if ($p) { $out.Add($p.Replace('\', '/')) }
+    }
+    return $out.ToArray()
+}
+
+function Test-AosAllowed([string]$RelPath, [string[]]$Allow) {
+    foreach ($g in @($Allow | Where-Object { $_ })) {
+        if ($RelPath -like ($g.Replace('\', '/').Replace('**', '*'))) { return $true }
+    }
+    return $false
+}
+
+function Get-AosDelegatePrompt([string]$TaskText, [string]$WorkDir, [string]$Branch, [switch]$Write) {
+    $lines = @('', '---', "Working directory: $WorkDir")
+    if ($Write) {
+        $lines += "Branch: $Branch"
+        $lines += 'Edit files only. Do not run git add or git commit: the host commits your changes after you finish.'
+    }
+    else { $lines += 'Read-only task: do not modify any file.' }
+    $lines += 'Your final answer must match the given JSON schema. List every test or check you could not run under "unverified".'
+    $lines += 'Never report a test as passed unless you ran it and saw it pass.'
+    return ($TaskText.TrimEnd() + "`n" + ($lines -join "`n") + "`n")
+}
+
+function Invoke-AosDelegate {
+    param([string]$Vendor, [string]$TaskFile, [switch]$Write, [string]$Model, [string[]]$Needs, [string]$Verify,
+        [string[]]$Allow, [string[]]$Setup, [int]$TimeoutMinutes = 30, [string]$Repo)
+    if ($Vendor -notin @('codex', 'claude')) { throw "unknown vendor '$Vendor' (codex or claude)" }
+    if (-not $TaskFile -or -not (Test-Path -LiteralPath $TaskFile)) { throw "task file not found: $TaskFile" }
+    if ($Write -and -not $Verify) { throw 'write mode needs --verify <command>: the host checks the result, not the delegate' }
+    $taskText = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $TaskFile).ProviderPath)
+    $repoDir = $Repo
+    if (-not $repoDir) { $repoDir = (Get-Location).ProviderPath }
+    $repoDir = Get-AosCheckout $repoDir
+    $id = (Get-Date -Format 'yyyyMMdd-HHmmss') + "-$Vendor-" + (Get-AosDelegateSlug $taskText)
+    $dir = Join-Path (Join-Path (Get-AosCoordDir) 'delegations') $id
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    Write-AosText -Path (Join-Path $dir 'task.md') -Text $taskText
+    $started = [DateTime]::UtcNow
+    $receipt = [ordered]@{ id = $id; vendor = $Vendor; model = ''; mode = 'read'; repo = $repoDir; workdir = $repoDir; branch = ''; base = ''; commit = ''
+        started = $started.ToString('yyyy-MM-ddTHH:mm:ssZ'); ended = ''; seconds = 0; exit_code = $null; timed_out = $false; kill_failed = $false
+        thread_id = ''; session_id = ''; usage = [ordered]@{ input = 0; cached = 0; output = 0 }; cost_usd = $null
+        error = $null; delegate = $null; changed = @(); outside_allow = @(); verify = $null; accepted = $false; outcome = 'failed' }
+    $finish = {
+        param($outcome)
+        $receipt.outcome = $outcome
+        $receipt.ended = (Get-AosUtcStamp)
+        $receipt.seconds = [int]([DateTime]::UtcNow - $started).TotalSeconds
+        Write-AosText -Path (Join-Path $dir 'receipt.json') -Text ((ConvertTo-Json -InputObject $receipt -Depth 10) + "`n")
+        Add-AosLedgerEvent ([ordered]@{ type = 'delegate'; id = $id; vendor = $Vendor; model = $receipt.model; outcome = $outcome
+            seconds = $receipt.seconds; input = $receipt.usage.input; output = $receipt.usage.output })
+    }
+    $workdir = $repoDir
+    $claimed = $false
+    if ($Write) {
+        $receipt.mode = 'write'
+        $top = Invoke-AosGit -Dir $repoDir -Arguments @('rev-parse', '--show-toplevel')
+        if ($top.Code -ne 0) { throw "write mode needs a git repository: $repoDir" }
+        $base = (Invoke-AosGit -Dir $repoDir -Arguments @('rev-parse', 'HEAD')).Out
+        $receipt.base = $base
+        $dirty = (Invoke-AosGit -Dir $repoDir -Arguments @('status', '--porcelain')).Out
+        if ($dirty) { Write-AosWarn 'uncommitted changes in the repo: the delegate sees committed HEAD only' }
+        $branch = "delegate/$id"
+        $workdir = Join-Path (Get-AosWorktreesDir) ((Split-Path -Leaf $repoDir) + "-$id")
+        $wt = Invoke-AosGit -Dir $repoDir -Arguments @('worktree', 'add', '-b', $branch, $workdir, $base) -TimeoutSeconds 300
+        if ($wt.Code -ne 0) { throw "git worktree add failed: $($wt.Err)" }
+        $receipt.branch = $branch
+        $receipt.workdir = $workdir
+        $cl = Invoke-AosClaim -Path $workdir -Agent $Vendor -Session $id -TtlMinutes ([Math]::Min(1440, $TimeoutMinutes + 30)) -Note "aos delegate $id"
+        $claimed = $cl.Ok
+        foreach ($s in @($Setup | Where-Object { $_ })) {
+            $sr = Invoke-AosProcess -Exe 'cmd.exe' -ArgumentString ('/d /s /c "' + $s + '"') -WorkingDirectory $workdir -TimeoutSeconds 600
+            if ($sr.Code -ne 0) { Write-AosWarn "setup failed (exit $($sr.Code)): $s" }
+        }
+    }
+    $pre = Test-AosDelegatePreflight -Vendor $Vendor -Model $Model -Needs $Needs -Verify $Verify -WorkDir $workdir -Write:$Write
+    if (-not $pre.Ok) {
+        $receipt.error = [ordered]@{ category = 'preflight'; message = ($pre.Reasons -join '; ') }
+        if ($Write) {
+            if ($claimed) { $null = Invoke-AosRelease -Path $workdir -Agent $Vendor -Session $id }
+            $null = Invoke-AosGit -Dir $repoDir -Arguments @('worktree', 'remove', '--force', $workdir)
+            $null = Invoke-AosGit -Dir $repoDir -Arguments @('branch', '-D', $receipt.branch)
+        }
+        & $finish 'preflight-failed'
+        Write-AosWarn "delegate $id preflight failed: $($receipt.error.message)"
+        $global:LASTEXITCODE = 1
+        return $receipt
+    }
+    $receipt.model = $pre.Model
+    $schemaPath = Join-Path $script:Root 'config\delegate\result.schema.json'
+    $promptPath = Join-Path $dir 'prompt.md'
+    Write-AosText -Path $promptPath -Text (Get-AosDelegatePrompt -TaskText $taskText -WorkDir $workdir -Branch $receipt.branch -Write:$Write)
+    $result = $null
+    if ($Vendor -eq 'codex') {
+        $mode = 'read-only'
+        if ($Write) { $mode = 'workspace-write' }
+        $resultPath = Join-Path $dir 'result.json'
+        $run = Invoke-AosProcess -Exe 'codex.exe' -Arguments @('exec', '-m', $pre.Model, '--json', '--output-schema', $schemaPath, '-o', $resultPath,
+            '-C', $workdir, '--sandbox', $mode, '--skip-git-repo-check', '-') -WorkingDirectory $workdir -StdinFile $promptPath `
+            -StdoutFile (Join-Path $dir 'events.jsonl') -StderrFile (Join-Path $dir 'stderr.log') -TimeoutSeconds ($TimeoutMinutes * 60)
+        $ev = Read-AosCodexEvents (Join-Path $dir 'events.jsonl')
+        $receipt.thread_id = $ev.ThreadId
+        $receipt.usage = [ordered]@{ input = $ev.Input; cached = $ev.Cached; output = $ev.Output }
+        if ($ev.Errors.Count -gt 0) {
+            $cat = Get-AosErrorCategory $ev.Errors[0]
+            $receipt.error = [ordered]@{ category = $cat; message = $ev.Errors[0] }
+            if ($cat -eq 'not-supported') { Clear-AosDelegateModelCache 'codex' }
+        }
+        if (Test-Path -LiteralPath $resultPath) {
+            try { $result = ConvertTo-AosHashtable (ConvertFrom-Json -InputObject ([System.IO.File]::ReadAllText($resultPath)) -ErrorAction Stop) } catch { }
+        }
+    }
+    else {
+        $schemaJson = ([System.IO.File]::ReadAllText($schemaPath) -replace '\s+', ' ').Trim()
+        $perm = 'plan'
+        if ($Write) { $perm = 'acceptEdits' }
+        $claudeArgs = @('-p', '--output-format', 'json', '--json-schema', $schemaJson, '--permission-mode', $perm)
+        if ($Write) {
+            $tools = @()
+            foreach ($c in @(@($Verify) + @($Needs) | Where-Object { $_ })) { $tools += ('Bash(' + (Get-AosCommandExe $c) + ':*)') }
+            if ($tools.Count) { $claudeArgs += @('--allowedTools') + @($tools | Select-Object -Unique) }
+        }
+        $outPath = Join-Path $dir 'claude.json'
+        $run = Invoke-AosProcess -Exe 'claude.exe' -Arguments $claudeArgs -WorkingDirectory $workdir -StdinFile $promptPath `
+            -StdoutFile $outPath -StderrFile (Join-Path $dir 'stderr.log') -TimeoutSeconds ($TimeoutMinutes * 60)
+        $cj = $null
+        if (Test-Path -LiteralPath $outPath) { try { $cj = ConvertTo-AosHashtable (ConvertFrom-Json -InputObject ([System.IO.File]::ReadAllText($outPath)) -ErrorAction Stop) } catch { } }
+        if ($cj -is [System.Collections.IDictionary]) {
+            $receipt.session_id = [string]$cj['session_id']
+            $receipt.cost_usd = $cj['total_cost_usd']
+            $u = $cj['usage']
+            if ($u -is [System.Collections.IDictionary]) {
+                $receipt.usage = [ordered]@{ input = [long]$u['input_tokens']; cached = [long]$u['cache_read_input_tokens']; output = [long]$u['output_tokens'] }
+            }
+            if ($cj['is_error'] -eq $true) {
+                $msg = [string]$cj['result']
+                $receipt.error = [ordered]@{ category = (Get-AosErrorCategory $msg); message = $msg }
+            }
+            elseif ($cj['structured_output'] -is [System.Collections.IDictionary]) { $result = $cj['structured_output'] }
+            else { try { $result = ConvertTo-AosHashtable (ConvertFrom-Json -InputObject ([string]$cj['result']) -ErrorAction Stop) } catch { } }
+        }
+        elseif (-not $run.TimedOut) { $receipt.error = [ordered]@{ category = 'other'; message = "no JSON from claude (exit $($run.Code))" } }
+    }
+    $receipt.exit_code = $run.Code
+    $receipt.timed_out = [bool]$run.TimedOut
+    $receipt.kill_failed = [bool]$run.KillFailed
+    if ($result -is [System.Collections.IDictionary]) {
+        $receipt.delegate = [ordered]@{ status = [string]$result['status']; summary = [string]$result['summary']
+            files_changed = @($result['files_changed']); tests_run = @($result['tests_run']); unverified = @($result['unverified']) }
+    }
+    if ($run.KillFailed) {
+        & $finish 'needs-inspection'
+        Write-AosWarn "delegate $id timed out and could not be stopped: inspect $workdir (claim kept)"
+        $global:LASTEXITCODE = 1
+        return $receipt
+    }
+    if ($Write) {
+        $st = Invoke-AosGit -Dir $workdir -Arguments @('status', '--porcelain')
+        $changed = @(Get-AosPorcelainPaths $st.Out)
+        $receipt.changed = $changed
+        if (@($Allow | Where-Object { $_ }).Count -gt 0) { $receipt.outside_allow = @($changed | Where-Object { -not (Test-AosAllowed $_ $Allow) }) }
+        if ($changed.Count -gt 0) {
+            $summary = 'changes'
+            if ($receipt.delegate -and $receipt.delegate.summary) { $summary = (($receipt.delegate.summary -split "`r?`n")[0]) }
+            if ($summary.Length -gt 72) { $summary = $summary.Substring(0, 72) }
+            $null = Invoke-AosGit -Dir $workdir -Arguments @('add', '-A')
+            $cm = Invoke-AosGit -Dir $workdir -Arguments @('commit', '-q', '-m', "delegate ${id}: $summary")
+            if ($cm.Code -eq 0) { $receipt.commit = (Invoke-AosGit -Dir $workdir -Arguments @('rev-parse', 'HEAD')).Out }
+        }
+        if ($claimed) { $null = Invoke-AosRelease -Path $workdir -Agent $Vendor -Session $id }
+    }
+    if ($Verify -and -not $run.TimedOut) {
+        $vlog = Join-Path $dir 'verify.log'
+        $vr = Invoke-AosProcess -Exe 'cmd.exe' -ArgumentString ('/d /s /c "' + $Verify + '"') -WorkingDirectory $workdir -StdoutFile $vlog -StderrFile (Join-Path $dir 'verify.err.log') -TimeoutSeconds 1800
+        $receipt.verify = [ordered]@{ command = $Verify; exit_code = $vr.Code }
+    }
+    $outcome = 'rejected'
+    if ($run.TimedOut) { $outcome = 'timed-out' }
+    elseif ($null -ne $receipt.error) { $outcome = 'failed' }
+    else {
+        $ok = ($null -ne $receipt.delegate -and $receipt.delegate.status -eq 'done')
+        if ($Verify -and ($null -eq $receipt.verify -or $receipt.verify.exit_code -ne 0)) { $ok = $false }
+        if ($Write -and (-not $receipt.commit -or @($receipt.outside_allow).Count -gt 0)) { $ok = $false }
+        if ($ok) { $outcome = 'accepted' }
+    }
+    $receipt.accepted = ($outcome -eq 'accepted')
+    & $finish $outcome
+    $line = "delegate $id ($Vendor $($receipt.model)): $outcome, $($receipt.seconds) s, $($receipt.usage.input) in / $($receipt.usage.output) out tokens"
+    if ($receipt.accepted) { Write-AosOk $line } else { Write-AosWarn $line }
+    Write-AosInfo (Join-Path $dir 'receipt.json')
+    if ($receipt.accepted) { $global:LASTEXITCODE = 0 } else { $global:LASTEXITCODE = 1 }
+    return $receipt
+}
+
+function Show-AosDelegations([int]$Last = 10) {
+    $rows = @(Get-AosLedger -Last 0 | Where-Object { $_['type'] -eq 'delegate' } | Select-Object -Last $Last)
+    if ($rows.Count -eq 0) { Write-AosInfo 'no delegations yet'; return }
+    foreach ($r in $rows) { Write-Host ('{0}  {1,-16} {2,-8} {3,-12} {4,6} s  {5} in / {6} out' -f $r['ts'], $r['outcome'], $r['vendor'], $r['model'], $r['seconds'], $r['input'], $r['output']); Write-Host "       $($r['id'])" }
+}
+
+function Show-AosDelegation([string]$Id) {
+    $path = Join-Path (Join-Path (Join-Path (Get-AosCoordDir) 'delegations') $Id) 'receipt.json'
+    if (-not (Test-Path -LiteralPath $path)) { Write-AosWarn "no receipt for $Id"; $global:LASTEXITCODE = 1; return }
+    Write-Host ([System.IO.File]::ReadAllText($path))
+}
+
+function Remove-AosDelegation([string]$Id, [switch]$Force) {
+    $path = Join-Path (Join-Path (Join-Path (Get-AosCoordDir) 'delegations') $Id) 'receipt.json'
+    $r = Read-AosJson $path
+    if ($null -eq $r) { Write-AosWarn "no receipt for $Id"; $global:LASTEXITCODE = 1; return }
+    if ($r['mode'] -ne 'write' -or -not $r['branch']) { Write-AosOk "$Id has no worktree"; return }
+    $repo = [string]$r['repo']
+    $merged = (Invoke-AosGit -Dir $repo -Arguments @('branch', '--merged', 'HEAD', '--list', $r['branch'])).Out
+    if (-not $merged -and -not $Force) { Write-AosWarn "$($r['branch']) is not merged into the current branch of $repo; use --force to drop it"; $global:LASTEXITCODE = 1; return }
+    $null = Invoke-AosGit -Dir $repo -Arguments @('worktree', 'remove', '--force', $r['workdir'])
+    $null = Invoke-AosGit -Dir $repo -Arguments @('branch', '-D', $r['branch'])
+    Add-AosLedgerEvent ([ordered]@{ type = 'delegate-clean'; id = $Id; branch = $r['branch'] })
+    Write-AosOk "removed $($r['workdir']) and $($r['branch'])"
+}
+
+#endregion
+#region coordination CLI ------------------------------------------------------------------
+
+function Get-AosParentPid {
+    # The calling shell: one CLI session per terminal. CIM works in 5.1 and 7 (Process.Parent is 7 only).
+    try { return [int](Get-CimInstance Win32_Process -Filter "ProcessId=$PID" -ErrorAction Stop).ParentProcessId } catch { return $PID }
+}
+
+function ConvertFrom-AosCliArgs([string[]]$Arguments, [string[]]$Switches, [string[]]$Options, [string[]]$Multi) {
+    $opts = @{}
+    $pos = New-Object System.Collections.Generic.List[string]
+    $a = @($Arguments | Where-Object { $null -ne $_ })
+    for ($i = 0; $i -lt $a.Count; $i++) {
+        $x = $a[$i]
+        if ($x.StartsWith('--')) {
+            $name = $x.Substring(2)
+            if ($Switches -contains $name) { $opts[$name] = $true; continue }
+            if (($Options -contains $name -or $Multi -contains $name) -and $i + 1 -lt $a.Count) {
+                if ($Multi -contains $name) {
+                    if (-not $opts.ContainsKey($name)) { $opts[$name] = New-Object System.Collections.Generic.List[string] }
+                    $opts[$name].Add($a[$i + 1])
+                }
+                else { $opts[$name] = $a[$i + 1] }
+                $i++
+                continue
+            }
+            throw "unknown or incomplete option: $x"
+        }
+        $pos.Add($x)
+    }
+    return @{ Pos = $pos.ToArray(); Opts = $opts }
+}
+
+function Invoke-AosCoordCommand([string]$Command, [string[]]$Arguments) {
+    try {
+        switch ($Command) {
+            'claim' {
+                $p = ConvertFrom-AosCliArgs $Arguments @('json') @('as', 'session', 'note', 'ttl') @()
+                if (-not $p.Opts['as']) { throw 'usage: aos claim [<path>] --as <agent> [--session <id>] [--note <text>] [--ttl <min>] [--json]' }
+                $session = $p.Opts['session']
+                if (-not $session) { $session = "$($p.Opts['as'])-$(Get-AosParentPid)" }
+                $ttl = 60
+                if ($p.Opts['ttl']) { $ttl = [int]$p.Opts['ttl'] }
+                $r = Invoke-AosClaim -Path ($p.Pos | Select-Object -First 1) -Agent $p.Opts['as'] -Session $session -Note ([string]$p.Opts['note']) -TtlMinutes $ttl
+                if ($p.Opts['json']) { Write-Host (ConvertTo-Json -InputObject $r -Depth 6) }
+                elseif ($r.Ok) { Write-AosOk "$($r.Action): $($r.Claim.checkout) for $($r.Claim.agent) ($($r.Claim.session)) until $($r.Claim.expires)" }
+                else { Write-AosWarn $r.Message }
+                if ($r.Ok) { $global:LASTEXITCODE = 0 } else { $global:LASTEXITCODE = 1 }
+            }
+            'release' {
+                $p = ConvertFrom-AosCliArgs $Arguments @() @('as', 'session') @()
+                if (-not $p.Opts['as']) { throw 'usage: aos release [<path>] --as <agent> [--session <id>]' }
+                $session = $p.Opts['session']
+                if (-not $session) { $session = "$($p.Opts['as'])-$(Get-AosParentPid)" }
+                $r = Invoke-AosRelease -Path ($p.Pos | Select-Object -First 1) -Agent $p.Opts['as'] -Session $session
+                if ($r.Ok) { Write-AosOk 'released'; $global:LASTEXITCODE = 0 } else { Write-AosWarn $r.Message; $global:LASTEXITCODE = 1 }
+            }
+            'who' {
+                $p = ConvertFrom-AosCliArgs $Arguments @('json') @() @()
+                $claims = @(Get-AosClaims)
+                $events = @(Get-AosLedger -Last 10)
+                if ($p.Opts['json']) { Write-Host (ConvertTo-Json -InputObject ([ordered]@{ claims = $claims; ledger = $events }) -Depth 8) ; return }
+                if ($claims.Count -eq 0) { Write-AosInfo 'no live claims' }
+                foreach ($c in $claims) { Write-AosOk (Format-AosClaimHolder $c) }
+                foreach ($e in $events) {
+                    $what = @($e.Keys | Where-Object { $_ -notin @('ts', 'type') } | ForEach-Object { "$_=$($e[$_])" }) -join ' '
+                    Write-AosInfo "$($e['ts']) $($e['type']) $what"
+                }
+            }
+            'note' {
+                $p = ConvertFrom-AosCliArgs $Arguments @() @('as') @()
+                $text = ($p.Pos -join ' ').Trim()
+                if (-not $p.Opts['as'] -or -not $text) { throw 'usage: aos note <text> --as <agent>' }
+                if (-not (Test-AosAgentName $p.Opts['as'])) { throw "invalid agent name '$($p.Opts['as'])'" }
+                Add-AosLedgerEvent ([ordered]@{ type = 'note'; agent = $p.Opts['as']; checkout = (Get-AosCheckout ''); text = $text })
+                Write-AosOk 'noted (aos who shows it)'
+            }
+            'delegate' {
+                $sub = @($Arguments)[0]
+                $rest = @($Arguments | Select-Object -Skip 1)
+                switch ($sub) {
+                    'ls' { $p = ConvertFrom-AosCliArgs $rest @() @('last') @(); $n = 10; if ($p.Opts['last']) { $n = [int]$p.Opts['last'] }; Show-AosDelegations -Last $n }
+                    'show' { Show-AosDelegation -Id (@($rest)[0]) }
+                    'clean' { $p = ConvertFrom-AosCliArgs $rest @('force') @() @(); Remove-AosDelegation -Id ($p.Pos | Select-Object -First 1) -Force:([bool]$p.Opts['force']) }
+                    { $_ -in @('codex', 'claude') } {
+                        $p = ConvertFrom-AosCliArgs $rest @('write') @('task', 'model', 'verify', 'timeout', 'repo') @('needs', 'allow', 'setup')
+                        if (-not $p.Opts['task']) { throw 'usage: aos delegate <codex|claude> --task <file> [--write --verify <cmd>] [--model <m>] [--needs <cmd>]... [--allow <glob>]... [--setup <cmd>]... [--timeout <min>] [--repo <path>]' }
+                        $t = 30
+                        if ($p.Opts['timeout']) { $t = [int]$p.Opts['timeout'] }
+                        $null = Invoke-AosDelegate -Vendor $sub -TaskFile $p.Opts['task'] -Write:([bool]$p.Opts['write']) -Model $p.Opts['model'] `
+                            -Needs @($p.Opts['needs']) -Verify $p.Opts['verify'] -Allow @($p.Opts['allow']) -Setup @($p.Opts['setup']) -TimeoutMinutes $t -Repo $p.Opts['repo']
+                    }
+                    default { throw 'usage: aos delegate <codex|claude|ls|show|clean> ...' }
+                }
+            }
+        }
+    }
+    catch { Write-AosWarn $_.Exception.Message; $global:LASTEXITCODE = 1 }
+}
+
+#endregion

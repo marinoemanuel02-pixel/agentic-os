@@ -1,0 +1,14 @@
+{
+  "_readme": "Merged into ~/.codex/hooks.json by aos sync ({{aos}} = this repo's aos.psm1). Entries containing 'aos guard' are owned by aos and replaced on every sync; trust them once in Codex (/hooks).",
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "apply_patch|Edit|Write", "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Import-Module '{{aos}}' -DisableNameChecking; aos guard codex pre-edit\"", "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Import-Module '{{aos}}' -DisableNameChecking; aos guard codex pre-edit\"", "timeout": 10 } ] }
+    ],
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Import-Module '{{aos}}' -DisableNameChecking; aos guard codex session-start\"", "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Import-Module '{{aos}}' -DisableNameChecking; aos guard codex session-start\"", "timeout": 10 } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Import-Module '{{aos}}' -DisableNameChecking; aos guard codex session-end\"", "commandWindows": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Import-Module '{{aos}}' -DisableNameChecking; aos guard codex session-end\"", "timeout": 5 } ] }
+    ]
+  }
+}
