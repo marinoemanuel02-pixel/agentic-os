@@ -2213,13 +2213,15 @@ function Resolve-AosExe([string]$Exe) {
 function Start-AosProcessCore {
     # Native exe, UTF-8 output captured to strings, optional UTF-8 stdin, a hard timeout that kills
     # the process tree and reports whether the kill worked.
-    param([string]$Exe, [string[]]$Arguments, [string]$ArgumentString, [string]$WorkingDirectory, [string]$StdinFile, [int]$TimeoutSeconds = 60)
+    param([string]$Exe, [string[]]$Arguments, [string]$ArgumentString, [string]$WorkingDirectory, [string]$StdinFile, [int]$TimeoutSeconds = 60,
+        [hashtable]$Environment)
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = Resolve-AosExe $Exe
     if ($PSBoundParameters.ContainsKey('ArgumentString')) { $psi.Arguments = $ArgumentString } else { $psi.Arguments = ConvertTo-AosArgString $Arguments }
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow = $true
     if ($WorkingDirectory) { $psi.WorkingDirectory = $WorkingDirectory }
+    if ($Environment) { foreach ($k in @($Environment.Keys)) { $psi.EnvironmentVariables[[string]$k] = [string]$Environment[$k] } }
     $psi.RedirectStandardInput = $true
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
@@ -2262,8 +2264,8 @@ function Start-AosProcessCore {
 function Invoke-AosProcess {
     # The one place aos starts a delegate or a verify command; tests mock it.
     param([string]$Exe, [string[]]$Arguments, [string]$ArgumentString, [string]$WorkingDirectory, [string]$StdinFile,
-        [string]$StdoutFile, [string]$StderrFile, [int]$TimeoutSeconds = 60)
-    $core = @{ Exe = $Exe; WorkingDirectory = $WorkingDirectory; StdinFile = $StdinFile; TimeoutSeconds = $TimeoutSeconds }
+        [string]$StdoutFile, [string]$StderrFile, [int]$TimeoutSeconds = 60, [hashtable]$Environment)
+    $core = @{ Exe = $Exe; WorkingDirectory = $WorkingDirectory; StdinFile = $StdinFile; TimeoutSeconds = $TimeoutSeconds; Environment = $Environment }
     if ($PSBoundParameters.ContainsKey('ArgumentString')) { $core['ArgumentString'] = $ArgumentString } else { $core['Arguments'] = $Arguments }
     $r = Start-AosProcessCore @core
     if ($StdoutFile) { Write-AosText -Path $StdoutFile -Text $r.Out }
@@ -2342,14 +2344,14 @@ function Format-AosClaimHolder($Claim) {
 function Test-AosAgentName([string]$Agent) { return ($Agent -cmatch '^[a-z][a-z0-9:_-]{0,40}$') }
 
 function Invoke-AosClaim {
-    param([string]$Path, [string]$Agent, [string]$Session, [string]$Note = '', [int]$TtlMinutes = 60)
+    param([string]$Path, [string]$Agent, [string]$Session, [string]$Note = '', [int]$TtlMinutes = 60, [switch]$KeepNote)
     $fail = { param($m) [pscustomobject]@{ Ok = $false; Action = 'refused'; Claim = $null; Holder = $null; Message = $m } }
     if (-not (Test-AosAgentName $Agent)) { return (& $fail "invalid agent name '$Agent' (lowercase letters, digits, : _ -)") }
     if ([string]::IsNullOrWhiteSpace($Session)) { return (& $fail 'a session id is required') }
     if ($TtlMinutes -lt 1 -or $TtlMinutes -gt 1440) { return (& $fail "TTL must be 1..1440 minutes, not $TtlMinutes") }
     $aosClaimCheckout = Get-AosCheckout $Path
     $aosClaimFile = Get-AosClaimPath $aosClaimCheckout
-    $aosClaimArgs = @{ Agent = $Agent; Session = $Session; Note = $Note; Ttl = $TtlMinutes }
+    $aosClaimArgs = @{ Agent = $Agent; Session = $Session; Note = $Note; Ttl = $TtlMinutes; KeepNote = [bool]$KeepNote }
     return (Invoke-AosCoordLocked {
         $now = [DateTime]::UtcNow
         $nowText = $now.ToString('yyyy-MM-ddTHH:mm:ssZ')
@@ -2382,7 +2384,7 @@ function Invoke-AosClaim {
             }
         }
         $note = $aosClaimArgs.Note
-        if ($action -eq 'renewed' -and -not $note) { $note = [string]$old['note'] }
+        if ($action -eq 'renewed' -and ($aosClaimArgs.KeepNote -or -not $note)) { $note = [string]$old['note'] }
         $previous = $null
         if ($action -eq 'taken-over') { $previous = $old }
         $claim = [ordered]@{ checkout = $aosClaimCheckout; agent = $aosClaimArgs.Agent; session = $aosClaimArgs.Session; note = $note
@@ -2461,6 +2463,8 @@ function Invoke-AosGuard([string]$Agent, [string]$Event, [string]$InputJson) {
         $in = ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $InputJson -ErrorAction Stop)
         if (-not ($in -is [System.Collections.IDictionary])) { throw 'hook input is not a JSON object' }
         $session = [string]$in['session_id']
+        # A delegate started by `aos delegate` edits under the claim its wrapper took: same session name.
+        if ($env:AOS_DELEGATE_ID) { $session = $env:AOS_DELEGATE_ID }
         if (-not $session) { throw 'no session_id in hook input' }
         $cwd = [string]$in['cwd']
         switch ($Event) {
@@ -2470,9 +2474,12 @@ function Invoke-AosGuard([string]$Agent, [string]$Event, [string]$InputJson) {
                     $co = Get-AosCheckout $p
                     if ($done.ContainsKey($co.ToLowerInvariant())) { continue }
                     $done[$co.ToLowerInvariant()] = $true
-                    $r = Invoke-AosClaim -Path $co -Agent $Agent -Session $session -TtlMinutes 60 -Note 'auto (first edit)'
+                    $r = Invoke-AosClaim -Path $co -Agent $Agent -Session $session -TtlMinutes 60 -Note 'auto (first edit)' -KeepNote
                     if (-not $r.Ok) {
                         if ($null -eq $r.Holder) { throw $r.Message }
+                        # Fallback when the vendor does not pass AOS_DELEGATE_ID to hooks: the wrapper's claim on a
+                        # delegate worktree admits the same agent.
+                        if ($r.Holder['agent'] -eq $Agent -and ([string]$r.Holder['note']).StartsWith('aos delegate ')) { continue }
                         $res.Exit = 2
                         $res.Stderr = 'aos: ' + (Format-AosClaimHolder $r.Holder) + ' Do not edit here; coordinate (aos who) or use a worktree.'
                         break
@@ -2908,7 +2915,8 @@ function Invoke-AosDelegate {
         $resultPath = Join-Path $dir 'result.json'
         $run = Invoke-AosProcess -Exe 'codex.exe' -Arguments @('exec', '-m', $pre.Model, '--json', '--output-schema', $schemaPath, '-o', $resultPath,
             '-C', $workdir, '--sandbox', $mode, '--skip-git-repo-check', '-') -WorkingDirectory $workdir -StdinFile $promptPath `
-            -StdoutFile (Join-Path $dir 'events.jsonl') -StderrFile (Join-Path $dir 'stderr.log') -TimeoutSeconds ($TimeoutMinutes * 60)
+            -StdoutFile (Join-Path $dir 'events.jsonl') -StderrFile (Join-Path $dir 'stderr.log') -TimeoutSeconds ($TimeoutMinutes * 60) `
+            -Environment @{ AOS_DELEGATE_ID = $id }
         $ev = Read-AosCodexEvents (Join-Path $dir 'events.jsonl')
         $receipt.thread_id = $ev.ThreadId
         $receipt.usage = [ordered]@{ input = $ev.Input; cached = $ev.Cached; output = $ev.Output }
@@ -2933,7 +2941,8 @@ function Invoke-AosDelegate {
         }
         $outPath = Join-Path $dir 'claude.json'
         $run = Invoke-AosProcess -Exe 'claude.exe' -Arguments $claudeArgs -WorkingDirectory $workdir -StdinFile $promptPath `
-            -StdoutFile $outPath -StderrFile (Join-Path $dir 'stderr.log') -TimeoutSeconds ($TimeoutMinutes * 60)
+            -StdoutFile $outPath -StderrFile (Join-Path $dir 'stderr.log') -TimeoutSeconds ($TimeoutMinutes * 60) `
+            -Environment @{ AOS_DELEGATE_ID = $id }
         $cj = $null
         if (Test-Path -LiteralPath $outPath) { try { $cj = ConvertTo-AosHashtable (ConvertFrom-Json -InputObject ([System.IO.File]::ReadAllText($outPath)) -ErrorAction Stop) } catch { } }
         if ($cj -is [System.Collections.IDictionary]) {

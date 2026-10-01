@@ -3020,6 +3020,26 @@ Describe 'Write guard' {
         $r.Exit | Should -Be 2
         $r.Stderr | Should -Match 'aos: .* is held by codex \(other\).*Do not edit here; coordinate \(aos who\) or use a worktree\.'
     }
+    # Written by Claude (not split authorship): found in Claude's own review of pass A while both
+    # Codex slots were busy. Without it, a delegate's hook would be blocked by its own wrapper's claim.
+    It 'lets a delegate edit under the claim its aos delegate wrapper took' {
+        InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosClaim -Path $P -Agent 'codex' -Session 'd-1' -Note 'aos delegate d-1' } | Out-Null
+        $j = @{ cwd=$repo; session_id='codex-thread-9'; tool_name='apply_patch'; tool_input=@{ input="*** Begin Patch`n*** Add File: b.txt`n*** End Patch" } } | ConvertTo-Json -Compress
+        $saved = $env:AOS_DELEGATE_ID
+        try {
+            $env:AOS_DELEGATE_ID = 'd-1'
+            $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'codex' -Event 'pre-edit' -InputJson $J }
+            $r.Exit | Should -Be 0
+            $env:AOS_DELEGATE_ID = $null
+            $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'codex' -Event 'pre-edit' -InputJson $J }
+            $r.Exit | Should -Be 0
+            $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson $J }
+            $r.Exit | Should -Be 2
+        } finally { $env:AOS_DELEGATE_ID = $saved }
+        $c = @(InModuleScope aos { Get-AosClaims })
+        $c.Count | Should -Be 1
+        $c[0]['session'] | Should -Be 'd-1'
+    }
     It 'fails open for invalid JSON and a busy lock' {
         $r = InModuleScope aos { Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson '{' }
         $r.Exit | Should -Be 0
