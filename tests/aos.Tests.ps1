@@ -3055,13 +3055,15 @@ Describe 'Presence hooks sync' {
         $claude = Get-Content (Join-Path $PSScriptRoot '..\config\claude\settings.json') -Raw | ConvertFrom-Json
         $codex = Get-Content (Join-Path $PSScriptRoot '..\config\codex\hooks.json') -Raw | ConvertFrom-Json
         $claude.hooks.PreToolUse[0].matcher | Should -Be 'Edit|Write|MultiEdit|NotebookEdit'
-        $codex.PreToolUse[0].matcher | Should -Be 'apply_patch|Edit|Write'
-        foreach ($hooks in @($claude.hooks, $codex)) {
+        # ~/.codex/hooks.json wraps events in "hooks" (Codex hooks docs; the cc plugin's hooks.json).
+        $codex.hooks.PreToolUse[0].matcher | Should -Be 'apply_patch|Edit|Write'
+        foreach ($hooks in @($claude.hooks, $codex.hooks)) {
             foreach ($event in 'PreToolUse','SessionStart','SessionEnd') {
                 @($hooks.$event).Count | Should -BeGreaterThan 0
                 $entry = @($hooks.$event)[0].hooks[0]
                 $entry.command | Should -Match 'aos guard'
-                $entry.commandWindows | Should -Match 'aos guard'
+                # commandWindows exists only in Codex hooks; Claude settings have no such field.
+                if ($hooks -eq $codex.hooks) { $entry.commandWindows | Should -Match 'aos guard' }
                 if ($event -eq 'SessionEnd') { $entry.timeout | Should -Be 5 }
                 else { $entry.timeout | Should -Be 10 }
             }
@@ -3069,7 +3071,7 @@ Describe 'Presence hooks sync' {
     }
     It 'merges a user hook, replaces stale owned hooks and stays byte-identical on second sync' {
         $target = Join-Path $caseRoot 'codex hooks.json'
-        Write-TestFile $target '{"SessionStart":[{"hooks":[{"type":"command","command":"echo user"}]},{"hooks":[{"type":"command","command":"old aos guard codex session-start"}]}]}'
+        Write-TestFile $target '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"echo user"}]},{"hooks":[{"type":"command","command":"old aos guard codex session-start"}]}]}}'
         if (InModuleScope aos { Get-Command Get-AosCodexHooksPath -ErrorAction SilentlyContinue }) { Mock Get-AosCodexHooksPath -ModuleName aos { $target } }
         Mock Write-AosWarn -ModuleName aos { }
         InModuleScope aos { Sync-AosCodexHooks }

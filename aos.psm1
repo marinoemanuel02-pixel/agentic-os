@@ -2091,6 +2091,16 @@ function Get-AosCodexHome {
 
 function Get-AosUtcStamp { return [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ') }
 
+function ConvertTo-AosStamp($Value) {
+    # PowerShell 7's ConvertFrom-Json turns ISO strings into DateTime; keep one textual UTC form.
+    if ($Value -is [DateTime]) {
+        $d = $Value
+        if ($d.Kind -eq [System.DateTimeKind]::Unspecified) { $d = [DateTime]::SpecifyKind($d, [System.DateTimeKind]::Utc) }
+        return $d.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    }
+    return [string]$Value
+}
+
 function ConvertFrom-AosUtcStamp([string]$Text) {
     $d = [DateTime]::MinValue
     $styles = [System.Globalization.DateTimeStyles]::AdjustToUniversal -bor [System.Globalization.DateTimeStyles]::AssumeUniversal
@@ -2153,7 +2163,12 @@ function Get-AosLedger([int]$Last = 20) {
     $out = New-Object System.Collections.ArrayList
     foreach ($line in ((Read-AosSharedText $path) -split "`r?`n")) {
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
-        try { [void]$out.Add((ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $line -ErrorAction Stop))) } catch { }
+        try {
+            $e = ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $line -ErrorAction Stop)
+            if ($e -is [System.Collections.IDictionary] -and $e.Contains('ts')) { $e['ts'] = ConvertTo-AosStamp $e['ts'] }
+            [void]$out.Add($e)
+        }
+        catch { }
     }
     if ($Last -gt 0 -and $out.Count -gt $Last) { return $out.GetRange($out.Count - $Last, $Last).ToArray() }
     return $out.ToArray()
@@ -2300,6 +2315,7 @@ function Read-AosClaimFile([string]$Path) {
     if ([string]::IsNullOrWhiteSpace($text)) { throw "empty claim file $Path" }
     $c = ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $text -ErrorAction Stop)
     if (-not ($c -is [System.Collections.IDictionary]) -or -not $c['agent'] -or -not $c['expires']) { throw "not a claim: $Path" }
+    foreach ($k in @('since', 'renewed', 'expires')) { if ($c.Contains($k)) { $c[$k] = ConvertTo-AosStamp $c[$k] } }
     return $c
 }
 
@@ -2367,13 +2383,15 @@ function Invoke-AosClaim {
         }
         $note = $aosClaimArgs.Note
         if ($action -eq 'renewed' -and -not $note) { $note = [string]$old['note'] }
+        $previous = $null
+        if ($action -eq 'taken-over') { $previous = $old }
         $claim = [ordered]@{ checkout = $aosClaimCheckout; agent = $aosClaimArgs.Agent; session = $aosClaimArgs.Session; note = $note
             since = $since; renewed = $nowText; expires = $expires; host_pid = $PID }
         Write-AosClaimFile $aosClaimFile $claim
         if ($action -ne 'renewed') {
             Add-AosLedgerEvent ([ordered]@{ type = 'claim'; action = $action; checkout = $aosClaimCheckout; agent = $aosClaimArgs.Agent; session = $aosClaimArgs.Session; note = $note })
         }
-        return [pscustomobject]@{ Ok = $true; Action = $action; Claim = $claim; Holder = $null; Message = '' }
+        return [pscustomobject]@{ Ok = $true; Action = $action; Claim = $claim; Holder = $previous; Message = '' }
     })
 }
 
@@ -2467,7 +2485,7 @@ function Invoke-AosGuard([string]$Agent, [string]$Event, [string]$InputJson) {
                     foreach ($c in (Get-AosClaims)) {
                         if ($c['checkout'] -ne $co) { continue }
                         if ($c['agent'] -eq $Agent -and $c['session'] -eq $session) { continue }
-                        $res.Stdout = 'Note: ' + (Format-AosClaimHolder $c) + ' Do not edit here; coordinate (aos who) or use a worktree.'
+                        $res.Stdout = 'Note: aos: ' + (Format-AosClaimHolder $c) + ' Do not edit here; coordinate (aos who) or use a worktree.'
                     }
                 }
             }
@@ -2544,9 +2562,11 @@ function Merge-AosOwnedHooks($Target, $Overlay) {
     }
 }
 
+function Get-AosCodexHooksPath { return (Join-Path (Get-AosCodexHome) 'hooks.json') }
+
 function Sync-AosCodexHooks([switch]$DryRun, [string]$Path) {
     $target = $Path
-    if (-not $target) { $target = Join-Path (Get-AosCodexHome) 'hooks.json' }
+    if (-not $target) { $target = Get-AosCodexHooksPath }
     $overlay = Read-AosJson (Join-Path $script:Root 'config\codex\hooks.json')
     if ($null -eq $overlay -or -not $overlay.Contains('hooks')) { Write-AosWarn 'config/codex/hooks.json missing or empty'; return }
     $read = Read-AosJsonOrWarn $target
@@ -2585,7 +2605,12 @@ function Repair-AosCcHooks([switch]$DryRun, [string]$PluginsRoot) {
     if ($files.Count -eq 0) { Write-AosOk 'no cc plugin hooks to repair'; return }
     foreach ($f in $files) {
         $text = [System.IO.File]::ReadAllText($f)
-        $new = [regex]::Replace($text, '(?<!\{)\$PLUGIN_ROOT(?![A-Za-z0-9_}])', '$${PLUGIN_ROOT}')
+        # Only inside command/commandWindows values; other fields (notes, docs) keep their text.
+        $fix = [System.Text.RegularExpressions.MatchEvaluator] {
+            param($m)
+            $m.Groups[1].Value + [regex]::Replace($m.Groups[2].Value, '(?<!\{)\$PLUGIN_ROOT(?![A-Za-z0-9_}])', '$${PLUGIN_ROOT}') + '"'
+        }
+        $new = [regex]::Replace($text, '("(?:command|commandWindows|command_windows)"\s*:\s*")((?:[^"\\]|\\.)*)"', $fix)
         if ($new -ceq $text) { Write-AosOk "cc hooks use `${PLUGIN_ROOT} ($f)"; continue }
         try { $null = ConvertFrom-Json -InputObject $new -ErrorAction Stop }
         catch { Write-AosWarn "repairing $f would break its JSON; left alone"; continue }
@@ -2805,9 +2830,15 @@ function Get-AosDelegatePrompt([string]$TaskText, [string]$WorkDir, [string]$Bra
 function Invoke-AosDelegate {
     param([string]$Vendor, [string]$TaskFile, [switch]$Write, [string]$Model, [string[]]$Needs, [string]$Verify,
         [string[]]$Allow, [string[]]$Setup, [int]$TimeoutMinutes = 30, [string]$Repo)
-    if ($Vendor -notin @('codex', 'claude')) { throw "unknown vendor '$Vendor' (codex or claude)" }
-    if (-not $TaskFile -or -not (Test-Path -LiteralPath $TaskFile)) { throw "task file not found: $TaskFile" }
-    if ($Write -and -not $Verify) { throw 'write mode needs --verify <command>: the host checks the result, not the delegate' }
+    $refuse = {
+        param($m)
+        Write-AosWarn "delegate refused: $m"
+        $global:LASTEXITCODE = 1
+        return [pscustomobject]@{ accepted = $false; outcome = 'refused'; error = [ordered]@{ category = 'usage'; message = $m } }
+    }
+    if ($Vendor -notin @('codex', 'claude')) { return (& $refuse "unknown vendor '$Vendor' (codex or claude)") }
+    if (-not $TaskFile -or -not (Test-Path -LiteralPath $TaskFile)) { return (& $refuse "task file not found: $TaskFile") }
+    if ($Write -and -not $Verify) { return (& $refuse 'write mode needs --verify <command>: the host checks the result, not the delegate') }
     $taskText = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $TaskFile).ProviderPath)
     $repoDir = $Repo
     if (-not $repoDir) { $repoDir = (Get-Location).ProviderPath }
@@ -2835,7 +2866,7 @@ function Invoke-AosDelegate {
     if ($Write) {
         $receipt.mode = 'write'
         $top = Invoke-AosGit -Dir $repoDir -Arguments @('rev-parse', '--show-toplevel')
-        if ($top.Code -ne 0) { throw "write mode needs a git repository: $repoDir" }
+        if ($top.Code -ne 0) { return (& $refuse "write mode needs a git repository: $repoDir") }
         $base = (Invoke-AosGit -Dir $repoDir -Arguments @('rev-parse', 'HEAD')).Out
         $receipt.base = $base
         $dirty = (Invoke-AosGit -Dir $repoDir -Arguments @('status', '--porcelain')).Out
