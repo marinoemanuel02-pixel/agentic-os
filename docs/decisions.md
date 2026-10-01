@@ -3,6 +3,15 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-01 - One fresh vault replaces tala, duda15 and meta-cognizione
+
+- The user said the tala and duda15 vaults are not theirs and were mixed in by mistake. Both folders went
+  to the Windows Recycle Bin (recoverable; OneDrive also keeps deleted files online for a while).
+  meta-cognizione moved to `Desktop\legacy\meta-cognizione` (D:, where legacy archives normally go, was
+  not connected). All three left `config/places.json` and Paseo's project list.
+- The only vault is now `Desktop\vault`: created empty, with nothing copied from the old vaults. Notes
+  above that name tala describe the old setup.
+
 ## 2026-10-01 - Places: one list, one inbox, filing only on confirmation
 
 - One global Inbox, not one per vault (the user's choice). The phone captures through the aos plugin

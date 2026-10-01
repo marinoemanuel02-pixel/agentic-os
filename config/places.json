@@ -3,9 +3,7 @@
   "places": [
     { "name": "agentic-os", "kind": "repo", "path": "{{desktop}}\\agentic-os" },
     { "name": "nar-tools", "kind": "repo", "path": "{{projects}}\\nar-tools" },
-    { "name": "tala", "kind": "vault", "path": "{{desktop}}\\tala" },
-    { "name": "duda15", "kind": "vault", "path": "{{desktop}}\\duda15" },
-    { "name": "meta-cognizione", "kind": "folder", "path": "{{desktop}}\\meta-cognizione" },
-    { "name": "inbox", "kind": "inbox", "path": "{{desktop}}\\Inbox" }
+    { "name": "inbox", "kind": "inbox", "path": "{{desktop}}\\Inbox" },
+    { "name": "vault", "kind": "vault", "path": "{{desktop}}\\vault" }
   ]
 }
