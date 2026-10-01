@@ -3195,5 +3195,173 @@ Describe 'aos delegate' {
         @(& git -C $repo branch --list 'delegate/*').Count | Should -Be 0
         @(& git -C $repo worktree list).Count | Should -Be 1
     }
+    Context 'host verification and delegate lifecycle' {
+        BeforeEach {
+            $savedWorktrees = $env:AOS_WORKTREES
+            $env:AOS_WORKTREES = Join-Path $caseRoot 'worktrees'
+            & git -C $repo config user.name Fixture
+            & git -C $repo config user.email fixture@example.invalid
+            Mock Invoke-AosProcess -ModuleName aos {
+                if ($Exe -eq 'codex.exe') {
+                    Write-TestFile (Join-Path $WorkingDirectory 'fixture.txt') 'delegate edit'
+                    Write-TestFile $StdoutFile '{"type":"turn.completed"}'
+                    $resultPath = $Arguments[[Array]::IndexOf($Arguments, '-o') + 1]
+                    Write-TestFile $resultPath '{"status":"done","summary":"fixture change","files_changed":["fixture.txt"],"tests_run":[{"command":"fixture test","exit_code":0,"passed":true}],"unverified":[]}'
+                }
+                else { Write-TestFile $StdoutFile 'host verification' }
+                @{ Code=0; TimedOut=$false; KillFailed=$false }
+            }
+        }
+        AfterEach { $env:AOS_WORKTREES = $savedWorktrees }
+
+        It 'accepts a host commit in an accented worktree and releases its live claim' {
+            $accentRepo = Join-Path $caseRoot ('repo space\caf' + [char]0x00E8)
+            New-TestFolder $accentRepo | Out-Null
+            & git -C $accentRepo init -q
+            & git -C $accentRepo config user.name Fixture
+            & git -C $accentRepo config user.email fixture@example.invalid
+            & git -C $accentRepo commit --allow-empty -qm initial
+            Mock Invoke-AosProcess -ModuleName aos -ParameterFilter { $Exe -eq 'codex.exe' } {
+                $claims = @(InModuleScope aos { Get-AosClaims })
+                $claims.Count | Should -Be 1
+                $claims[0].agent | Should -Be 'codex'
+                $branch = & git -C $WorkingDirectory branch --show-current
+                $branch | Should -Be ('delegate/' + $claims[0].session)
+                $claims[0].checkout | Should -Be $WorkingDirectory
+                Get-Content -LiteralPath $StdinFile -Raw -Encoding UTF8 | Should -Match ([regex]::Escape($WorkingDirectory))
+                Write-TestFile (Join-Path $WorkingDirectory 'fixture.txt') 'delegate edit'
+                Write-TestFile $StdoutFile '{"type":"turn.completed"}'
+                Write-TestFile $Arguments[[Array]::IndexOf($Arguments, '-o') + 1] '{"status":"done","summary":"fixture change","files_changed":["fixture.txt"],"tests_run":[],"unverified":[]}'
+                @{ Code=0; TimedOut=$false; KillFailed=$false }
+            }
+            $r = InModuleScope aos -Parameters @{ T=$task; R=$accentRepo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R -Write -Verify 'fixture-verify' }
+            $global:LASTEXITCODE | Should -Be 0
+            $r.outcome | Should -Be 'accepted'
+            $r.accepted | Should -BeTrue
+            $r.branch | Should -Be "delegate/$($r.id)"
+            $r.commit | Should -Not -BeNullOrEmpty
+            (& git -C $accentRepo log -1 --format=%H $r.branch) | Should -Be $r.commit
+            (& git -C $accentRepo show "$($r.commit):fixture.txt") | Should -Be 'delegate edit'
+            $r.verify.exit_code | Should -Be 0
+            @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 0
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Exe -eq 'cmd.exe' -and $WorkingDirectory -eq $r.workdir }
+        }
+
+        It 'rejects a done write delegate that changes nothing without committing' {
+            Mock Invoke-AosProcess -ModuleName aos -ParameterFilter { $Exe -eq 'codex.exe' } {
+                Write-TestFile $StdoutFile '{"type":"turn.completed"}'
+                Write-TestFile $Arguments[[Array]::IndexOf($Arguments, '-o') + 1] '{"status":"done","summary":"nothing to change","files_changed":[],"tests_run":[],"unverified":[]}'
+                @{ Code=0; TimedOut=$false; KillFailed=$false }
+            }
+            $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R -Write -Verify 'fixture-verify' }
+            $r.outcome | Should -Be 'rejected'
+            $r.accepted | Should -BeFalse
+            $r.commit | Should -BeNullOrEmpty
+            (& git -C $repo log -1 --format=%H $r.branch) | Should -Be $r.base
+        }
+
+        It 'rejects and names a change outside the allow glob' {
+            $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R -Write -Verify 'fixture-verify' -Allow 'src/*' }
+            $r.outcome | Should -Be 'rejected'
+            $r.accepted | Should -BeFalse
+            @($r.outside_allow) | Should -Contain 'fixture.txt'
+        }
+
+        It 'rejects failing host verification while preserving the delegate passing test claim' {
+            Mock Invoke-AosProcess -ModuleName aos -ParameterFilter { $Exe -eq 'cmd.exe' } {
+                Write-TestFile $StdoutFile 'host verification failed'
+                @{ Code=1; TimedOut=$false; KillFailed=$false }
+            }
+            $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R -Write -Verify 'fixture-verify' }
+            $r.outcome | Should -Be 'rejected'
+            $r.accepted | Should -BeFalse
+            $r.commit | Should -Not -BeNullOrEmpty
+            $r.delegate.status | Should -Be 'done'
+            @($r.delegate.tests_run).Count | Should -Be 1
+            $r.delegate.tests_run[0].command | Should -Be 'fixture test'
+            $r.delegate.tests_run[0].exit_code | Should -Be 0
+            $r.delegate.tests_run[0].passed | Should -BeTrue
+            $r.verify.exit_code | Should -Be 1
+            $global:LASTEXITCODE | Should -Be 1
+        }
+
+        It 'accepts usage limit words in a normal agent message' {
+            Mock Invoke-AosProcess -ModuleName aos -ParameterFilter { $Exe -eq 'codex.exe' } {
+                Write-TestFile $StdoutFile "{`"type`":`"item.completed`",`"item`":{`"type`":`"agent_message`",`"text`":`"The usage limit documentation is correct.`"}}`n{`"type`":`"turn.completed`"}"
+                Write-TestFile $Arguments[[Array]::IndexOf($Arguments, '-o') + 1] '{"status":"done","summary":"reviewed","files_changed":[],"tests_run":[],"unverified":[]}'
+                @{ Code=0; TimedOut=$false; KillFailed=$false }
+            }
+            $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R }
+            $r.outcome | Should -Be 'accepted'
+            $r.accepted | Should -BeTrue
+            $r.error | Should -BeNullOrEmpty
+            $global:LASTEXITCODE | Should -Be 0
+        }
+
+        It 'releases the claim without committing partial edits after a clean timeout kill' {
+            Mock Invoke-AosProcess -ModuleName aos -ParameterFilter { $Exe -eq 'codex.exe' } {
+                Write-TestFile (Join-Path $WorkingDirectory 'partial.txt') 'unfinished edit'
+                Write-TestFile $StdoutFile ''
+                @{ Code=1; TimedOut=$true; KillFailed=$false }
+            }
+            $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R -Write -Verify 'fixture-verify' }
+            $r.outcome | Should -Be 'timed-out'
+            $r.accepted | Should -BeFalse
+            @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 0
+            $global:LASTEXITCODE | Should -Be 1
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly -ParameterFilter { $Exe -eq 'cmd.exe' }
+            $r.commit | Should -BeNullOrEmpty
+            (& git -C $repo log -1 --format=%H $r.branch) | Should -Be $r.base
+        }
+
+        It 'refuses write mode outside a git repository before launching a process' {
+            $plain = New-TestFolder (Join-Path $caseRoot 'not a repo')
+            $r = InModuleScope aos -Parameters @{ T=$task; R=$plain } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R -Write -Verify 'fixture-verify' }
+            $r.outcome | Should -Be 'refused'
+            $r.accepted | Should -BeFalse
+            $global:LASTEXITCODE | Should -Be 1
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
+        }
+
+        It 'warns that a dirty caller tree supplies committed HEAD only and proceeds' {
+            Write-TestFile (Join-Path $repo 'untracked.txt') 'caller edit'
+            Mock Write-AosWarn -ModuleName aos { }
+            $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R -Write -Verify 'fixture-verify' }
+            Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Text -like '*committed HEAD only*' }
+            $r.outcome | Should -Be 'accepted'
+            Test-Path (Join-Path $r.workdir 'untracked.txt') | Should -BeFalse
+            Get-Content (Join-Path $repo 'untracked.txt') -Raw | Should -Be 'caller edit'
+        }
+
+        It 'lists recent ledger delegates and shows the receipt JSON through the CLI' {
+            InModuleScope aos {
+                foreach ($id in @('older', 'recent', 'latest')) {
+                    Add-AosLedgerEvent @{ type='delegate'; id=$id; vendor='codex'; model='fixture-model'; outcome='accepted'; seconds=1; input=2; output=3 }
+                }
+                Add-AosLedgerEvent @{ type='note'; id='not-a-delegate' }
+            }
+            $listing = (InModuleScope aos { aos delegate ls --last 2 } 6>&1 | Out-String)
+            $listing | Should -Match 'recent'
+            $listing | Should -Match 'latest'
+            $listing | Should -Not -Match 'older|not-a-delegate'
+            $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R -Write -Verify 'fixture-verify' }
+            $shown = (InModuleScope aos -Parameters @{ Id=$r.id } { param($Id) aos delegate show $Id } 6>&1 | Out-String -Width 32767)
+            $stored = Get-Content (Join-Path $env:AOS_COORD "delegations\$($r.id)\receipt.json") -Raw
+            ($shown | ConvertFrom-Json | ConvertTo-Json -Depth 10) | Should -Be ($stored | ConvertFrom-Json | ConvertTo-Json -Depth 10)
+        }
+
+        It 'refuses to clean an unmerged branch unless force is supplied' {
+            $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R -Write -Verify 'fixture-verify' }
+            $r.accepted | Should -BeTrue
+            InModuleScope aos -Parameters @{ Id=$r.id } { param($Id) aos delegate clean $Id }
+            $global:LASTEXITCODE | Should -Be 1
+            @(& git -C $repo branch --list $r.branch).Count | Should -Be 1
+            Test-Path -LiteralPath $r.workdir | Should -BeTrue
+            InModuleScope aos -Parameters @{ Id=$r.id } { param($Id) aos delegate clean $Id --force }
+            @(& git -C $repo branch --list $r.branch).Count | Should -Be 0
+            Test-Path -LiteralPath $r.workdir | Should -BeFalse
+            @(& git -C $repo worktree list).Count | Should -Be 1
+        }
+    }
 }
 }
