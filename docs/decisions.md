@@ -3,6 +3,21 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-01 - Perplexity removed: research uses the agents' free web tools
+
+- Supersedes the Perplexity half of the entry below. In the first real use (the agi-race-2 video research) both
+  `call_perplexity_computer` calls returned `insufficient_credits`. The connector exposes only "Computer" (an
+  agent that spends credits on every call; `models_list` worked, so sign-in was fine). Perplexity's own credits page
+  (https://www.perplexity.ai/help-center/en/articles/13838041-how-credits-work-on-perplexity; it returned 403 to
+  Claude's fetcher, Codex's reviewer read it) says consumer Pro has no monthly Computer credits, only a one-time
+  bonus, after which credits are bought. Bought credits are a paid dependency, which the free-stack rule excludes.
+- The user asked to investigate it and remove it if it did not work. Removed from `config/mcp.json`; the
+  `research` skill now describes the free method (search, then open every page a claim rests on, record opened
+  vs snippet). The research for that video was done this way, and every script claim traces to an opened page.
+- `aos sync` does not unregister servers dropped from the manifest, so the Claude registration is removed by
+  hand (`claude mcp remove perplexity-computer --scope user`) after a Codex review. The `"agents"` field in
+  `config/mcp.json` stays: it is still useful for a one-agent server.
+
 ## 2026-10-01 - Perplexity for research, Claude only; one tool catalog for every agent
 
 - The user connected Perplexity (`perplexity-computer`, a remote HTTP MCP) and wants it available as a tool

@@ -18,12 +18,6 @@
       "args": [],
       "requires": "{{home}}\\.aos\\venvs\\nar-tools\\Scripts\\nar-mcp.exe",
       "why": "Local, calibrated single-pass (non-autoregressive) scoring of options; agents call it only when a choice among known alternatives benefits from it."
-    },
-    "perplexity-computer": {
-      "transport": "http",
-      "url": "https://www.perplexity.ai/rest/computer/mcp",
-      "agents": ["claude"],
-      "why": "Cited multi-source web research on the user's Perplexity plan. Claude Code only (Codex quota is the scarce one); the research skill says when to use it. Sign-in is the user's, in /mcp."
     }
   }
 }
