@@ -2687,4 +2687,15 @@ Describe 'Places commands' {
     }
 }
 
+Describe 'Inbox skill' {
+    It 'has valid frontmatter with a short description' {
+        $path = Join-Path $PSScriptRoot '..\agents-home\skills\inbox\SKILL.md'
+        Test-Path -LiteralPath $path | Should -BeTrue
+        $text = [IO.File]::ReadAllText($path)
+        $frontmatter = [regex]::Match($text, '(?s)^---\r?\nname: inbox\r?\ndescription: (?<d>[^\r\n]+)\r?\n---')
+        $frontmatter.Success | Should -BeTrue
+        # Pi lists every skill's description in its 16K prompt.
+        $frontmatter.Groups['d'].Value.Length | Should -BeLessOrEqual 250
+    }
+}
 }
