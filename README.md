@@ -108,6 +108,21 @@ Keep the PC reachable (your Windows settings, once): keep it plugged in; Setting
 Power > sleep: Never when plugged in; Control Panel > Power Options > "Choose what closing the lid
 does" > Plugged in: Do nothing. The Claude app only holds the PC awake while a session is working.
 
+## Shared folders and Inbox
+
+`config/places.json` lists shared repositories, vaults and folders using runtime placeholders.
+`aos place ls --json` reports the resolved paths and whether they exist. Add an existing folder with
+`aos place add <folder> [--name <name>] [--kind repo|vault|folder]`; commit the resulting config change.
+`aos new` adds the created project too. `aos sync` registers existing Places with Paseo and writes
+`~/.aos/places.json` for agents and tools. Missing folders are left absent; only a missing Inbox is created.
+If Paseo is unavailable, the local registry is still saved and registration is reported as skipped.
+
+The agentic-os phone panel has an Inbox box for notes and optional HTTP(S) links, plus recent captures.
+Save creates a new UTF-8 Markdown file in the configured Inbox and never overwrites another note.
+After a lost reply, the panel keeps your text: refresh the recent list before saving again.
+For photos or other files, use Android Share -> OneDrive -> Desktop/Inbox; OneDrive syncs them separately.
+The shared `inbox` skill can propose filing items into configured vaults and waits for confirmation before moving them.
+
 ## Changing it
 
 | Change | Edit | Then |

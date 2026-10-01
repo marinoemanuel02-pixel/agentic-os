@@ -3,6 +3,18 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-01 - Places: one list, one inbox, filing only on confirmation
+
+- One global Inbox, not one per vault (the user's choice). The phone captures through the aos plugin
+  (no model call); photos and files go through OneDrive's share; agents file with the inbox skill.
+- The repo keeps placeholders ({{desktop}}, {{projects}}, {{home}}), resolved at run time; the resolved
+  list lives in ~\.aos\places.json, read by the plugin and the skill.
+- aos creates only the inbox folder; a missing place is warned about, never recreated.
+- The panel's file name is built on the PC; the phone never sends a path.
+- The skill asks the local model (`nar_choose`) for a destination per item and always shows the whole
+  proposal before moving anything. First live run (6 items, read-only): it sent every AI-video test to
+  `tala/Test ai` (confidence 0.34-0.76) and kept the acceptance note in the Inbox (0.99).
+
 ## 2026-09-30 - Make the local filesystem boundary explicit
 
 - The coordinator tells local Pi that its project directory is a starting location, not a repository
