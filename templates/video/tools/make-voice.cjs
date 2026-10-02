@@ -34,5 +34,6 @@ for (const l of lines) {
   result.push({ id: l.id, file, seconds, sid, speed });
   console.log(`${l.id}: ${seconds.toFixed(2)} s`);
 }
-fs.writeFileSync(voPath, JSON.stringify(result, null, 2) + "\n");
+// an audition (VO_OUT set) must not change the film's measured line lengths
+if (!outDir) fs.writeFileSync(voPath, JSON.stringify(result, null, 2) + "\n");
 console.log(`total ${result.reduce((s, x) => s + x.seconds, 0).toFixed(1)} s`);

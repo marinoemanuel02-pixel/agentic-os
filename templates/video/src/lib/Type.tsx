@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { continueRender, delayRender, Easing, interpolate, useCurrentFrame } from "remotion";
 import { SANS, SERIF } from "./look";
+import { SOFT } from "./motion";
 
 export const useFonts = () => {
   const [handle] = useState(() => delayRender("system fonts"));
@@ -20,14 +21,14 @@ const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 /** A line of type that rises out of a mask with a slight de-blur: starts at `at`, lasts `dur` frames. */
 export const Reveal: React.FC<{ at: number; dur?: number; children: React.ReactNode; style?: React.CSSProperties; out?: number }> = ({
   at,
-  dur = 16,
+  dur = 24,
   children,
   style,
   out,
 }) => {
   const f = useCurrentFrame();
-  const t = interpolate(f, [at, at + dur], [0, 1], { ...clamp, easing: Easing.bezier(0.16, 1, 0.3, 1) });
-  const o = out === undefined ? 1 : interpolate(f, [out, out + 10], [1, 0], { ...clamp, easing: Easing.in(Easing.cubic) });
+  const t = interpolate(f, [at, at + dur], [0, 1], { ...clamp, easing: SOFT });
+  const o = out === undefined ? 1 : interpolate(f, [out, out + 20], [1, 0], { ...clamp, easing: Easing.in(Easing.cubic) });
   return (
     <div style={{ overflow: "hidden", paddingBottom: "0.08em", ...style }}>
       <div style={{ transform: `translateY(${(1 - t) * 105}%)`, opacity: Math.min(1, t * 1.4) * o, filter: `blur(${(1 - t) * 6}px)` }}>

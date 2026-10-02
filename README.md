@@ -61,7 +61,8 @@ settings are merged, never replaced, and backups go to `~/.aos-backups/`.
 |---|---|
 | Start work in a repo | `claude` in the folder, or open it in the Codex app / Claude Desktop |
 | Start a new project | `aos new name` -> `Desktop\1-Projects\name` (AGENTS.md, CLAUDE.md -> @AGENTS.md, .gitignore, git) |
-| Start a new video | `aos video new name` -> `Desktop\1-Projects\videos\name` from `templates/video` (pipeline tools, kit, stage docs), plus a render app in `~\.aos\video\name` linked to the shared Remotion install |
+| Start a new video | `aos video new name` -> `Desktop\1-Projects\videos\name` from `templates/video` (pipeline tools, kit, stage docs), plus a render app in `~\.aos\video\name` linked to the shared Remotion install, and `PREFLIGHT.md` (rules, past verdicts, stage times) |
+| Teach the video pipeline | `aos video verdict name <the user's words>` and `aos video log name <stage> <minutes>` record into the ledger; `aos video preflight name` refreshes `PREFLIGHT.md`; rules in `agents-home/video/video-rules.md` marked `[check: x]` run as `tools/checks/x.mjs` in the project's QA |
 | A second opinion | ask for one; the `second-opinion` skill picks `/codex:review` or `$cc:review` |
 | Keep going at a limit | ask for a handoff; the `handoff` skill writes HANDOFF.md for the other agent |
 | See what's installed and linked | `aos status` |

@@ -1,7 +1,9 @@
 # {{name}} (video)
 
 Instructions for Claude Code and Codex; `CLAUDE.md` imports this file. Made with `aos video new {{name}}`.
-Read `~/.agents/video/video-rules.md` before every stage.
+Read `PREFLIGHT.md` first (the rules with their ids, the user's past verdicts on this kind of video, how long each
+stage took before); refresh it with `aos video preflight {{name}}`. Read `~/.agents/video/video-rules.md` before
+every stage.
 
 ## What this is
 
@@ -23,7 +25,20 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
 - Stills: `bash tools/still.sh <frame> <CompositionId>...`; verify a checkout: `node --no-warnings tools/verify.mjs S01 S02 ...`
   (bundles, renders first/middle/last frame per shot, writes a contact sheet)
 - Soundtrack stems: `node --no-warnings tools/audio.mts`; full build: `bash tools/build.sh v1`
-- QA: `bash tools/qa.sh exports/{{name}}.mp4 exports/{{name}}.srt`, then `node tools/screen.mjs` (on-screen text)
+- QA: `bash tools/qa.sh exports/{{name}}.mp4 exports/{{name}}.srt` (length from `qa.env`; includes the motion
+  check on a texture-free proxy, report `qa/motion.md`), then `node tools/screen.mjs` (on-screen text)
+- Motion check alone: `node --no-warnings tools/checks/motion.mjs <proxy.mp4>`; its tests: `node --test tools/checks/`
+
+## The learning loop (rule R20)
+
+- After each stage: `aos video log {{name}} <brief|look|structure|production|qa|delivery|retro|revision> <minutes> [note]`.
+- Every verdict the user gives, verbatim: `aos video verdict {{name}} <their words>`.
+- Motion: every move goes through `src/lib/motion.ts` (soft in-out curves, moves >= MIN_MOVE_FRAMES, `settle`,
+  `breathe`); expo-out and back-out curves fail the motion check. Shots are long and dissolve (`plan.ts`).
+- nar (rule R21): when choosing among style frames, `nar_choose` is a second signal; keep its call_id and the
+  candidates in `retro.md`, and send `nar_feedback` only if the user compares those same candidates.
+- The retrospective adds rules to `~/.agents/video/video-rules.md` with the next free id, as `[check: x]` with a
+  script in `tools/checks/x.mjs` called from `tools/qa.sh` whenever a script can catch the failure.
 
 ## Done means
 

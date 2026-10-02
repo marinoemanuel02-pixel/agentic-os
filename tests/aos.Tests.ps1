@@ -800,8 +800,9 @@ Describe 'aos video verdict and log' {
         $events[0].type | Should -BeExactly 'video-verdict'
         $events[0].video | Should -BeExactly 'align-1'
         $events[0].text | Should -BeExactly $text
+        # JSON escapes the quotes; the non-ASCII dash must be stored as UTF-8, not as a \u escape.
         [System.IO.File]::ReadAllText((Join-Path $env:AOS_COORD 'ledger.jsonl'), [System.Text.Encoding]::UTF8) |
-            Should -Match ([regex]::Escape($text))
+            Should -Match ([regex]::Escape('then' + [char]0x2014 + 'cut.'))
     }
 
     It 'warns and writes no verdict for <Case>' -ForEach @(

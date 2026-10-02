@@ -16,7 +16,8 @@ a=$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,sample_
 dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$video")
 [[ "$v" == h264,1920,1080,yuv420p,30/1 ]] && ok "video $v" || bad "video $v (want h264,1920,1080,yuv420p,30/1)"
 [[ "$a" == aac,48000,2 ]] && ok "audio $a" || bad "audio $a (want aac,48000,2)"
-# target length from the brief: QA_MIN_S / QA_MAX_S (default 60-90 s, the first video's target)
+# target length from the brief: qa.env sets QA_MIN_S / QA_MAX_S per project (the environment can override it)
+[ -f "$P/qa.env" ] && . "$P/qa.env"
 min="${QA_MIN_S:-60}"; max="${QA_MAX_S:-90}"
 awk "BEGIN{exit !($dur >= $min && $dur <= $max)}" && ok "duration ${dur}s ($min-$max)" || bad "duration ${dur}s (want $min-$max)"
 
@@ -48,6 +49,17 @@ rm -f "$H"/qa/shots/*.png
 while read -r id t; do ffmpeg -v error -y -ss "$t" -i "$video" -frames:v 1 "$H/qa/shots/$id.png"; done < "$H/qa/shot-mids.txt"
 magick montage "$H"/qa/shots/*.png -tile 6x -geometry 480x270+4+4 -background "#222" -fill "#bbb" -pointsize 14 "$P/qa/contact-sheet.jpg"
 ok "contact sheet: qa/contact-sheet.jpg ($(wc -l < "$H/qa/shot-mids.txt") shots)"
+
+# 6. motion (rule R17): a quarter-size proxy of Main without line boil or grain, then tools/checks/motion.mjs
+#    (snaps = travelling moves that start at full speed; banned expo/back curves in src/). Report: qa/motion.md
+proxy="$H/renders/Main-qa.mp4"
+if [ ! -f "$proxy" ] || [ "$video" -nt "$proxy" ]; then
+  bash "$P/tools/sync-app.sh"
+  (cd "$H/app" && node node_modules/@remotion/cli/remotion-cli.js render src/index.ts Main "$proxy" \
+    --scale=0.25 --props='{"qa":true}' --gl=angle --codec=h264 --crf=18 --muted --concurrency=4 --log=warn >/dev/null)
+fi
+node --no-warnings "$P/tools/checks/motion.mjs" "$proxy" "$P/qa/motion.md" > /dev/null \
+  && ok "motion check (qa/motion.md)" || bad "motion check: snaps or banned curves (see qa/motion.md)"
 
 echo >> "$R"; [ $fail = 0 ] && echo "**All technical checks pass.**" >> "$R" || echo "**Technical checks FAILED.**" >> "$R"
 cat "$R"; exit $fail

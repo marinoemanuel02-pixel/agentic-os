@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { buildLines, buildShots, CHAPTERS, totalBeats } from "../src/data/plan.ts";
-import { FPS } from "../src/lib/look.ts";
+import { BEAT, FPS } from "../src/lib/look.ts";
 
 const root = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
 const read = (f: string) => JSON.parse(fs.readFileSync(path.join(root, f), "utf8"));
@@ -11,7 +11,7 @@ const vo = read("src/data/vo.json");
 const text: { id: string; caption: string }[] = read("src/data/lines.json");
 const lines = buildLines(vo);
 const shots = buildShots();
-const end = (totalBeats(lines) * 18) / FPS;
+const end = (totalBeats(lines) * BEAT) / FPS;
 fs.mkdirSync(path.join(root, "exports"), { recursive: true });
 
 // Captions: split each line at sentence ends (then commas) into cues of at most 84 characters (2 x 42), timed

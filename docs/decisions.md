@@ -3,6 +3,29 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-02 - The video pipeline learns: rules with ids, a motion check, verdicts in the ledger
+
+- The user judged the alignment video v1 "still very much shape-like" and, after v2, "still too shape-like and
+  simple, as well as having too-snappy animations", and asked that the orchestration learn from every creation.
+  Until now learning was prose appended to `video-rules.md` that nothing enforced, and nothing recorded verdicts
+  or stage times.
+- Rules now carry an id and a kind: `[manual]` or `[check: x]`. A check rule must have `templates/video/tools/
+  checks/x.mjs` and be called from `tools/qa.sh` (a test enforces both). The first is `motion` (R17): the cause
+  of "snappy" was found in code (an expo-out "house ease" over 8-16 frames in 2-4 s shots), so the check scans
+  source for expo/back curves and scans a texture-free proxy render for moves that start at full speed. It is a
+  locator, with labelled unit tests; on the real films it flags 19 snaps in the v2 export and none in the new hero.
+- `aos video verdict` and `aos video log` record the user's words verbatim and each stage's minutes in the
+  existing coordination ledger (`~\.aos\coord\ledger.jsonl`, append-safe, outside the repo), next to the delegate
+  receipts. `aos video preflight` turns rules + ledger into the project's `PREFLIGHT.md` (same-family verdicts
+  first, stage medians, delegate outcomes); `aos video new` writes it once. Rejected: a history file in
+  `agents-home` (Codex's plan critique: every log line would dirty the config repo, and two agents could
+  interleave writes).
+- nar feedback is sent only when the user compares the same candidates nar scored (rule R21); a verdict on a
+  finished film is not a label for an earlier choice (also from the plan critique).
+- The template moved to long shots joined by dissolves (`plan.ts` overlaps, `Main.tsx` fades), soft easing
+  (`src/lib/motion.ts`), a per-project `qa.env` for the length, and an audition mode that no longer overwrites
+  the measured line lengths (a bug found when this video's audition clobbered `vo.json`).
+
 ## 2026-10-02 - Videos start from a template; orchestration fixes from the first accepted video
 
 - The user accepted agi-race-2 v1 as a first result ("not that bad") and asked to improve the orchestration
