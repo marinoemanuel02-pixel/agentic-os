@@ -751,6 +751,23 @@ Describe 'New-AosVideo' {
         [System.IO.File]::ReadAllText($brief) | Should -BeExactly "my brief`r`n"
     }
 
+    It 'creates a missing preflight once and keeps an edited report on a second run' {
+        $oldCoord = $env:AOS_COORD; $oldRules = $env:AOS_VIDEO_RULES
+        try {
+            $env:AOS_COORD = Join-Path $caseRoot 'coord'
+            $env:AOS_VIDEO_RULES = Join-Path $caseRoot 'video-rules.md'
+            Write-TestFile $env:AOS_VIDEO_RULES "# Video rules`n- R01 [manual] Approve the brief.`n"
+            New-AosVideo -Name 'align-1'
+            $report = Join-Path $env:AOS_PROJECTS 'videos\align-1\PREFLIGHT.md'
+            [System.IO.File]::ReadAllText($report) | Should -Match '^# Preflight: align-1'
+            [System.IO.File]::ReadAllText($report) | Should -Match '## Rules'
+            Write-TestFile $report "my preflight`r`n"
+            New-AosVideo -Name 'align-1'
+            [System.IO.File]::ReadAllText($report) | Should -BeExactly "my preflight`r`n"
+        }
+        finally { $env:AOS_COORD = $oldCoord; $env:AOS_VIDEO_RULES = $oldRules }
+    }
+
     It 'warns and links no node_modules when the shared install is missing' {
         $env:AOS_REMOTION_MODULES = Join-Path $caseRoot 'missing\node_modules'
         Mock Write-AosWarn -ModuleName aos { }
@@ -764,6 +781,186 @@ Describe 'New-AosVideo' {
         New-AosVideo -Name $Name
         Test-Path -LiteralPath (Join-Path $env:AOS_PROJECTS 'videos') | Should -BeFalse
         Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'usage: aos video new' }
+    }
+}
+
+Describe 'aos video verdict and log' {
+    BeforeEach {
+        $oldCoord = $env:AOS_COORD
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+    }
+    AfterEach { $env:AOS_COORD = $oldCoord }
+
+    It 'stores the full verdict text and timestamp in one UTF-8 ledger event' {
+        $text = 'Keep "wide", then' + [char]0x2014 + 'cut.'
+        aos video verdict align-1 'Keep "wide",' ('then' + [char]0x2014 + 'cut.')
+        $events = @(InModuleScope aos { Get-AosLedger -Last 0 })
+        $events.Count | Should -Be 1
+        $events[0].ts | Should -Not -BeNullOrEmpty
+        $events[0].type | Should -BeExactly 'video-verdict'
+        $events[0].video | Should -BeExactly 'align-1'
+        $events[0].text | Should -BeExactly $text
+        [System.IO.File]::ReadAllText((Join-Path $env:AOS_COORD 'ledger.jsonl'), [System.Text.Encoding]::UTF8) |
+            Should -Match ([regex]::Escape($text))
+    }
+
+    It 'warns and writes no verdict for <Case>' -ForEach @(
+        @{ Case = 'invalid name'; Name = '../escape'; Text = 'good' },
+        @{ Case = 'empty text'; Name = 'align-1'; Text = '' }
+    ) {
+        Mock Write-AosWarn -ModuleName aos { }
+        InModuleScope aos -Parameters @{ N = $Name; T = $Text } {
+            param($N, $T)
+            Add-AosVideoVerdict -Name $N -Text $T
+        }
+        Test-Path -LiteralPath (Join-Path $env:AOS_COORD 'ledger.jsonl') | Should -BeFalse
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Text -match 'usage: aos video verdict' }
+    }
+
+    It 'accepts stage <Stage> and stores invariant decimal minutes with the joined note' -ForEach @(
+        @{ Stage = 'brief' }, @{ Stage = 'look' }, @{ Stage = 'structure' },
+        @{ Stage = 'production' }, @{ Stage = 'qa' }, @{ Stage = 'delivery' },
+        @{ Stage = 'retro' }, @{ Stage = 'revision' }
+    ) {
+        aos video log align-1 $Stage '12.5' 'first' 'review'
+        $events = @(InModuleScope aos { Get-AosLedger -Last 0 })
+        $events.Count | Should -Be 1
+        $events[0].ts | Should -Not -BeNullOrEmpty
+        $events[0].type | Should -BeExactly 'video-stage'
+        $events[0].video | Should -BeExactly 'align-1'
+        $events[0].stage | Should -BeExactly $Stage
+        $events[0].minutes | Should -Be 12.5
+        ($events[0].minutes -is [string]) | Should -BeFalse
+        $events[0].note | Should -BeExactly 'first review'
+    }
+
+    It 'stores an empty note when no note is supplied' {
+        InModuleScope aos { Add-AosVideoStage -Name 'align-1' -Stage 'qa' -Minutes '0' }
+        $events = @(InModuleScope aos { Get-AosLedger -Last 0 })
+        $events.Count | Should -Be 1
+        $events[0].note | Should -BeExactly ''
+        $events[0].minutes | Should -Be 0
+    }
+
+    It 'warns and writes no stage for <Case>' -ForEach @(
+        @{ Case = 'invalid name'; Words = @('log', '../escape', 'qa', '2') },
+        @{ Case = 'unknown stage'; Words = @('log', 'align-1', 'editing', '2') },
+        @{ Case = 'negative minutes'; Words = @('log', 'align-1', 'qa', '-1') },
+        @{ Case = 'non-numeric minutes'; Words = @('log', 'align-1', 'qa', 'soon') },
+        @{ Case = 'locale decimal'; Words = @('log', 'align-1', 'qa', '12,5') }
+    ) {
+        Mock Write-AosWarn -ModuleName aos { }
+        aos video @Words
+        Test-Path -LiteralPath (Join-Path $env:AOS_COORD 'ledger.jsonl') | Should -BeFalse
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Text -match 'usage: aos video log' }
+    }
+
+    It 'lists all video subcommands in the warning for an unknown action' {
+        Mock Write-AosWarn -ModuleName aos { }
+        aos video unknown
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -Exactly -ParameterFilter {
+            $Text -match 'usage: aos video new\|verdict\|log\|preflight'
+        }
+    }
+}
+
+Describe 'aos video preflight' {
+    BeforeEach {
+        $savedPreflight = @{ C = $env:AOS_COORD; P = $env:AOS_PROJECTS; R = $env:AOS_VIDEO_RULES }
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        $env:AOS_PROJECTS = New-TestFolder (Join-Path $caseRoot 'projects')
+        $env:AOS_VIDEO_RULES = Join-Path $caseRoot 'rules.md'
+        Write-TestFile $env:AOS_VIDEO_RULES "# Video rules`n- R01 [manual] Approve the brief.`n- R02 [check: frozen-frames] Check the timeline.`n"
+    }
+    AfterEach {
+        $env:AOS_COORD = $savedPreflight.C; $env:AOS_PROJECTS = $savedPreflight.P; $env:AOS_VIDEO_RULES = $savedPreflight.R
+    }
+
+    It 'returns a report for a missing project without creating its folder' {
+        $report = aos video preflight align-1 | Out-String
+        $report | Should -Match '^# Preflight: align-1'
+        $headings = @('## Rules', '## Verdicts on align', '## Other recent verdicts',
+            '## Stage minutes', '## Delegations')
+        $last = -1
+        foreach ($heading in $headings) {
+            $position = $report.IndexOf($heading, [StringComparison]::Ordinal)
+            $position | Should -BeGreaterThan $last
+            $last = $position
+        }
+        $report | Should -Match 'R01.*manual'
+        $report | Should -Match 'R02.*check: frozen-frames.*tools/checks/frozen-frames\.mjs'
+        $report | Should -Match '(?s)## Stage minutes.*?- none recorded.*?## Delegations.*?- none recorded'
+        Test-Path -LiteralPath (Join-Path $env:AOS_PROJECTS 'videos\align-1') | Should -BeFalse
+    }
+
+    It 'reports family verdicts, five other verdicts, medians and delegation outcomes' {
+        $lines = @(
+            '{"ts":"2026-09-01T10:00:00Z","type":"video-verdict","video":"alignment-3","text":"first"}',
+            '{"ts":"2026-09-02T10:00:00Z","type":"video-verdict","video":"alignment","text":"second"}',
+            '{"ts":"2026-09-03T10:00:00Z","type":"video-verdict","video":"Alignment-v2","text":"third"}',
+            '{"ts":"2026-09-04T10:00:00Z","type":"video-verdict","video":"other-1","text":"drop me"}',
+            '{"ts":"2026-09-05T10:00:00Z","type":"video-verdict","video":"other-2","text":"keep 1"}',
+            '{"ts":"2026-09-06T10:00:00Z","type":"video-verdict","video":"other-3","text":"keep 2"}',
+            '{"ts":"2026-09-07T10:00:00Z","type":"video-verdict","video":"other-4","text":"keep 3"}',
+            '{"ts":"2026-09-08T10:00:00Z","type":"video-verdict","video":"other-5","text":"keep 4"}',
+            '{"ts":"2026-09-09T10:00:00Z","type":"video-verdict","video":"other-6","text":"keep 5"}',
+            '{"ts":"2026-09-10T10:00:00Z","type":"video-stage","video":"other-1","stage":"production","minutes":10,"note":""}',
+            '{"ts":"2026-09-11T10:00:00Z","type":"video-stage","video":"alignment","stage":"production","minutes":42,"note":""}',
+            '{"ts":"2026-09-12T10:00:00Z","type":"video-stage","video":"alignment-3","stage":"production","minutes":50,"note":""}',
+            '{"ts":"2026-09-13T10:00:00Z","type":"video-stage","video":"alignment","stage":"qa","minutes":10,"note":""}',
+            '{"ts":"2026-09-14T10:00:00Z","type":"video-stage","video":"alignment","stage":"qa","minutes":20,"note":""}',
+            '{"ts":"2026-09-15T10:00:00Z","type":"delegate","outcome":"accepted"}',
+            '{"ts":"2026-09-16T10:00:00Z","type":"delegate","outcome":"accepted"}',
+            '{"ts":"2026-09-17T10:00:00Z","type":"delegate","outcome":"rejected"}'
+        )
+        # The report must read beyond Get-AosLedger's default 20-event window.
+        for ($i = 0; $i -lt 21; $i++) {
+            $lines += '{"ts":"2026-09-18T10:00:00Z","type":"note","text":"unrelated"}'
+        }
+        Write-TestFile (Join-Path $env:AOS_COORD 'ledger.jsonl') ($lines -join "`n")
+        $report = aos video preflight 'ALIGNMENT-4' | Out-String
+        $report | Should -Match '(?m)^- 2026-09-01 alignment-3: "first"\r?$'
+        $report | Should -Match '(?m)^- 2026-09-02 alignment: "second"\r?$'
+        $report | Should -Match '(?m)^- 2026-09-03 Alignment-v2: "third"\r?$'
+        $report.IndexOf('alignment-3: "first"') | Should -BeLessThan $report.IndexOf('alignment: "second"')
+        $report.IndexOf('alignment: "second"') | Should -BeLessThan $report.IndexOf('Alignment-v2: "third"')
+        $report | Should -Not -Match 'drop me'
+        $report | Should -Match '(?m)^- 2026-09-05 other-2: "keep 1"\r?$'
+        foreach ($n in 1..5) { $report | Should -Match ('keep ' + $n) }
+        $report | Should -Match '(?m)^- production: median 42 min \(3 runs\)\r?$'
+        $report | Should -Match '(?m)^- qa: median 15 min \(2 runs\)\r?$'
+        $report | Should -Match '(?m)^- accepted: 2\r?$'
+        $report | Should -Match '(?m)^- rejected: 1\r?$'
+    }
+
+    It 'overwrites the generated report when the project folder exists' {
+        $folder = New-TestFolder (Join-Path $env:AOS_PROJECTS 'videos\align-1')
+        $path = Join-Path $folder 'PREFLIGHT.md'
+        Write-TestFile $path 'stale report'
+        $report = InModuleScope aos { Write-AosVideoPreflight -Name 'align-1' } | Out-String
+        $stored = [System.IO.File]::ReadAllText($path)
+        $stored.TrimEnd([char[]]@("`r", "`n")) | Should -BeExactly $report.TrimEnd([char[]]@("`r", "`n"))
+        $stored | Should -Match '^# Preflight: align-1'
+    }
+}
+
+Describe 'Video rules format' {
+    It 'has numbered unique rules and wires every check into the video QA script' {
+        $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+        $rules = [System.IO.File]::ReadAllLines((Join-Path $root 'agents-home\video\video-rules.md'))
+        $qa = [System.IO.File]::ReadAllText((Join-Path $root 'templates\video\tools\qa.sh'))
+        $ids = @()
+        foreach ($line in @($rules | Select-Object -Skip 1 | Where-Object { $_.Trim() })) {
+            $line | Should -Match '^- R\d{2} \[(manual|check: [a-z-]+)\] \S'
+            if ($line -match '^- (R\d{2}) \[(?:manual|check: [a-z-]+)\]') { $ids += $Matches[1] }
+            if ($line -match '\[check: ([a-z-]+)\]') {
+                $check = $Matches[1]
+                Test-Path -LiteralPath (Join-Path $root "templates\video\tools\checks\$check.mjs") | Should -BeTrue
+                $qa | Should -Match ([regex]::Escape("checks/$check.mjs"))
+            }
+        }
+        $ids.Count | Should -BeGreaterThan 0
+        @($ids | Select-Object -Unique).Count | Should -Be $ids.Count
     }
 }
 
