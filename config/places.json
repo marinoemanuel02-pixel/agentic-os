@@ -1,9 +1,30 @@
 {
   "_readme": "Shared places for all agents and phone projects. Paths resolve at runtime; missing places are never recreated except the Inbox.",
   "places": [
-    { "name": "agentic-os", "kind": "repo", "path": "{{desktop}}\\agentic-os" },
-    { "name": "nar-tools", "kind": "repo", "path": "{{projects}}\\nar-tools" },
-    { "name": "inbox", "kind": "inbox", "path": "{{desktop}}\\Inbox" },
-    { "name": "vault", "kind": "vault", "path": "{{desktop}}\\vault" }
+    {
+      "name": "agentic-os",
+      "kind": "repo",
+      "path": "{{desktop}}\\agentic-os"
+    },
+    {
+      "name": "nar-tools",
+      "kind": "repo",
+      "path": "{{projects}}\\nar-tools"
+    },
+    {
+      "name": "inbox",
+      "kind": "inbox",
+      "path": "{{desktop}}\\Inbox"
+    },
+    {
+      "name": "vault",
+      "kind": "vault",
+      "path": "{{desktop}}\\vault"
+    },
+    {
+      "name": "alignment",
+      "kind": "repo",
+      "path": "{{projects}}\\videos\\alignment"
+    }
   ]
 }
