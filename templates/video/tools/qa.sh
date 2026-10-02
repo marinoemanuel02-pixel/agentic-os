@@ -16,7 +16,9 @@ a=$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,sample_
 dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$video")
 [[ "$v" == h264,1920,1080,yuv420p,30/1 ]] && ok "video $v" || bad "video $v (want h264,1920,1080,yuv420p,30/1)"
 [[ "$a" == aac,48000,2 ]] && ok "audio $a" || bad "audio $a (want aac,48000,2)"
-awk "BEGIN{exit !($dur >= 60 && $dur <= 90)}" && ok "duration ${dur}s (60-90)" || bad "duration ${dur}s (want 60-90)"
+# target length from the brief: QA_MIN_S / QA_MAX_S (default 60-90 s, the first video's target)
+min="${QA_MIN_S:-60}"; max="${QA_MAX_S:-90}"
+awk "BEGIN{exit !($dur >= $min && $dur <= $max)}" && ok "duration ${dur}s ($min-$max)" || bad "duration ${dur}s (want $min-$max)"
 
 # 2. loudness (YouTube: -14 LUFS +-1, true peak <= -1 dBTP)
 L=$(ffmpeg -hide_banner -nostats -i "$video" -af ebur128=peak=true -f null - 2>&1 | sed -n '/Summary/,$p')
