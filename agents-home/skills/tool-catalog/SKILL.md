@@ -36,6 +36,7 @@ Servers cost context on every request: add one only when a command line cannot d
 ## Command lines (preferred over servers)
 
 `gh` (GitHub), `rg`/`fd`/`jq` (search), `git`, `uv`/`python`, `node`/`npm`, `pwsh`; the media tools above;
+`python ~/.video-intel/video_intel.py <reel-url>... [--limit N]` (public reels to local Whisper transcripts in `~/.video-intel/out/`; no cookies needed, profile pages are listed through the browser; Instagram media only, the `video-intel` skill drives it);
 `aos` itself: `status`, `sync`, `test`, `new`, `video new` (a video project from the template), `who` (claims), `note`, `delegate codex|claude` (hand a task to the other
 vendor), `secret` (keys; never print them), `place` (known folders), `install <layer>`.
 
