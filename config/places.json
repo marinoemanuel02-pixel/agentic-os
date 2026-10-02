@@ -25,6 +25,11 @@
       "name": "alignment",
       "kind": "repo",
       "path": "{{projects}}\\videos\\alignment"
+    },
+    {
+      "name": "alignment-3",
+      "kind": "repo",
+      "path": "{{projects}}\\videos\\alignment-3"
     }
   ]
 }
