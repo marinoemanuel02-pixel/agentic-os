@@ -7,7 +7,7 @@ don't rewrite the old one: the record of what was rejected is the part that ages
 
 - The user accepted agi-race-2 v1 as a first result ("not that bad") and asked to improve the orchestration
   before the next video. Its pipeline was rebuilt by hand inside the project; now `templates/video` carries it
-  and `aos video new <name>` scaffolds a project plus a render app in `~\.aosideo\<name>` linked to the shared
+  and `aos video new <name>` scaffolds a project plus a render app in `~\.aos\video\<name>` linked to the shared
   Remotion install (about 480 MB, made once). The template's verify makes a contact sheet (the director's review
   of delegated shots was the gate that caught every visual defect), the local-model screen asks only for
   on-screen text (its slop flags were noise), and the delegate task template asks for readable code.
