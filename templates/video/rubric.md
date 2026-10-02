@@ -1,0 +1,17 @@
+# Rubric: what "good" means for {{name}}
+
+Score each check 0-2 per shot on the contact sheet and once for the whole cut. A 0 sends the shot back.
+
+1. **The visual carries the line.** With the sound off, the picture says what the line is about.
+2. **Craft of the medium.** (lighting and materials for 3D; line, shape language and animation principles for 2D)
+3. **Motion with intent.** Every shot moves with purpose; nothing static over 1 s except deliberate holds.
+4. **A type system.** Fixed families and scale; inside title-safe; >= 36 px at 1080p.
+5. **One world.** One palette and one set of rules across all shots.
+6. **Cut and sound in sync.** Cuts on the beat grid; every major motion has a sound.
+7. **True and traceable.** Every number and quote matches `script.md` and `sources.md`.
+8. **Upload-clean.** `tools/qa.sh` passes.
+
+## Anti-slop list (any hit fails the shot)
+
+Generic stock look; visuals that do not carry their line; AI artifacts; style drift; slideshow pacing; motion
+that goes nowhere.

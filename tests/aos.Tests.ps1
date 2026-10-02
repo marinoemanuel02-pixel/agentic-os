@@ -706,6 +706,67 @@ Describe 'New-AosProject' {
     }
 }
 
+Describe 'New-AosVideo' {
+    BeforeEach {
+        Mock Add-AosPlace -ModuleName aos { $true }
+        $savedVideo = @{ P = $env:AOS_PROJECTS; V = $env:AOS_VIDEO_HOME; M = $env:AOS_REMOTION_MODULES }
+        $env:AOS_PROJECTS = New-TestFolder (Join-Path $caseRoot 'projects')
+        $env:AOS_VIDEO_HOME = Join-Path $caseRoot 'media'
+        $env:AOS_REMOTION_MODULES = New-TestFolder (Join-Path $caseRoot 'shared\node_modules')
+    }
+    AfterEach {
+        $env:AOS_PROJECTS = $savedVideo.P; $env:AOS_VIDEO_HOME = $savedVideo.V; $env:AOS_REMOTION_MODULES = $savedVideo.M
+    }
+
+    It 'copies the whole video template with the name substituted, plus the project files' {
+        New-AosVideo -Name 'align-1'
+        $project = Join-Path $env:AOS_PROJECTS 'videos\align-1'
+        $templates = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\templates\video'))
+        foreach ($f in Get-ChildItem -LiteralPath $templates -File -Recurse -Force) {
+            $rel = $f.FullName.Substring($templates.Length).TrimStart('\')
+            if ((Split-Path -Leaf $rel).StartsWith('_')) { continue }
+            $expected = [System.IO.File]::ReadAllText($f.FullName).Replace('{{name}}', 'align-1')
+            [System.IO.File]::ReadAllText((Join-Path $project $rel)) | Should -BeExactly $expected
+        }
+        [System.IO.File]::ReadAllText((Join-Path $project '.gitignore')) | Should -Match '(?m)^\*\.mp4\r?$'
+        Test-Path -LiteralPath (Join-Path $project '.gitattributes') | Should -BeTrue
+        [System.IO.File]::ReadAllText((Join-Path $project 'AGENTS.md')) | Should -Match '(?m)^# align-1 \(video\)\r?$'
+        [System.IO.File]::ReadAllText((Join-Path $project 'tools\verify.mjs')) | Should -Not -Match '\{\{name\}\}'
+    }
+
+    It 'makes the render app outside the project, linked to the shared install and to src' {
+        New-AosVideo -Name 'align-1'
+        $app = Join-Path $env:AOS_VIDEO_HOME 'align-1\app'
+        (Get-Item -LiteralPath (Join-Path $app 'node_modules')).LinkType | Should -Be 'Junction'
+        (Get-Item -LiteralPath (Join-Path $app 'src')).LinkType | Should -Be 'Junction'
+        Test-Path -LiteralPath (Join-Path $app 'src\data\plan.ts') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $app 'public\vo') | Should -BeTrue
+    }
+
+    It 'keeps edited files on a second run' {
+        New-AosVideo -Name 'align-1'
+        $brief = Join-Path $env:AOS_PROJECTS 'videos\align-1\brief.md'
+        Write-TestFile $brief "my brief`r`n"
+        New-AosVideo -Name 'align-1'
+        [System.IO.File]::ReadAllText($brief) | Should -BeExactly "my brief`r`n"
+    }
+
+    It 'warns and links no node_modules when the shared install is missing' {
+        $env:AOS_REMOTION_MODULES = Join-Path $caseRoot 'missing\node_modules'
+        Mock Write-AosWarn -ModuleName aos { }
+        New-AosVideo -Name 'align-2'
+        Test-Path -LiteralPath (Join-Path $env:AOS_VIDEO_HOME 'align-2\app\node_modules') | Should -BeFalse
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'shared Remotion install not found' }
+    }
+
+    It 'refuses a name that is not a plain folder name: <Name>' -ForEach @(@{ Name = '..\escape' }, @{ Name = '' }, @{ Name = 'a b' }) {
+        Mock Write-AosWarn -ModuleName aos { }
+        New-AosVideo -Name $Name
+        Test-Path -LiteralPath (Join-Path $env:AOS_PROJECTS 'videos') | Should -BeFalse
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'usage: aos video new' }
+    }
+}
+
 Describe 'aos' {
     It 'prints help without throwing for <Command>' -ForEach @(
         @{ Command = 'help' }, @{ Command = 'not-a-real-aos-command' }

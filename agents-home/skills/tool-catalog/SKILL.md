@@ -36,7 +36,7 @@ Servers cost context on every request: add one only when a command line cannot d
 ## Command lines (preferred over servers)
 
 `gh` (GitHub), `rg`/`fd`/`jq` (search), `git`, `uv`/`python`, `node`/`npm`, `pwsh`; the media tools above;
-`aos` itself: `status`, `sync`, `test`, `who` (claims), `note`, `delegate codex|claude` (hand a task to the other
+`aos` itself: `status`, `sync`, `test`, `new`, `video new` (a video project from the template), `who` (claims), `note`, `delegate codex|claude` (hand a task to the other
 vendor), `secret` (keys; never print them), `place` (known folders), `install <layer>`.
 
 ## Other agents

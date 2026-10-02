@@ -3,6 +3,19 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-02 - Videos start from a template; orchestration fixes from the first accepted video
+
+- The user accepted agi-race-2 v1 as a first result ("not that bad") and asked to improve the orchestration
+  before the next video. Its pipeline was rebuilt by hand inside the project; now `templates/video` carries it
+  and `aos video new <name>` scaffolds a project plus a render app in `~\.aosideo\<name>` linked to the shared
+  Remotion install (about 480 MB, made once). The template's verify makes a contact sheet (the director's review
+  of delegated shots was the gate that caught every visual defect), the local-model screen asks only for
+  on-screen text (its slop flags were noise), and the delegate task template asks for readable code.
+- The claim guard only hooks edit tools; a shell write slipped through on 2026-10-01. The contract now says to
+  check `aos who` before writing with a shell. A Bash hook was rejected: it cannot tell writes from reads.
+- `aos sync` now also removes MCP servers it registered earlier and the manifest dropped (built by Codex,
+  reviewed by Claude; see the commit).
+
 ## 2026-10-01 - Perplexity removed: research uses the agents' free web tools
 
 - Supersedes the Perplexity half of the entry below. In the first real use (the agi-race-2 video research) both

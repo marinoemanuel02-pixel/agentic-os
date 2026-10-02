@@ -1772,6 +1772,58 @@ function New-AosProject([string]$Path) {
     Write-AosInfo 'Next: fill in the Commands section of AGENTS.md, then open the folder in Claude Code or Codex.'
 }
 
+function Get-AosVideoMediaDir([string]$Name) {
+    # Heavy media (renders, stems, the render app) stays outside OneDrive.
+    if ($env:AOS_VIDEO_HOME) { return (Join-Path $env:AOS_VIDEO_HOME $Name) }
+    return (Join-Path $HOME (Join-Path '.aos\video' $Name))
+}
+
+function Get-AosRemotionModules {
+    # The shared Remotion + three.js install (about 480 MB), made once and linked into every video project.
+    if ($env:AOS_REMOTION_MODULES) { return $env:AOS_REMOTION_MODULES }
+    return (Join-Path $HOME '.aos\scratch\video-agi-race\node_modules')
+}
+
+function New-AosVideo([string]$Name) {
+    # A video project = the video template (pipeline tools, kit, stage docs) + a normal project + a render app
+    # outside OneDrive that links the shared node_modules and this project's src/.
+    if (-not $Name -or $Name -notmatch '^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$') {
+        Write-AosWarn 'usage: aos video new <name>  (letters, digits, - _ . ; becomes Desktop\1-Projects\videos\<name>)'
+        return
+    }
+    $full = Join-Path (Join-Path (Get-AosProjectsDir) 'videos') $Name
+    $src = Join-Path $script:Root 'templates\video'
+    Write-AosStep "Video $Name"
+    New-Item -ItemType Directory -Force -Path $full | Out-Null
+    foreach ($f in Get-ChildItem -LiteralPath $src -File -Recurse -Force) {
+        $rel = $f.FullName.Substring($src.Length).TrimStart('\')
+        $leaf = Split-Path -Leaf $rel
+        if ($leaf.StartsWith('_')) {
+            $parent = Split-Path -Parent $rel
+            $rel = '.' + $leaf.Substring(1)   # _gitignore -> .gitignore
+            if ($parent) { $rel = Join-Path $parent $rel }
+        }
+        $target = Join-Path $full $rel
+        if (Test-Path -LiteralPath $target) { Write-AosInfo "kept existing $rel"; continue }
+        Write-AosText -Path $target -Text ([System.IO.File]::ReadAllText($f.FullName).Replace('{{name}}', $Name))
+    }
+    Write-AosOk "template files in $full"
+    New-AosProject -Path $full
+    $media = Get-AosVideoMediaDir $Name
+    foreach ($d in @('app\public\vo', 'renders', 'frames', 'audio', 'qa')) { New-Item -ItemType Directory -Force -Path (Join-Path $media $d) | Out-Null }
+    $srcLink = Join-Path $media 'app\src'
+    if (-not (Test-Path -LiteralPath $srcLink)) { New-Item -ItemType Junction -Path $srcLink -Target (Join-Path $full 'src') | Out-Null }
+    $modLink = Join-Path $media 'app\node_modules'
+    $mods = Get-AosRemotionModules
+    if (Test-Path -LiteralPath $modLink) { Write-AosOk 'render app already linked to node_modules' }
+    elseif (Test-Path -LiteralPath $mods) {
+        New-Item -ItemType Junction -Path $modLink -Target $mods | Out-Null
+        Write-AosOk "render app in $media\app (node_modules -> $mods)"
+    }
+    else { Write-AosWarn "shared Remotion install not found at ${mods}: install it once (about 480 MB; ask first), then run aos video new $Name again" }
+    Write-AosInfo 'Next: read ~\.agents\video\video-rules.md, then fill brief.md and rubric.md.'
+}
+
 # Secrets: one DPAPI-encrypted file per key in ~\.aos\secrets. Only your Windows account on this
 # machine can decrypt them (not Codex's sandbox users), and every app and terminal sees the same
 # store: SecretStore kept its vault under %LOCALAPPDATA%, which a packaged app can make private.
@@ -1887,6 +1939,7 @@ aos - agentic-os control
   aos usage                  local usage history for Claude Code and Codex
   aos test                   parse/ASCII checks + the Pester suite under PowerShell 5.1 and 7
   aos new <name>             new project in Desktop\1-Projects: AGENTS.md, CLAUDE.md (@AGENTS.md), .gitignore, git init
+  aos video new <name>       new video project in Desktop\1-Projects\videos (video template + render app in ~\.aos\video)
   aos place ls [--json]      list shared places, including missing folders
   aos place add <folder> [--name <n>] [--kind repo|vault|folder]   add a place, then sync
   aos refs                   clone/pull the reference repos in refs/repos.json (into ~\.aos\refs)
@@ -1920,6 +1973,7 @@ function aos {
         'usage'   { Show-AosUsage }
         'test'    { Invoke-AosTest }
         'new'     { New-AosProject -Path $a1 }
+        'video'   { if ($a1 -eq 'new') { New-AosVideo -Name $a2 } else { Write-AosWarn 'usage: aos video new <name>' } }
         'place'   { Invoke-AosPlace -Arguments @($Rest) -DryRun:$DryRun }
         'refs'    { Sync-AosRefs -DryRun:$DryRun }
         'secret'  { Invoke-AosSecret -Action $a1 -Name $a2 }
@@ -1939,7 +1993,7 @@ function aos {
 
 #endregion
 
-Export-ModuleMember -Function aos, Install-AosLayer, Sync-AosBrain, Get-AosStatus, Update-Aos, New-AosProject
+Export-ModuleMember -Function aos, Install-AosLayer, Sync-AosBrain, Get-AosStatus, Update-Aos, New-AosProject, New-AosVideo
 
 function Get-AosPaseoProjectPaths {
     try {

@@ -61,6 +61,7 @@ settings are merged, never replaced, and backups go to `~/.aos-backups/`.
 |---|---|
 | Start work in a repo | `claude` in the folder, or open it in the Codex app / Claude Desktop |
 | Start a new project | `aos new name` -> `Desktop\1-Projects\name` (AGENTS.md, CLAUDE.md -> @AGENTS.md, .gitignore, git) |
+| Start a new video | `aos video new name` -> `Desktop\1-Projects\videos\name` from `templates/video` (pipeline tools, kit, stage docs), plus a render app in `~\.aos\video\name` linked to the shared Remotion install |
 | A second opinion | ask for one; the `second-opinion` skill picks `/codex:review` or `$cc:review` |
 | Keep going at a limit | ask for a handoff; the `handoff` skill writes HANDOFF.md for the other agent |
 | See what's installed and linked | `aos status` |
@@ -186,6 +187,7 @@ agentic-os/
     codex/*.config.toml  Codex profiles (review, deep, quick) -> ~/.codex/<name>.config.toml
     mcp.json             MCP servers registered in both agents
   templates/project/     what aos new creates (in Desktop\1-Projects; override with $env:AOS_PROJECTS)
+  templates/video/       what aos video new adds on top (pipeline tools, Remotion kit, stage docs, delegate task)
   refs/repos.json        essential repos (clones go to ~\.aos\refs, outside OneDrive and AppData;
                          override with $env:AOS_REFS)
   docs/routing.md        who does what, limits playbook

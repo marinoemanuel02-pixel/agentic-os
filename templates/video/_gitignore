@@ -1,0 +1,23 @@
+# secrets
+.env
+.env.local
+.env.*.local
+*.pem
+
+# dependencies and builds
+node_modules/
+.venv/
+__pycache__/
+dist/
+build/
+
+# agent-local state
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
+
+# media: renders and exports stay out of git (heavy copies live in ~/.aos/video/<name>)
+*.mp4
+*.wav
+*.mp3
+style/candidate-*.png

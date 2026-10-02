@@ -53,8 +53,8 @@ server: they cost no context until used. Quote paths (spaces, Italian names) and
 
 ## Code-driven motion design (Remotion + three.js), from the agi-race-2 video
 
-Read `~\.agents\video\video-rules.md` first. A working project to copy from: `Desktop\1-Projects\videos\agi-race-2`
-(`AGENTS.md` there lists its commands).
+Read `~\.agents\video\video-rules.md` first. Start a video with `aos video new <name>`: the template carries the
+tools below (its `AGENTS.md` lists the commands). The first finished video is `Desktop\1-Projects\videos\agi-race-2`.
 
 - **Layout:** code in the OneDrive project; render from `~\.aos\video\<name>\app`, which holds junctions
   `node_modules` -> the shared install `~\.aos\scratch\video-agi-race\node_modules` (Remotion 4, three r186, r3f 9;

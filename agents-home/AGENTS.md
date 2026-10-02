@@ -83,6 +83,7 @@ then continue on the other vendor from that file.
 
 - Edits claim the checkout for your session (a guard hook). A blocked edit means another live session
   holds it: tell the user or work in a worktree; never work around the guard. `aos who` shows claims.
+  The hook sees only edit tools: before writing in a checkout with a shell command, check `aos who` yourself.
 - Hand work to the other vendor with `aos delegate codex|claude --task <file>` (add `--write --verify
   <cmd>` for changes). Accept it only from its receipt plus your own read of the diff and tests.
 - Parallel agents read and review; one writer per checkout; you integrate. `aos note` leaves a message.
