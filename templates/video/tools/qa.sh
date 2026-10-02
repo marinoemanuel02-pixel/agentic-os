@@ -10,6 +10,12 @@ R="$P/qa/report.md"; fail=0
 ok() { echo "- PASS $*" >> "$R"; }; bad() { echo "- FAIL $*" >> "$R"; fail=1; }
 echo "# QA report: $(basename "$video") ($(date '+%Y-%m-%d %H:%M'))" > "$R"; echo >> "$R"
 
+# 0. the export must come from the current src/ (the motion proxy below renders from src/, so a later edit would
+#    make QA judge two different films); tools/build.sh records the hash it rendered from
+now=$(cd "$P" && find src -type f | sort | xargs cat | sha1sum | cut -d" " -f1)
+built=$(cat "$H/renders/Main.src-hash" 2>/dev/null || echo none)
+[ "$now" = "$built" ] && ok "export built from the current src/" || bad "src/ changed since the export was built (rebuild before QA)"
+
 # 1. stream format
 v=$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height,r_frame_rate,pix_fmt -of csv=p=0 "$video" | tr -d '\r' | sed 's/,$//')
 a=$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,sample_rate,channels -of csv=p=0 "$video" | tr -d '\r' | sed 's/,$//')

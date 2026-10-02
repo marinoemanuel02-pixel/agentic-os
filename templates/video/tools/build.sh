@@ -8,6 +8,8 @@ label="${1:-v1}"
 cd "$P"
 node --no-warnings tools/check-plan.mts | tail -1
 node --no-warnings tools/audio.mts
+# the source the picture is rendered from, so QA can refuse to judge an export against changed code
+(cd "$P" && find src -type f | sort | xargs cat | sha1sum | cut -d" " -f1) > "$H/renders/Main.src-hash"
 bash tools/render.sh Main
 bash tools/mix.sh "$H/renders/Main.mp4" "$H/renders/{{name}}-$label.mp4"
 node --no-warnings tools/package-outputs.mts
