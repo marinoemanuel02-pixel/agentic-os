@@ -156,6 +156,8 @@ Claude Code and Codex share one coordination layer in `~\.aos\coord` (outside On
 | A reference repo | `refs/repos.json` | `aos refs` |
 | A plugin | install it, then add it to `Install-AosBridges` in `aos.psm1` | so a rebuild reproduces it |
 
+Sync also removes MCP servers it previously registered when they leave `config/mcp.json` or no longer target an agent.
+
 Rules that keep this upgradeable:
 - **No model names** outside the agents' own defaults. Profiles tune effort and sandbox, not models,
   so nothing goes stale when a new model ships.
