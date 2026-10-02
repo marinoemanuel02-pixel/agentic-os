@@ -72,6 +72,28 @@ test("a cut is excluded even when the next shot starts with a moving camera", ()
   assert.equal(snapsInSeries(d, 0.2, never).length, 1);
 });
 
+test("an expo-out move that starts on the first frame after a cut is a snap", () => {
+  // the shot before the cut moves hard; the new shot opens with an expo-out move (Codex review finding, 2026-10-02)
+  const before = Array(20).fill(12);
+  const expo = move(EXPO_OUT, 14, 6, { pre: 0 });
+  const d = [...before, ...expo];
+  assert.deepEqual(snapsInSeries(d, 0.2, excluded([[20, 20]], 0)), [21]);
+});
+
+test("the end of a dissolve is not a snap, though the change decays after it", () => {
+  // a 20-frame dissolve leaves residual change that fades out; findSnaps knows the window is a dissolve
+  const d = [...Array(20).fill(0.2), ...Array(20).fill(9), 8, 6, 4, 2, 1, 0.5, ...Array(20).fill(0.2)];
+  assert.deepEqual(findSnaps([d], [[20, 40]], OPTS), []);
+  // the same shape after a cut is flagged
+  const cut = [...Array(20).fill(0.2), 9, 9, 8, 7, 6, 5, 4, 3.5, 3, 2.5, 2, 1.6, 1.3, 1.1, 1, ...Array(24).fill(0.2)];
+  assert.equal(findSnaps([cut], [[20, 21]], OPTS).length, 1);
+});
+
+test("a soft move that starts right after a cut is not a snap", () => {
+  const d = [...Array(20).fill(12), ...move(SOFT, 24, 6, { pre: 0 })];
+  assert.deepEqual(snapsInSeries(d, 0.2, excluded([[20, 20]], 0)), []);
+});
+
 test("a soft move over a slow camera drift is not a snap; an expo move over the same drift is", () => {
   const drift = 1.4;
   const soft = move(SOFT, 24, 6, { base: drift });

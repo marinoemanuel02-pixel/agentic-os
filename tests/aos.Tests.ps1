@@ -957,7 +957,9 @@ Describe 'Video rules format' {
             if ($line -match '\[check: ([a-z-]+)\]') {
                 $check = $Matches[1]
                 Test-Path -LiteralPath (Join-Path $root "templates\video\tools\checks\$check.mjs") | Should -BeTrue
-                $qa | Should -Match ([regex]::Escape("checks/$check.mjs"))
+                # invoked by a command, not merely mentioned (a comment naming the script must not satisfy this)
+                $runs = @($qa -split "`r?`n" | Where-Object { $_ -notmatch '^\s*#' -and $_ -match '\bnode\b' -and $_.Contains("checks/$check.mjs") })
+                $runs.Count | Should -BeGreaterThan 0
             }
         }
         $ids.Count | Should -BeGreaterThan 0

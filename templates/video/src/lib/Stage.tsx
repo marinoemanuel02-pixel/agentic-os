@@ -1,6 +1,7 @@
 // The studio every shot is filmed in: renderer settings, image-based reflections, fog, floor, key and rim
 // light, and the post chain (MSAA, bloom, tone mapping, grade with vignette and film grain).
 import React, { useEffect, useMemo } from "react";
+import { QA } from "./qa";
 import { ThreeCanvas } from "@remotion/three";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
@@ -76,7 +77,7 @@ const Studio: React.FC<{ look: Look; camera: CameraPose; dof?: boolean }> = ({ l
     c.addPass(new UnrealBloomPass(new THREE.Vector2(size.width, size.height), look.bloom.strength, look.bloom.radius, look.bloom.threshold));
     c.addPass(new OutputPass());
     const g = new ShaderPass(GradeShader);
-    g.uniforms.uGrain.value = look.grain;
+    g.uniforms.uGrain.value = QA ? 0 : look.grain; // no per-frame grain in the QA proxy
     g.uniforms.uVignette.value = look.vignette;
     g.uniforms.uRes.value.set(size.width, size.height);
     c.addPass(g);

@@ -16,8 +16,11 @@ a=$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,sample_
 dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$video")
 [[ "$v" == h264,1920,1080,yuv420p,30/1 ]] && ok "video $v" || bad "video $v (want h264,1920,1080,yuv420p,30/1)"
 [[ "$a" == aac,48000,2 ]] && ok "audio $a" || bad "audio $a (want aac,48000,2)"
-# target length from the brief: qa.env sets QA_MIN_S / QA_MAX_S per project (the environment can override it)
+# target length from the brief: qa.env sets QA_MIN_S / QA_MAX_S per project; values already in the environment win
+env_min="${QA_MIN_S:-}"; env_max="${QA_MAX_S:-}"
 [ -f "$P/qa.env" ] && . "$P/qa.env"
+[ -n "$env_min" ] && QA_MIN_S="$env_min"
+[ -n "$env_max" ] && QA_MAX_S="$env_max"
 min="${QA_MIN_S:-60}"; max="${QA_MAX_S:-90}"
 awk "BEGIN{exit !($dur >= $min && $dur <= $max)}" && ok "duration ${dur}s ($min-$max)" || bad "duration ${dur}s (want $min-$max)"
 
@@ -52,14 +55,17 @@ ok "contact sheet: qa/contact-sheet.jpg ($(wc -l < "$H/qa/shot-mids.txt") shots)
 
 # 6. motion (rule R17): a quarter-size proxy of Main without line boil or grain, then tools/checks/motion.mjs
 #    (snaps = travelling moves that start at full speed; banned expo/back curves in src/). Report: qa/motion.md
+#    The proxy is rendered fresh from the current src/ every run, so it can never describe an older cut.
 proxy="$H/renders/Main-qa.mp4"
-if [ ! -f "$proxy" ] || [ "$video" -nt "$proxy" ]; then
-  bash "$P/tools/sync-app.sh"
-  (cd "$H/app" && node node_modules/@remotion/cli/remotion-cli.js render src/index.ts Main "$proxy" \
-    --scale=0.25 --props='{"qa":true}' --gl=angle --codec=h264 --crf=18 --muted --concurrency=4 --log=warn >/dev/null)
+rm -f "$proxy"
+bash "$P/tools/sync-app.sh"
+if (cd "$H/app" && node node_modules/@remotion/cli/remotion-cli.js render src/index.ts Main "$proxy" \
+    --scale=0.25 --props='{"qa":true}' --gl=angle --codec=h264 --crf=18 --muted --concurrency=4 --log=warn >/dev/null) && [ -s "$proxy" ]; then
+  node --no-warnings "$P/tools/checks/motion.mjs" "$proxy" "$P/qa/motion.md" > /dev/null \
+    && ok "motion check (qa/motion.md)" || bad "motion check: snaps or banned curves (see qa/motion.md)"
+else
+  bad "motion check: the proxy render failed"
 fi
-node --no-warnings "$P/tools/checks/motion.mjs" "$proxy" "$P/qa/motion.md" > /dev/null \
-  && ok "motion check (qa/motion.md)" || bad "motion check: snaps or banned curves (see qa/motion.md)"
 
 echo >> "$R"; [ $fail = 0 ] && echo "**All technical checks pass.**" >> "$R" || echo "**Technical checks FAILED.**" >> "$R"
 cat "$R"; exit $fail

@@ -50,10 +50,21 @@ export const excluded = (windows, edge = OPTS.edge) => (t) => windows.some(([a, 
  * Snaps in one tile's series of frame differences d[t] (change between frame t-1 and t).
  * Returns the onset frames. base = the tile's resting level (its median change).
  */
-export const snapsInSeries = (d, base, isEdit, o = OPTS) => {
+export const snapsInSeries = (d, base, isEdit, o = OPTS, isAfterCut = (t) => isEdit(t - 1)) => {
   const out = [];
   for (let t = 3; t < d.length - o.sustain; t++) {
     if (isEdit(t)) continue;
+    // Right after a cut there is no "before" inside the shot. A camera already drifting at the cut is normal; a
+    // move that starts at full speed and then decays (an expo-out start) is a snap.
+    if (isEdit(t - 1)) {
+      if (!isAfterCut(t)) continue; // the end of a dissolve: the fading picture settles, nothing starts
+      const first = d[t] - base;
+      const later = d[t + Math.min(6, o.sustain - 1)] - base;
+      let moving = 0;
+      for (let k = 0; k < o.sustain; k++) if (d[t + k] > base + o.rest) moving++;
+      if (first >= o.peak && later < 0.5 * first && moving >= o.sustain) out.push(t);
+      continue;
+    }
     const rest = base + o.rest;
     const before = Math.max(d[t - 1], d[t - 2], d[t - 3]);
     if (before > rest) continue; // not starting from rest
@@ -99,10 +110,13 @@ export const tileSeries = (frames, o = OPTS) => {
 /** All snaps in a film: [{frame, tile}] sorted by frame, merged across tiles within 3 frames. */
 export const findSnaps = (series, windows, o = OPTS) => {
   const isEdit = excluded(windows, o.edge);
+  // windows of one or two frames are cuts; longer ones are dissolves
+  const isAfterCut = excluded(windows.filter(([a, b]) => b - a <= 2), o.edge);
+  const afterCut = (t) => isAfterCut(t - 1);
   const hits = [];
   series.forEach((d, tile) => {
     const base = median(d);
-    for (const t of snapsInSeries(d, base, isEdit, o)) hits.push({ frame: t, tile });
+    for (const t of snapsInSeries(d, base, isEdit, o, afterCut)) hits.push({ frame: t, tile });
   });
   hits.sort((a, b) => a.frame - b.frame);
   const merged = [];

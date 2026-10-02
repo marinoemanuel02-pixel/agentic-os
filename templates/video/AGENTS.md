@@ -22,6 +22,7 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
 
 - Plan check: `node --no-warnings tools/check-plan.mts`
 - Voice: `node tools/make-voice.cjs 3 1.0 [lineId]` (3 = af_heart; audition others with `VO_OUT=<dir>`)
+- Review sheet of chosen frames (the director's main loop): `bash tools/frames.sh <sheet> S01:20 S02:140 ...`
 - Stills: `bash tools/still.sh <frame> <CompositionId>...`; verify a checkout: `node --no-warnings tools/verify.mjs S01 S02 ...`
   (bundles, renders first/middle/last frame per shot, writes a contact sheet)
 - Soundtrack stems: `node --no-warnings tools/audio.mts`; full build: `bash tools/build.sh v1`
