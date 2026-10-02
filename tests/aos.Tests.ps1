@@ -1711,6 +1711,9 @@ Describe 'Codex local profile' {
 
 Describe 'MCP placeholders and nar registration' {
     BeforeEach {
+        $savedMcpState = $env:AOS_MCP_STATE
+        $env:AOS_MCP_STATE = Join-Path $TestDrive 'mcp-registered.json'
+        Remove-Item -LiteralPath $env:AOS_MCP_STATE -ErrorAction SilentlyContinue
         $savedProjects = $env:AOS_PROJECTS
         $env:AOS_PROJECTS = Join-Path $caseRoot 'projects'
         $exe = Join-Path $env:AOS_PROJECTS 'nar-tools\nar-mcp.exe'
@@ -1724,7 +1727,51 @@ Describe 'MCP placeholders and nar registration' {
                 requires = '{{projects}}\nar-tools\nar-mcp.exe' } } }
         }
     }
-    AfterEach { $env:AOS_PROJECTS = $savedProjects }
+    AfterEach { $env:AOS_PROJECTS = $savedProjects; $env:AOS_MCP_STATE = $savedMcpState }
+
+    It 'removes a recorded server dropped from the manifest' {
+        Write-TestFile $env:AOS_MCP_STATE '{"claude":["old"],"codex":[]}'
+        Mock Get-AosMcpManifest -ModuleName aos { [ordered]@{ servers = [ordered]@{} } }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = '' } } -ParameterFilter { $CommandLine -eq 'claude mcp remove old --scope user' }
+        InModuleScope aos { Sync-AosMcp }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -eq 'claude mcp remove old --scope user' }
+        @((Get-Content $env:AOS_MCP_STATE -Raw | ConvertFrom-Json).claude).Count | Should -Be 0
+    }
+
+    It 'leaves unrecorded user servers alone' {
+        Mock Get-AosMcpManifest -ModuleName aos { [ordered]@{ servers = [ordered]@{} } }
+        InModuleScope aos { Sync-AosMcp }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like '* mcp remove *' }
+    }
+
+    It 'keeps recorded servers and state unchanged in dry run' {
+        $original = '{"claude":["old"],"codex":[]}'
+        Write-TestFile $env:AOS_MCP_STATE $original
+        Mock Get-AosMcpManifest -ModuleName aos { [ordered]@{ servers = [ordered]@{} } }
+        InModuleScope aos { Sync-AosMcp -DryRun }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like '* mcp remove *' }
+        Get-Content $env:AOS_MCP_STATE -Raw | Should -BeExactly $original
+    }
+
+    It 'removes a Claude-only server only from recorded Codex registrations' {
+        Write-TestFile $env:AOS_MCP_STATE '{"claude":[],"codex":["research"]}'
+        Mock Get-AosMcpManifest -ModuleName aos { [ordered]@{ servers = [ordered]@{ research = [ordered]@{ transport = 'http'; url = 'https://example.test/mcp'; agents = @('claude') } } } }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = '' } } -ParameterFilter { $CommandLine -eq 'codex mcp remove research' }
+        InModuleScope aos { Sync-AosMcp }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -eq 'codex mcp remove research' }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -eq 'claude mcp remove research --scope user' }
+        @((Get-Content $env:AOS_MCP_STATE -Raw | ConvertFrom-Json).codex).Count | Should -Be 0
+    }
+
+    It 'keeps a failed removal recorded for retry' {
+        Write-TestFile $env:AOS_MCP_STATE '{"claude":["old"],"codex":[]}'
+        Mock Get-AosMcpManifest -ModuleName aos { [ordered]@{ servers = [ordered]@{} } }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 1; Text = 'failed' } } -ParameterFilter { $CommandLine -eq 'claude mcp remove old --scope user' }
+        Mock Write-AosWarn -ModuleName aos { }
+        InModuleScope aos { Sync-AosMcp }
+        @((Get-Content $env:AOS_MCP_STATE -Raw | ConvertFrom-Json).claude) | Should -Contain 'old'
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'removing old failed' }
+    }
 
     It 'expands the projects and home placeholders' {
         InModuleScope aos {

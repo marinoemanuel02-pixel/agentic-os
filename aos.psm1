@@ -574,9 +574,23 @@ function Get-AosMcpTargets($Server) {
     return $targets
 }
 
+function Get-AosMcpStatePath {
+    if ($env:AOS_MCP_STATE) { return $env:AOS_MCP_STATE }
+    return (Join-Path (Get-AosStateDir) 'mcp-registered.json')
+}
+
 function Sync-AosMcp([switch]$DryRun) {
     # Registered = present AND pointing where the manifest says; a changed URL or command is re-added.
     $manifest = Get-AosMcpManifest
+    $statePath = Get-AosMcpStatePath
+    $state = [ordered]@{ claude = @(); codex = @() }
+    if (Test-Path -LiteralPath $statePath) {
+        $saved = Read-AosJson $statePath
+        foreach ($agent in @('claude', 'codex')) {
+            if ($saved.Contains($agent)) { $state[$agent] = @($saved[$agent]) }
+        }
+    }
+    $before = ConvertTo-Json -InputObject $state -Depth 5 -Compress
     foreach ($name in @($manifest['servers'].Keys)) {
         $s = $manifest['servers'][$name]
         if ($s.Contains('requires')) {
@@ -595,7 +609,11 @@ function Sync-AosMcp([switch]$DryRun) {
             $getCmd = "claude mcp get $name"
             if ($agent -eq 'codex') { $getCmd = "codex mcp get $name --json" }
             $got = Invoke-AosCapture $getCmd
-            if (Test-AosMcpCurrent $got $needles) { Write-AosOk "${agent}: $name"; continue }
+            if (Test-AosMcpCurrent $got $needles) {
+                if (-not $DryRun -and $state[$agent] -notcontains $name) { $state[$agent] = @($state[$agent]) + @($name) }
+                Write-AosOk "${agent}: $name"
+                continue
+            }
             if ($DryRun) { Write-AosDry "$agent mcp add $name"; continue }
             if ($got.Code -eq 0) {
                 $rm = "claude mcp remove $name --scope user"
@@ -603,9 +621,32 @@ function Sync-AosMcp([switch]$DryRun) {
                 $null = Invoke-AosCapture $rm
                 Write-AosInfo "${agent}: $name changed; re-adding"
             }
-            if (Add-AosMcpServer -Agent $agent -Name $name -Http $isHttp -Url ([string]$s['url']) -Command $cmd) { Write-AosOk "${agent}: added $name" }
+            if (Add-AosMcpServer -Agent $agent -Name $name -Http $isHttp -Url ([string]$s['url']) -Command $cmd) {
+                if ($state[$agent] -notcontains $name) { $state[$agent] = @($state[$agent]) + @($name) }
+                Write-AosOk "${agent}: added $name"
+            }
             else { Write-AosWarn "${agent}: adding $name failed" }
         }
+    }
+    foreach ($agent in @('claude', 'codex')) {
+        foreach ($name in @($state[$agent])) {
+            $wanted = $false
+            if ($manifest['servers'].Contains($name)) {
+                $wanted = (@(Get-AosMcpTargets $manifest['servers'][$name]) -contains $agent)
+            }
+            if ($wanted) { continue }
+            if ($DryRun) { Write-AosDry "$agent mcp remove $name (dropped from config/mcp.json)"; continue }
+            if (-not (Test-AosCommand $agent)) { Write-AosWarn "$agent missing; $name not removed there"; continue }
+            $rm = "claude mcp remove $name --scope user"
+            if ($agent -eq 'codex') { $rm = "codex mcp remove $name" }
+            $result = Invoke-AosCapture $rm
+            if ($result.Code -ne 0) { Write-AosWarn "${agent}: removing $name failed: $($result.Text)"; continue }
+            $state[$agent] = @($state[$agent] | Where-Object { $_ -ne $name })
+            Write-AosOk "${agent}: removed $name"
+        }
+    }
+    if (-not $DryRun -and $before -ne (ConvertTo-Json -InputObject $state -Depth 5 -Compress)) {
+        Write-AosText -Path $statePath -Text ((ConvertTo-Json -InputObject $state -Depth 5) + "`n")
     }
 }
 
