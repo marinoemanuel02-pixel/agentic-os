@@ -89,3 +89,10 @@ vo.json before audio.mts. The default measurement uses those runner paths direct
 `node tools/verify-hero.mjs Composition:30,90,150` checks explicit clips; `--stills Composition:30,Other:60` checks
 only frames. Hero verification owns a bundle under `hero-verify/<branch>` within that media root; never share
 that bundle with a running verifier. Both verifiers use read-only shared dependencies and private apps.
+
+Reviews and speed (rules R26, R30, R32). `node --no-warnings tools/review-sheets.mts <export.mp4>` writes the shot
+sheets (every shot at 20, 50 and 85 %) and the dissolve sheet under the media root; give them to the other vendor as
+images (`codex exec -i`) at the look gate, the hero, the animatic and the final cut, not only at the end. Render review
+cuts at `--scale=0.5` or quarter scale. Do not edit hashed inputs, build scripts or this checkout while `build.sh` or
+QA runs; reviews, docs and the next brief can run beside a render, edits to the tree cannot. Keep the computer awake
+for long jobs, and log each stage's minutes with `aos video log`. Use `-nostdin` for ffmpeg inside shell loops.

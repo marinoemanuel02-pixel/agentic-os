@@ -3,6 +3,25 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-03 - What the AGI/ASI run taught the pipeline (rules R26-R33, a review-sheet tool)
+
+- **Verdict that drives it.** v4 passed every technical gate and two independent reviews, and still got "too stiff and
+  not engaging enough, the data and references are old". Craft checks do not measure engagement or freshness, so the
+  pipeline gains a currency gate (R27), a look lab with a design system for many visualization practices (R28), and an
+  engagement report (R29). R18's "one medium" is overridden only when a brief asks for variety, and then only under a
+  design system, because mixed media without one read as demos (alignment v1 and v2).
+- **Efficacy.** Reviews must see images early (R30): the late film review found a missing mechanism explanation and a
+  source-version drift that three author passes did not. Bugs found on renders get source guards with red-first tests
+  (R31). Rejected alternatives: a sixth author pass instead of an independent one; waiving the dome-pop motion hit.
+- **Efficiency.** Where the time went: four 12-15 minute full renders, a three-hour idle gap, and a build that died
+  because a script was edited while bash ran it. R26 seals builds, R32 spends the machine (awake, parallel work,
+  quarter-scale review renders, render only what changed; measured: render concurrency 2-4 are equal and 6-10 slower,
+  so the lever is rendering less, not rendering wider), and `templates/video/tools/review-sheets.mts` replaces
+  the hand-written frame extraction that was rewritten three times (tested; byte-identical to the hand frames).
+- **Not changed.** R17 stays: calm easing and 0.6 s moves. The checks that measure currency and pacing are built and
+  exercised in the next film (alignment-now) first and transferred only after they pass on a real film, as the joins,
+  screen-text and word-cue checks were.
+
 ## 2026-10-03 - Transfer proven film checks without transferring the film
 
 - The AGI/ASI director source at c30a7ac exercised matched-pose dissolve holds, finite camera guards,

@@ -949,7 +949,8 @@ Describe 'Video input provenance' {
     It 'runs reusable video <Check> regressions in isolated fixtures' -ForEach @(
         @{ Check = 'joins'; File = 'joins.test.mts' },
         @{ Check = 'screen text'; File = 'screen-text.test.mjs' },
-        @{ Check = 'pipeline'; File = 'pipeline.test.mjs' }
+        @{ Check = 'pipeline'; File = 'pipeline.test.mjs' },
+        @{ Check = 'review sheets'; File = 'review-sheets.test.mts' }
     ) {
         $testFile = Join-Path $PSScriptRoot "..\templates\video\tools\checks\$File"
         $savedScratch = $env:AOS_VIDEO_TEST_ROOT
