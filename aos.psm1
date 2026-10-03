@@ -1186,11 +1186,14 @@ function Install-AosPhone([switch]$DryRun) {
 function Get-AosPaseoAutostartCommand {
     # What the logon task runs: `paseo daemon start` in a hidden PowerShell. At logon it gets the user's
     # full environment, which a daemon started from inside the Claude or Codex app would not have.
+    # The task repeats every 5 minutes (a no-op while the daemon runs), so the PowerShell goes through
+    # conhost --headless: -WindowStyle Hidden alone still flashes a window, or opens Windows Terminal.
     $ps = Get-Command pwsh -ErrorAction SilentlyContinue
     $exe = 'powershell.exe'
     if ($ps) { $exe = $ps.Source }
     $paseo = Join-Path (Get-AosNpmPrefix) 'paseo.cmd'
-    return @{ Execute = $exe; Arguments = "-NoProfile -WindowStyle Hidden -Command `"& '$paseo' daemon start`"" }
+    $conhost = Join-Path $env:SystemRoot 'System32\conhost.exe'
+    return @{ Execute = $conhost; Arguments = "--headless `"$exe`" -NoProfile -WindowStyle Hidden -Command `"& '$paseo' daemon start`"" }
 }
 
 function Sync-AosPaseoAutostart([switch]$DryRun) {
@@ -1204,7 +1207,7 @@ function Sync-AosPaseoAutostart([switch]$DryRun) {
         $a = @($task.Actions)[0]
         $same = $a -and $a.Execute -eq $want.Execute -and $a.Arguments -eq $want.Arguments
         # Registering again repairs drift: disabled, no logon trigger for this user, battery rules.
-        $healthy = $task.Enabled -eq $true -and $task.HasCurrentUserLogonTrigger -eq $true -and
+        $healthy = $task.Enabled -eq $true -and $task.HasCurrentUserLogonTrigger -eq $true -and $task.RepeatsEvery5Minutes -eq $true -and
             $task.DisallowStartIfOnBatteries -eq $false -and $task.StopIfGoingOnBatteries -eq $false
         if ($same -and $healthy) { Write-AosOk "logon task '$name'"; return }
     }
@@ -1251,15 +1254,20 @@ function ConvertTo-AosLogonTaskState($Task) {
     # The fields Sync-AosPaseoAutostart checks, flattened from the CIM task (Settings, Triggers).
     $me = "$env:USERDOMAIN\$env:USERNAME"
     $mine = $false
+    $repeats = $false
     foreach ($t in @($Task.Triggers)) {
         if (-not $t) { continue }
         $logon = ($t.PSObject.TypeNames -join ' ') -match 'MSFT_TaskLogonTrigger'
-        if ($logon -and $t.Enabled -ne $false -and ($t.UserId -ieq $me -or $t.UserId -ieq $env:USERNAME)) { $mine = $true }
+        if ($logon -and $t.Enabled -ne $false -and ($t.UserId -ieq $me -or $t.UserId -ieq $env:USERNAME)) {
+            $mine = $true
+            if ($t.Repetition -and [string]$t.Repetition.Interval -eq 'PT5M') { $repeats = $true }
+        }
     }
     return [pscustomobject]@{
         Actions = @($Task.Actions)
         Enabled = [bool]$Task.Settings.Enabled
         HasCurrentUserLogonTrigger = $mine
+        RepeatsEvery5Minutes = $repeats
         DisallowStartIfOnBatteries = [bool]$Task.Settings.DisallowStartIfOnBatteries
         StopIfGoingOnBatteries = [bool]$Task.Settings.StopIfGoingOnBatteries
     }
@@ -1274,6 +1282,10 @@ function Register-AosLogonTask([string]$Name, [string]$Execute, [string]$Argumen
     # A thin wrapper: the ScheduledTasks cmdlets are CDXML and cannot be mocked, so tests mock this.
     $action = New-ScheduledTaskAction -Execute $Execute -Argument $Arguments
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+    # Every 5 minutes after logon, for as long as the session lasts: the daemon died at logon and after
+    # crashes (2026-09-30 to 10-03) and stayed down until someone noticed. A logon trigger cannot take a
+    # repetition directly; borrow one from a -Once trigger (no duration = indefinitely).
+    $trigger.Repetition = (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5)).Repetition
     # A laptop: without these, Windows skips the task when it logs on while on battery.
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
     $null = Register-ScheduledTask -TaskName $Name -Action $action -Trigger $trigger -Settings $settings `

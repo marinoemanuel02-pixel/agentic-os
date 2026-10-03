@@ -2479,7 +2479,7 @@ Describe 'Paseo daemon at logon' {
     It 'does nothing when the task already runs the same command' {
         $script:existingTask = [pscustomobject]@{
             Actions = @([pscustomobject]@{ Execute = 'C:\ps\pwsh.exe'; Arguments = $script:wantArgs })
-            Enabled = $true; HasCurrentUserLogonTrigger = $true
+            Enabled = $true; HasCurrentUserLogonTrigger = $true; RepeatsEvery5Minutes = $true
             DisallowStartIfOnBatteries = $false; StopIfGoingOnBatteries = $false
         }
         InModuleScope aos { Sync-AosPaseoAutostart }
@@ -2490,12 +2490,13 @@ Describe 'Paseo daemon at logon' {
         @{ Field = 'Enabled'; Value = $false },
         @{ Field = 'HasCurrentUserLogonTrigger'; Value = $false },
         @{ Field = 'DisallowStartIfOnBatteries'; Value = $true },
-        @{ Field = 'StopIfGoingOnBatteries'; Value = $true }
+        @{ Field = 'StopIfGoingOnBatteries'; Value = $true },
+        @{ Field = 'RepeatsEvery5Minutes'; Value = $false }
     ) {
         param($Field, $Value)
         $script:existingTask = [pscustomobject]@{
             Actions = @([pscustomobject]@{ Execute = 'C:\ps\pwsh.exe'; Arguments = $script:wantArgs })
-            Enabled = $true; HasCurrentUserLogonTrigger = $true
+            Enabled = $true; HasCurrentUserLogonTrigger = $true; RepeatsEvery5Minutes = $true
             DisallowStartIfOnBatteries = $false; StopIfGoingOnBatteries = $false
         }
         $script:existingTask.$Field = $Value
@@ -2538,8 +2539,8 @@ Describe 'Paseo daemon at logon' {
 Describe 'Logon task state' {
     # Real tasks are CIM objects: the checked fields sit under Settings and Triggers.
     BeforeAll {
-        function New-TestTrigger([string]$Class, [string]$User, $Enabled = $true) {
-            $t = [pscustomobject]@{ UserId = $User; Enabled = $Enabled }
+        function New-TestTrigger([string]$Class, [string]$User, $Enabled = $true, [string]$Interval = '') {
+            $t = [pscustomobject]@{ UserId = $User; Enabled = $Enabled; Repetition = [pscustomobject]@{ Interval = $Interval } }
             $t.PSObject.TypeNames.Insert(0, "Microsoft.Management.Infrastructure.CimInstance#Root/Microsoft/Windows/TaskScheduler/$Class")
             return $t
         }
@@ -2561,6 +2562,15 @@ Describe 'Logon task state' {
         $s.DisallowStartIfOnBatteries | Should -BeFalse
         $s.StopIfGoingOnBatteries | Should -BeFalse
         @($s.Actions)[0].Execute | Should -Be 'x.exe'
+    }
+
+    It 'reads the 5-minute repetition that restarts a daemon that died' {
+        $task = New-TestTask (New-TestTrigger 'MSFT_TaskLogonTrigger' $me -Interval 'PT5M')
+        $s = InModuleScope aos -Parameters @{ Task = $task } { param($Task) ConvertTo-AosLogonTaskState $Task }
+        $s.RepeatsEvery5Minutes | Should -BeTrue
+        $task = New-TestTask (New-TestTrigger 'MSFT_TaskLogonTrigger' $me)
+        $s = InModuleScope aos -Parameters @{ Task = $task } { param($Task) ConvertTo-AosLogonTaskState $Task }
+        $s.RepeatsEvery5Minutes | Should -BeFalse
     }
 
     It 'reports settings drift' {
@@ -2771,11 +2781,12 @@ Describe 'Paseo daemon startup' {
 }
 
 Describe 'Paseo daemon logon command' {
-    It 'starts paseo from the npm prefix through PowerShell, hidden' {
+    It 'starts paseo from the npm prefix through PowerShell, hidden, inside a headless console' {
+        # conhost --headless: the task repeats every 5 minutes, and a hidden PowerShell alone still flashes.
         InModuleScope aos {
             $c = Get-AosPaseoAutostartCommand
-            $c.Execute | Should -Match '(pwsh|powershell)\.exe$'
-            $c.Arguments | Should -Match '^-NoProfile -WindowStyle Hidden -Command '
+            $c.Execute | Should -Match 'conhost\.exe$'
+            $c.Arguments | Should -Match '^--headless "[^"]*(pwsh|powershell)\.exe" -NoProfile -WindowStyle Hidden -Command '
             $c.Arguments | Should -Match ([regex]::Escape((Join-Path (Get-AosNpmPrefix) 'paseo.cmd')))
             $c.Arguments | Should -Match 'daemon start"$'
         }
