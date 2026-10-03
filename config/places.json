@@ -30,6 +30,11 @@
       "name": "alignment-3",
       "kind": "repo",
       "path": "{{projects}}\\videos\\alignment-3"
+    },
+    {
+      "name": "agi-asi-alignment",
+      "kind": "repo",
+      "path": "{{projects}}\\videos\\agi-asi-alignment"
     }
   ]
 }
