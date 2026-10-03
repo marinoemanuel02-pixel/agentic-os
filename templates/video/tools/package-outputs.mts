@@ -2,13 +2,14 @@
 // chapters.txt (YouTube chapters) and description.md (sources). node --no-warnings tools/package-outputs.mts
 import fs from "node:fs";
 import path from "node:path";
+import {fileURLToPath} from "node:url";
 import { buildLines, buildShots, CHAPTERS, totalBeats } from "../src/data/plan.ts";
 import { BEAT, FPS } from "../src/lib/look.ts";
 
-const root = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (f: string) => JSON.parse(fs.readFileSync(path.join(root, f), "utf8"));
 const vo = read("src/data/vo.json");
-const text: { id: string; caption: string }[] = read("src/data/lines.json");
+const text: { id: string; text: string; caption?: string }[] = read("src/data/lines.json");
 const lines = buildLines(vo);
 const shots = buildShots();
 const end = (totalBeats(lines) * BEAT) / FPS;
@@ -43,7 +44,11 @@ const split = (s: string): string[] => {
 let n = 0;
 const cues: string[] = [];
 for (const l of lines) {
-  const cap = text.find((t) => t.id === l.id)!.caption;
+  const row = text.find((t) => t.id === l.id);
+  if (!row) throw new Error(`missing caption/narration row: ${l.id}`);
+  const cap = row.caption ?? row.text;
+  if (typeof cap !== 'string') throw new Error(`Missing caption/text for ${l.id}`);
+  if (!cap.trim()) continue;
   const parts = split(cap);
   const total = parts.reduce((a, p) => a + p.length, 0);
   const lead = 0.05 + 0.12; // the voice is placed 0.05 s into its slot; Kokoro adds ~0.1 s of silence

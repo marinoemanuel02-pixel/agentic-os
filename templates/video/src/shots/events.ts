@@ -4,3 +4,5 @@
 export type SfxEvent = { frame: number; kind: string; gain?: number; pitch?: number };
 
 export const EVENTS: Record<string, SfxEvent[]> = {};
+// Author word-timed events with cue(shotId, lineId, word, occurrence). Picture and audio share cue-core.
+export const buildEvents = (cue: (shot: string, line: string, word: string, nth?: number) => number): Record<string, SfxEvent[]> => EVENTS;

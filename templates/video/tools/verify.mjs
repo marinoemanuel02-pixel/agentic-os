@@ -8,15 +8,23 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import {fileURLToPath} from "node:url";
 
-const here = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
-const H = path.join(os.homedir(), ".aos", "video", "{{name}}");
+const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const H = process.env.AOS_VIDEO_MEDIA_ROOT || path.join(os.homedir(), ".aos", "video", "{{name}}");
 // The shared Remotion + three.js install (about 480 MB, made once); aos video new links every project to it.
 const shared = process.env.AOS_REMOTION_MODULES || path.join(os.homedir(), ".aos", "scratch", "video-agi-race", "node_modules");
 const name = path.basename(here);
 const app = path.join(H, "verify-app", name);
 const out = path.join(H, "verify", name);
 const ids = process.argv.slice(2);
+
+for (const p of [app, out]) {
+  if (/[\\/]AppData[\\/]/i.test(p)) { console.error(`FAIL refusing to write under AppData: ${p}`); process.exit(1); }
+  if (path.resolve(p).toLowerCase().startsWith(here.toLowerCase() + path.sep)) {
+    console.error(`FAIL refusing to write inside the checkout: ${p}`); process.exit(1);
+  }
+}
 
 const run = (args, opts = {}) => execFileSync(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", ...opts });
 
@@ -74,4 +82,4 @@ try {
   }
 } catch (e) { console.error("contact sheet failed (ImageMagick): " + e.message); }
 console.log(failed ? `${failed} failure(s)` : `all stills ok -> ${out}`);
-process.exit(failed ? 1 : 0);
+process.exitCode = failed ? 1 : 0;

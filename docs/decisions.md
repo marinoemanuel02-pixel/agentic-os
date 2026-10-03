@@ -3,6 +3,32 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-03 - Transfer proven film checks without transferring the film
+
+- The AGI/ASI director source at c30a7ac exercised matched-pose dissolve holds, finite camera guards,
+  screen-text coverage, shared word cues, voice hash binding, private media roots and caption fallback.
+  The template carries those mechanisms, with empty authored joins/timing and an unreviewed scaffold ledger;
+  a new project must author/review them before production. No film shots, camera poses, text or acronym aliases
+  were copied. This tightens the earlier scaffold policy: generic ledger structure is now included.
+- Plan review found that the film checked voice hashes after writing two stems and divided by zero for an
+  explicit empty caption. The transfer checks hashes before any stem write and omits empty-caption cues.
+  Tests cover preserved stem bytes, narration fallback, explicit captions, malformed poses, held camera ends,
+  JSX child text and private verifier output roots. Word measurement takes an explicitly configured existing
+  local model directory, never a model download or a repository model name.
+- Sound uses BEAT/FPS, including the picture's rounded frames per beat. AOS_VIDEO_MEDIA_ROOT is honoured by
+  every media writer; hero verification requires explicit compositions/frame samples and its own bundle.
+  Read-only shared dependencies remain shared. Build and QA gate claims, text and joins; full-size frame and
+  primary-source review remain necessary. A coverage check cannot establish factual truth or listening quality.
+- Node regressions are wired into aos test under both Windows PowerShell 5.1 and PowerShell 7. The sealed-export
+  review remains a separate Codex verdict, saved outside the director checkout; it does not approve the film
+  by inference from template tests.
+- Transfer validation found filesystem URLs left percent-encoded in paths with spaces, silently bypassed
+  joins/motion entry points, frame-screen scratch outside the private media root, and a forced verifier exit
+  that crashed the Node loader after successful stills. CLI/fixture regressions failed before correction;
+  filesystem URLs are decoded, scratch belongs to the private runner and the verifier exits naturally.
+  Renderer fixtures assert AppData rejection when TestDrive is there; a private TestDrive exercises actual
+  successful output paths. Those are controlled renderer tests, not new film renders.
+
 ## 2026-10-03 - Video QA binds exports to all declared render inputs
 
 - An alignment-3 motion run rendered its proxy from edited source while examining an older export. The first

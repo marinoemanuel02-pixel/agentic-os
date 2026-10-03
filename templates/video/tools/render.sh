@@ -3,7 +3,7 @@
 #   tools/render.sh <CompositionId> [extra remotion flags]
 set -euo pipefail
 P="$(cd "$(dirname "$0")/.." && pwd)"
-H="$HOME/.aos/video/{{name}}"
+H="${AOS_VIDEO_MEDIA_ROOT:-$HOME/.aos/video/{{name}}}"
 bash "$P/tools/sync-app.sh"
 cd "$H/app"
 id="$1"; shift

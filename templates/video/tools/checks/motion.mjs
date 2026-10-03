@@ -12,6 +12,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import {fileURLToPath, pathToFileURL} from "node:url";
 
 export const OPTS = {
   w: 160, // proxy analysis size (16:9)
@@ -156,9 +157,9 @@ const main = async () => {
     console.error("usage: node tools/checks/motion.mjs <proxy.mp4> [report.md]");
     process.exit(2);
   }
-  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..", "..");
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
   const report = reportArg || path.join(root, "qa", "motion.md");
-  const plan = await import("file:///" + path.join(root, "src", "data", "plan.ts").replace(/\\/g, "/"));
+  const plan = await import(pathToFileURL(path.join(root, "src", "data", "plan.ts")));
   const shots = plan.buildShots();
   // older plans (hard cuts only) have no editWindows(): every shot start is a cut
   const windows = plan.editWindows ? plan.editWindows() : shots.map((s) => [s.from, s.from + 1]);
@@ -204,7 +205,7 @@ const main = async () => {
   process.exit(open.length || sourceHits.length ? 1 : 0);
 };
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"))) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((e) => {
     console.error(e.message);
     process.exit(2);

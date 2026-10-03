@@ -2,7 +2,7 @@
 # Render stills from one bundle: tools/still.sh <frame> <CompositionId>... -> ~/.aos/video/{{name}}/frames/<id>-<frame>.png
 set -euo pipefail
 P="$(cd "$(dirname "$0")/.." && pwd)"
-H="$HOME/.aos/video/{{name}}"
+H="${AOS_VIDEO_MEDIA_ROOT:-$HOME/.aos/video/{{name}}}"
 bash "$P/tools/sync-app.sh"
 cd "$H/app"
 frame="$1"; shift

@@ -946,6 +946,22 @@ Describe 'aos video preflight' {
 }
 
 Describe 'Video input provenance' {
+    It 'runs reusable video <Check> regressions in isolated fixtures' -ForEach @(
+        @{ Check = 'joins'; File = 'joins.test.mts' },
+        @{ Check = 'screen text'; File = 'screen-text.test.mjs' },
+        @{ Check = 'pipeline'; File = 'pipeline.test.mjs' }
+    ) {
+        $testFile = Join-Path $PSScriptRoot "..\templates\video\tools\checks\$File"
+        $savedScratch = $env:AOS_VIDEO_TEST_ROOT
+        try {
+            $env:AOS_VIDEO_TEST_ROOT = Join-Path $TestDrive 'video-regressions'
+            $result = & node --no-warnings --test $testFile 2>&1 | Out-String
+            $LASTEXITCODE | Should -Be 0 -Because $result
+        } finally {
+            $env:AOS_VIDEO_TEST_ROOT = $savedScratch
+        }
+    }
+
     It 'rejects changed render inputs and mismatched exports in an isolated fixture' {
         $testFile = Join-Path $PSScriptRoot '..\templates\video\tools\checks\input-manifest.test.mjs'
         $savedScratch = $env:AOS_MANIFEST_TEST_ROOT

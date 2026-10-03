@@ -4,11 +4,16 @@
 set -uo pipefail
 P="$(cd "$(dirname "$0")/.." && pwd)"
 video="$1"; srt="$2"
-H="$HOME/.aos/video/{{name}}"
+H="${AOS_VIDEO_MEDIA_ROOT:-$HOME/.aos/video/{{name}}}"
 mkdir -p "$P/qa" "$H/qa/shots"
 R="$P/qa/report.md"; fail=0
 ok() { echo "- PASS $*" >> "$R"; }; bad() { echo "- FAIL $*" >> "$R"; fail=1; }
 echo "# QA report: $(basename "$video") ($(date '+%Y-%m-%d %H:%M'))" > "$R"; echo >> "$R"
+
+# Source coverage and camera joins are gates, not proof of factual truth or full-size legibility.
+node "$P/tools/checks/claims.mjs" || { bad "claims ledger incomplete"; cat "$R"; exit 1; }
+node "$P/tools/checks/screen-text.mjs" || { bad "screen-text ledger coverage incomplete"; cat "$R"; exit 1; }
+node --no-warnings "$P/tools/checks/joins.mts" || { bad "camera joins invalid"; cat "$R"; exit 1; }
 
 # Refuse mixed-input evidence before decoding or rendering any proxy.
 if node "$P/tools/checks/input-manifest.mjs" verify "$P/exports/input-manifest.json" "$video" "$srt" > "$H/qa/manifest.log" 2>&1; then

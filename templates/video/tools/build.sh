@@ -3,9 +3,12 @@
 #   tools/build.sh [version-label]
 set -euo pipefail
 P="$(cd "$(dirname "$0")/.." && pwd)"
-H="$HOME/.aos/video/{{name}}"
+H="${AOS_VIDEO_MEDIA_ROOT:-$HOME/.aos/video/{{name}}}"
 label="${1:-v1}"
 cd "$P"
+node tools/checks/claims.mjs
+node tools/checks/screen-text.mjs
+node --no-warnings tools/checks/joins.mts
 node --no-warnings tools/check-plan.mts | tail -1
 node --no-warnings tools/audio.mts
 node tools/checks/input-manifest.mjs write "$H/renders/Main.inputs.json"

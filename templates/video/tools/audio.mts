@@ -1,31 +1,43 @@
-// Builds the soundtrack from code (no samples, no downloads): music on the 100 BPM grid, effects from each
+// Builds the soundtrack from code (no samples, no downloads): music on the picture beat grid, effects from each
 // shot's event list, and the voice placed on its beat. Writes three stems (48 kHz stereo, 16-bit) to
 // ~/.aos/video/{{name}}/audio: music.wav, sfx.wav, vo.wav. Mixing and loudness are done by tools/mix.sh.
 //   node tools/audio.mts
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import {fileURLToPath} from "node:url";
 import { buildLines, buildShots, totalBeats } from "../src/data/plan.ts";
 import { BEAT, FPS } from "../src/lib/look.ts";
-import { EVENTS, type SfxEvent } from "../src/shots/events.ts";
+import { buildEvents, type SfxEvent } from "../src/shots/events.ts";
 import { MUSIC } from "../src/data/music.ts";
+import { makeCues, type WordTimes } from "../src/lib/cue-core.ts";
 
 const SR = 48000;
-const ROOT = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
-const OUT = path.join(os.homedir(), ".aos/video/{{name}}/audio");
-const PUBLIC = path.join(os.homedir(), ".aos/video/{{name}}/app/public");
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const MEDIA = process.env.AOS_VIDEO_MEDIA_ROOT || path.join(os.homedir(), ".aos/video/{{name}}");
+const OUT = path.join(MEDIA, "audio");
+const PUBLIC = path.join(MEDIA, "app/public");
 fs.mkdirSync(OUT, { recursive: true });
 
 const vo = JSON.parse(fs.readFileSync(path.join(ROOT, "src/data/vo.json"), "utf8"));
 const lines = buildLines(vo);
 const shots = buildShots();
 const BEATS = totalBeats(lines);
-const SPB = 60 / 100; // seconds per beat
+const SPB = BEAT / FPS; // seconds per beat: use the picture grid, including rounded frames
 const N = Math.ceil((BEATS * SPB + 2.5) * SR); // + ring-out tail, trimmed by the mix to the picture
 const beatT = (b: number) => b * SPB;
 
 // Shot event lists (frames relative to the shot), registered in src/shots/events.ts.
-const SHOT_EVENTS: Record<string, SfxEvent[]> = EVENTS;
+const words: WordTimes = JSON.parse(fs.readFileSync(path.join(ROOT, "src/data/words.json"), "utf8"));
+const { cue } = makeCues(words, lines, shots, FPS);
+const SHOT_EVENTS: Record<string, SfxEvent[]> = buildEvents(cue);
+// Refuse drift before overwriting any stem. These must be the WAVs used to measure word times.
+const measured: Record<string, string> = JSON.parse(fs.readFileSync(path.join(ROOT, "src/data/words.sha256.json"), "utf8"));
+for (const l of lines) {
+  const sha = crypto.createHash("sha256").update(fs.readFileSync(path.join(PUBLIC, l.file))).digest("hex");
+  if (measured[l.id] !== sha || !words[l.id]) throw new Error(`${l.id}: voice changed since its word times were measured; run tools/word-times.py`);
+}
 
 // ---------------------------------------------------------------- tiny DSP kit
 let seed = 1234567;

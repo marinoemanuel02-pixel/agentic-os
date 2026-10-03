@@ -58,3 +58,34 @@ heard the voice.
 - Parallel builders each own a batch file (`batchX.ts`, `batchX.events.ts`, `batchX.lib.tsx`), spread into
   `registry.ts` and `events.ts` by the director. Everything is a pure function of the frame (no `Math.random`).
 - Every number and quote on screen matches `script.md` and a row in `sources.md`.
+## Production checks
+
+Author `src/shots/joins.ts` for every shot and use `src/lib/shot-camera.ts` for frame-keyed cameras that hold
+through dissolves. The empty scaffold intentionally fails the joins gate until these poses exist.
+Review narration and every authored on-screen string in `claims.json`. Write screen words as literal `text`
+properties/attributes or JSX children in shot/library consumers; stock forwarding helpers contain no authored
+words. Run claims, screen-text, check-plan and joins before rendering. QA repeats coverage and joins; independent
+source and full-size frame review establishes truth and legibility.
+
+After generating voice, set `AOS_WHISPER_MODEL` to an existing local model directory and run `tools/word-times.py`
+with the installed Whisper Python. No downloads are attempted. It writes words.json and words.sha256.json from
+the same `vo.json` WAV paths as audio.mts. Picture and sound share cue-core; a changed voice refuses the mix before
+any stem overwrite. Empty word timing also blocks production until measured. `caption` falls back to `text`;
+an explicit empty caption omits that line's cues.
+
+Set `AOS_VIDEO_MEDIA_ROOT` to a private directory for isolated production; every media tool honours it.
+Before shell build/render/still/frames/QA, provision that root's `app/src` junction to this checkout's `src`,
+`app/node_modules` junction to the existing read-only dependency installation, and `app/public/vo` with the
+measured WAVs; create its renders/frames directories. The override selects an existing runner; sync-app.sh
+copies config files and does not create junctions. Both verifier tools provision their own private runners.
+Use claim kinds fact, definition, quote, inference, illustration, hypothetical, label or title. Extra detail
+belongs in the evidence anchor, rather than changing the kind. Screen words use the literal conventions above;
+other props such as title are not scanned, so independent pixel review remains required.
+The lightweight JSX scanner is not a TypeScript parser: regex literals and custom dynamic text can escape its
+conventions. For files using those constructs, review their rendered words explicitly against the ledger;
+never treat a passing gate as complete screen coverage.
+If VO_DIR overrides the files measured by word-times.py, copy those exact WAV bytes to the runner paths in
+vo.json before audio.mts. The default measurement uses those runner paths directly.
+`node tools/verify-hero.mjs Composition:30,90,150` checks explicit clips; `--stills Composition:30,Other:60` checks
+only frames. Hero verification owns a bundle under `hero-verify/<branch>` within that media root; never share
+that bundle with a running verifier. Both verifiers use read-only shared dependencies and private apps.

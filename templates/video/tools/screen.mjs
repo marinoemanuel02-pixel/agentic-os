@@ -5,16 +5,20 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import {fileURLToPath} from "node:url";
 import { execFileSync } from "node:child_process";
 
-const here = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
-const dir = path.join(os.homedir(), ".aos", "video", "{{name}}", "qa", "shots");
+const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const media = process.env.AOS_VIDEO_MEDIA_ROOT || path.join(os.homedir(), ".aos", "video", "{{name}}");
+const dir = path.join(media, "qa", "shots");
 const model = process.env.SCREEN_MODEL || "aos-agent";
 const prompt = `Read all the text visible in this video frame, exactly as written, line by line. Answer ONLY with JSON: {"text_on_screen": "<the text, lines joined with ' / ', or empty>", "garbled_text": true|false}`;
 
 const rows = [];
+const scratch = path.join(media, "tmp", "screen");
+fs.mkdirSync(scratch, {recursive: true});
 for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".png")).sort()) {
-  const small = path.join(os.tmpdir(), `screen-${f.replace(".png", ".jpg")}`);
+  const small = path.join(scratch, `screen-${f.replace(".png", ".jpg")}`);
   execFileSync("magick", [path.join(dir, f), "-resize", "896x504", "-quality", "85", small]);
   const img = fs.readFileSync(small).toString("base64");
   const t0 = Date.now();
