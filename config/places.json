@@ -35,6 +35,11 @@
       "name": "agi-asi-alignment",
       "kind": "repo",
       "path": "{{projects}}\\videos\\agi-asi-alignment"
+    },
+    {
+      "name": "alignment-now",
+      "kind": "repo",
+      "path": "{{projects}}\\videos\\alignment-now"
     }
   ]
 }
