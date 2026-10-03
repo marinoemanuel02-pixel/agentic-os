@@ -3,6 +3,27 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-03 - Video QA binds exports to all declared render inputs
+
+- An alignment-3 motion run rendered its proxy from edited source while examining an older export. The first
+  source-only guard missed voice, music, public assets and font/config drift. The AGI/ASI run exercised a SHA256
+  manifest for those inputs, dependency lockfile, voice engine and runtime metadata; added/removed files also
+  invalidate it. Renderer source junctions must point at the declared checkout. It guards accidental drift,
+  not malicious forgery of both the export and its manifest.
+- Build checks the manifest before sealing exact MP4/SRT hashes; QA checks both inputs and those supplied files
+  before costly decoding/proxy work, and inputs again before/after the proxy. Claims are recorded when present,
+  so the generic scaffold does not need a film-specific claims ledger. Rule R22 calls the guard from QA.
+- Eleven content/export/junction/integrity regression cases run from aos test under both shells, with fixtures
+  under TestDrive. The project first failed the cases before the fix; the template integration test also failed
+  before transfer. Runtime paths are resolved locally; manifests store logical labels, not machine paths.
+- A private guard caller may set AOS_VIDEO_MEDIA_ROOT and AOS_REMOTION_MODULES. The existing build scripts still
+  use their scaffolded default media root; the guard override alone does not move an entire production pipeline.
+  Claude's independent review found mixer scratch inside the protected audio tree and an unbound dependency
+  junction. Scratch now goes to renders/ and the actual app/node_modules is checked; both had failing tests
+  before the fixes. Pre-proxy mismatches also write a FAIL to the report.
+  No shot cache was added: the independent plan review found that invalidation complexity would cost this run
+  more than it saved. Independent reusable-patch review remains a separate gate before push.
+
 ## 2026-10-02 - The video pipeline learns: rules with ids, a motion check, verdicts in the ledger
 
 - The user judged the alignment video v1 "still very much shape-like" and, after v2, "still too shape-like and

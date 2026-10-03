@@ -8,7 +8,8 @@ H="$HOME/.aos/video/{{name}}"
 A="$H/audio"
 video="$1"; out="$2"; start="${3:-0}"; dur="${4:-}"
 if [ -z "$dur" ]; then dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$video"); fi
-tmp="$H/audio/mix-tmp.wav"
+mkdir -p "$H/renders"
+tmp="$H/renders/mix-tmp.wav"
 
 # Stem balance (measured: music.wav -14.4 LUFS, vo.wav -22.5, sfx.wav -23.1): the voice must sit well above the
 # music, so the voice is raised and music and effects lowered before the sum.

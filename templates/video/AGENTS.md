@@ -29,6 +29,10 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
 - QA: `bash tools/qa.sh exports/{{name}}.mp4 exports/{{name}}.srt` (length from `qa.env`; includes the motion
   check on a texture-free proxy, report `qa/motion.md`), then `node tools/screen.mjs` (on-screen text)
 - Motion check alone: `node --no-warnings tools/checks/motion.mjs <proxy.mp4>`; its tests: `node --test tools/checks/`
+- Input provenance (R22): build snapshots inputs before rendering, checks them again afterward and seals the exact
+  MP4/SRT hashes. QA rejects changed inputs or artifacts before decoding/proxy work. Rebuild after a mismatch.
+  `node --test tools/checks/input-manifest.test.mjs` exercises the guard. An isolated caller may select its private
+  runner for this check with `AOS_VIDEO_MEDIA_ROOT`; this does not relocate the other build scripts automatically.
 
 ## The learning loop (rule R20)
 

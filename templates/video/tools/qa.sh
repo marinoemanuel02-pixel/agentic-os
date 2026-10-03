@@ -10,6 +10,16 @@ R="$P/qa/report.md"; fail=0
 ok() { echo "- PASS $*" >> "$R"; }; bad() { echo "- FAIL $*" >> "$R"; fail=1; }
 echo "# QA report: $(basename "$video") ($(date '+%Y-%m-%d %H:%M'))" > "$R"; echo >> "$R"
 
+# Refuse mixed-input evidence before decoding or rendering any proxy.
+if node "$P/tools/checks/input-manifest.mjs" verify "$P/exports/input-manifest.json" "$video" "$srt" > "$H/qa/manifest.log" 2>&1; then
+  ok "export input manifest matches picture, public assets, voice/music, fonts, config and runtime"
+else
+  bad "export input manifest missing or changed; rebuild before QA"
+  cat "$H/qa/manifest.log" >> "$R"
+  cat "$R"
+  exit 1
+fi
+
 # 0. the export must come from the current src/ (the motion proxy below renders from src/, so a later edit would
 #    make QA judge two different films); tools/build.sh records the hash it rendered from
 now=$(cd "$P" && find src -type f | sort | xargs cat | sha1sum | cut -d" " -f1)
@@ -63,6 +73,8 @@ ok "contact sheet: qa/contact-sheet.jpg ($(wc -l < "$H/qa/shot-mids.txt") shots)
 #    (snaps = travelling moves that start at full speed; banned expo/back curves in src/). Report: qa/motion.md
 #    The proxy is rendered fresh from the current src/ every run, so it can never describe an older cut.
 proxy="$H/renders/Main-qa.mp4"
+node "$P/tools/checks/input-manifest.mjs" verify "$P/exports/input-manifest.json" >/dev/null \
+  || { bad "inputs changed before proxy render; evidence invalid"; cat "$R"; exit 1; }
 rm -f "$proxy"
 bash "$P/tools/sync-app.sh"
 if (cd "$H/app" && node node_modules/@remotion/cli/remotion-cli.js render src/index.ts Main "$proxy" \
@@ -72,6 +84,9 @@ if (cd "$H/app" && node node_modules/@remotion/cli/remotion-cli.js render src/in
 else
   bad "motion check: the proxy render failed"
 fi
+
+node "$P/tools/checks/input-manifest.mjs" verify "$P/exports/input-manifest.json" >/dev/null \
+  && ok "inputs unchanged through QA" || bad "inputs changed during QA; evidence invalid"
 
 echo >> "$R"; [ $fail = 0 ] && echo "**All technical checks pass.**" >> "$R" || echo "**Technical checks FAILED.**" >> "$R"
 cat "$R"; exit $fail

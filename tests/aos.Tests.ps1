@@ -945,6 +945,20 @@ Describe 'aos video preflight' {
     }
 }
 
+Describe 'Video input provenance' {
+    It 'rejects changed render inputs and mismatched exports in an isolated fixture' {
+        $testFile = Join-Path $PSScriptRoot '..\templates\video\tools\checks\input-manifest.test.mjs'
+        $savedScratch = $env:AOS_MANIFEST_TEST_ROOT
+        try {
+            $env:AOS_MANIFEST_TEST_ROOT = Join-Path $TestDrive 'manifest-regressions'
+            $result = & node --test $testFile 2>&1 | Out-String
+            $LASTEXITCODE | Should -Be 0 -Because $result
+        } finally {
+            $env:AOS_MANIFEST_TEST_ROOT = $savedScratch
+        }
+    }
+}
+
 Describe 'Video rules format' {
     It 'has numbered unique rules and wires every check into the video QA script' {
         $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))

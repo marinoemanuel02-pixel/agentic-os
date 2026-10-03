@@ -8,10 +8,14 @@ label="${1:-v1}"
 cd "$P"
 node --no-warnings tools/check-plan.mts | tail -1
 node --no-warnings tools/audio.mts
+node tools/checks/input-manifest.mjs write "$H/renders/Main.inputs.json"
 # the source the picture is rendered from, so QA can refuse to judge an export against changed code
 (cd "$P" && find src -type f | sort | xargs cat | sha1sum | cut -d" " -f1) > "$H/renders/Main.src-hash"
 bash tools/render.sh Main
 bash tools/mix.sh "$H/renders/Main.mp4" "$H/renders/{{name}}-$label.mp4"
+node tools/checks/input-manifest.mjs verify "$H/renders/Main.inputs.json"
 node --no-warnings tools/package-outputs.mts
 cp "$H/renders/{{name}}-$label.mp4" "$P/exports/{{name}}.mp4"
+cp "$H/renders/Main.inputs.json" "$P/exports/input-manifest.json"
+node tools/checks/input-manifest.mjs seal "$P/exports/input-manifest.json" "$P/exports/{{name}}.mp4" "$P/exports/{{name}}.srt"
 echo "$P/exports/{{name}}.mp4"
