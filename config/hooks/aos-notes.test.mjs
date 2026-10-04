@@ -138,3 +138,19 @@ test('Codex sees each note on two separate calls (its subagents share the sessio
   assert.match(context(run(dir, 'claude', 's7')).additionalContext, /for claude/);
   assert.equal(run(dir, 'claude', 's7').stdout, '', 'Claude marks subagents, so once is enough');
 });
+
+test('each call reads a bounded chunk of a large unread tail and reaches the note over later calls (Codex review 4)', () => {
+  const dir = coord();
+  write(dir, [{ts: iso(9000), type: 'note', agent: 'codex', text: 'start'}]);
+  assert.match(context(run(dir, 'claude')).additionalContext, /start/);
+  const stateFile = path.join(dir, 'seen', fs.readdirSync(path.join(dir, 'seen'))[0]);
+  const before = JSON.parse(fs.readFileSync(stateFile, 'utf8')).offset;
+  const filler = JSON.stringify({ts: iso(5000), type: 'claim', agent: 'codex', checkout: 'x'.repeat(300)});
+  fs.appendFileSync(path.join(dir, 'ledger.jsonl'), (filler + '\n').repeat(9000) + JSON.stringify({ts: iso(1000), type: 'note', agent: 'codex', text: 'after the backlog'}) + '\n');
+  assert.equal(run(dir, 'claude').stdout, '', 'the first call only reads part of the 2.8 MB tail');
+  const after = JSON.parse(fs.readFileSync(stateFile, 'utf8')).offset;
+  assert.ok(after - before <= 1024 * 1024, `one call read ${after - before} bytes`);
+  let got = '';
+  for (let k = 0; k < 6 && !got; k++) got = run(dir, 'claude').stdout;
+  assert.match(context({stdout: got}).additionalContext, /after the backlog/);
+});

@@ -16,6 +16,7 @@ const FIRST_LOOK_HOURS = 6; // a session's first call shows notes this recent
 const FIRST_LOOK_CHUNK = 512 * 1024; // the first look reads back in growing chunks until it passes that age
 const PER_CALL = 5;
 const MAX_PENDING = 200; // reading stops here and resumes from the same line on a later call
+const READ_CHUNK = 1024 * 1024; // at most this much ledger per call; a backlog is read over several calls (Codex review 4)
 const MAX_CHARS = 600;
 const SHOWINGS = {codex: 2};
 
@@ -62,12 +63,16 @@ function main() {
   const firstLook = !state || !(state.offset <= size);
   const start = firstLook ? firstLookStart(ledger, size, since) : state.offset;
   const pending = firstLook ? [] : (state.pending || []);
-  const buf = readRange(ledger, start, size);
+  const stop = Math.min(size, start + READ_CHUNK);
+  const buf = readRange(ledger, start, stop);
   let pos = 0;
   let offset = start;
   while (pending.length < MAX_PENDING) {
     const nl = buf.indexOf(0x0a, pos);
-    if (nl < 0) break; // a half-written line waits for the next call
+    if (nl < 0) { // a half-written line waits for the next call; a line longer than a chunk is skipped
+      if (pos === 0 && stop < size) offset = stop;
+      break;
+    }
     const line = buf.subarray(pos, nl).toString('utf8');
     pos = nl + 1;
     offset = start + pos;
