@@ -30,7 +30,7 @@ test('shows the other vendor\'s unread notes once, as PostToolUse additionalCont
   assert.equal(first.status, 0);
   const out = context(first);
   assert.equal(out.hookEventName, 'PostToolUse');
-  assert.match(out.additionalContext, /1 new aos note from codex/);
+  assert.match(out.additionalContext, /1 unread aos note from codex/);
   assert.match(out.additionalContext, /reset: 100 % 5h, 11 % weekly/);
   assert.doesNotMatch(out.additionalContext, /my own note/);
   assert.equal(run(dir, 'claude').stdout, '', 'a note is shown once per session');
@@ -45,14 +45,53 @@ test('a new note after the last one shown is reported; old notes before a sessio
   assert.match(context(run(dir, 'claude')).additionalContext, /fresh/);
 });
 
-test('long notes are truncated, at most five are listed, and the rest are counted', () => {
+test('long notes are truncated; at most five per call, oldest first, the rest delivered on the next calls (Codex review)', () => {
   const dir = coord();
   write(dir, Array.from({length: 7}, (_, i) => ({ts: iso(70000 - i * 1000), type: 'note', agent: 'claude', text: `n${i} ` + 'x'.repeat(2000)})));
   const text = context(run(dir, 'codex')).additionalContext;
-  assert.match(text, /7 new aos notes from claude/);
-  assert.match(text, /2 older: aos who/);
+  assert.match(text, /7 unread aos notes from claude, showing 5/);
+  assert.match(text, /2 more after your next tool call/);
   assert.ok(text.length < 5000);
-  assert.doesNotMatch(text, /n0 /, 'the newest five are shown');
+  assert.match(text, /n0 /);
+  assert.doesNotMatch(text, /n5 /);
+  const next = context(run(dir, 'codex')).additionalContext;
+  assert.match(next, /n5 /);
+  assert.match(next, /n6 /);
+  assert.equal(run(dir, 'codex').stdout, '');
+});
+
+test('a note written in the same second as the last one shown is still delivered (Codex review)', () => {
+  const dir = coord();
+  const ts = iso(5000);
+  write(dir, [{ts, type: 'note', agent: 'codex', text: 'first'}]);
+  assert.match(context(run(dir, 'claude')).additionalContext, /first/);
+  fs.appendFileSync(path.join(dir, 'ledger.jsonl'), JSON.stringify({ts, type: 'note', agent: 'codex', text: 'second'}) + '\n');
+  const again = context(run(dir, 'claude'));
+  assert.match(again.additionalContext, /second/);
+  assert.doesNotMatch(again.additionalContext, /first/);
+});
+
+test('a Claude subagent call neither shows nor consumes the parent session notes (Codex review)', () => {
+  const dir = coord();
+  write(dir, [{ts: iso(2000), type: 'note', agent: 'codex', text: 'for the parent'}]);
+  const sub = spawnSync(process.execPath, [hook, 'claude'], {input: JSON.stringify({session_id: 's1', agent_id: 'sub-1', agent_type: 'Explore'}), env: {...process.env, AOS_COORD: dir, AOS_DELEGATE_ID: ''}, encoding: 'utf8'});
+  assert.equal(sub.stdout, '');
+  assert.match(context(run(dir, 'claude')).additionalContext, /for the parent/);
+});
+
+test('only the ledger tail after the last read is parsed: a large old ledger stays fast (Codex review)', () => {
+  const dir = coord();
+  const filler = JSON.stringify({ts: iso(40 * 3600 * 1000), type: 'claim', agent: 'codex', checkout: 'C:\\x'.padEnd(200, 'x')});
+  fs.writeFileSync(path.join(dir, 'ledger.jsonl'), (filler + '\n').repeat(60000));
+  fs.appendFileSync(path.join(dir, 'ledger.jsonl'), JSON.stringify({ts: iso(1000), type: 'note', agent: 'codex', text: 'tail note'}) + '\n');
+  const started = Date.now();
+  assert.match(context(run(dir, 'claude')).additionalContext, /tail note/);
+  fs.appendFileSync(path.join(dir, 'ledger.jsonl'), JSON.stringify({ts: iso(0), type: 'note', agent: 'codex', text: 'next'}) + '\n');
+  assert.match(context(run(dir, 'claude')).additionalContext, /next/);
+  assert.ok(Date.now() - started < 3000, 'two calls on a 12 MB ledger');
+  const seen = fs.readdirSync(path.join(dir, 'seen'));
+  assert.equal(seen.length, 1);
+  assert.ok(JSON.parse(fs.readFileSync(path.join(dir, 'seen', seen[0]), 'utf8')).offset > 12e6, 'the read offset is kept');
 });
 
 test('fails open: no ledger, a malformed ledger, bad stdin or a delegate run print nothing and exit 0', () => {

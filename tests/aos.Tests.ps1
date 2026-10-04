@@ -3405,7 +3405,8 @@ Describe 'Vendor capacity (R34)' {
             $week = [DateTimeOffset]::new([datetime]'2026-10-09T21:11:27Z').ToUnixTimeSeconds()
             $line = { param($ts, $id, $p, $s) '{"timestamp":"' + $ts + '","type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"limit_id":"' + $id + '","primary":{"used_percent":' + $p + ',"window_minutes":300,"resets_at":' + $five + '},"secondary":{"used_percent":' + $s + ',"window_minutes":10080,"resets_at":' + $week + '}}}}' }
             $log = (& $line '2026-10-04T15:00:00.000Z' 'codex' 60 80) + "`n" + '{"type":"other"}' + "`n" + (& $line '2026-10-04T16:27:10.550Z' 'codex' 99 89) + "`n" + (& $line '2026-10-04T16:30:00.000Z' 'base_model_inference' 5 5)
-            Write-TestFile (Join-Path $env:CODEX_HOME 'sessions\2026\10\04\rollout-2026-10-04T18-25-27-a.jsonl') $log
+            # a large rollout: the reading sits after 5 MB of other events, read from the tail only
+            Write-TestFile (Join-Path $env:CODEX_HOME 'sessions\2026\10\04\rollout-2026-10-04T18-25-27-a.jsonl') ((('{"type":"other","payload":"' + ('x' * 200) + '"}' + "`n") * 25000) + $log)
             $cap = InModuleScope aos { Get-AosCapacity -Now ([datetime]'2026-10-04T16:30:00Z').ToUniversalTime() }
             $cap['codex'].source | Should -Be 'codex-log'
             $cap['codex'].remaining | Should -Be 1
@@ -3576,6 +3577,19 @@ Describe 'Process runner' {
         $r.TimedOut | Should -BeTrue
         $r.Stalled | Should -BeTrue
         ([DateTime]::UtcNow - $started).TotalSeconds | Should -BeLessThan 30
+    }
+    It 'reads stdout while writing stdin in no-progress mode, so a child that writes before it reads cannot deadlock (Codex review 2)' {
+        $py = Get-Command python.exe -ErrorAction SilentlyContinue
+        if (-not $py) { Set-ItResult -Skipped -Because 'python.exe is not on PATH'; return }
+        $stdin = Join-Path $caseRoot 'mb-stdin.txt'
+        [System.IO.File]::WriteAllBytes($stdin, (New-Object byte[] (1MB)))
+        $out = Join-Path $caseRoot 'chatty-out.txt'
+        $started = [DateTime]::UtcNow
+        $r = InModuleScope aos -Parameters @{ P=$caseRoot; I=$stdin; O=$out } { param($P,$I,$O) Invoke-AosProcess -Exe 'python.exe' -Arguments @('-c', 'import sys; sys.stdout.write("x" * 300000); sys.stdout.flush(); sys.stdin.buffer.read()') -WorkingDirectory $P -StdinFile $I -StdoutFile $O -TimeoutSeconds 25 -IdleSeconds 15 }
+        $r.TimedOut | Should -BeFalse
+        $r.Code | Should -Be 0
+        (Get-Item $out).Length | Should -BeGreaterOrEqual 300000
+        ([DateTime]::UtcNow - $started).TotalSeconds | Should -BeLessThan 15
     }
     It 'keeps output written before a stuck stdin write in no-progress mode (Codex review)' {
         $stdin = Join-Path $caseRoot 'big-stdin.txt'

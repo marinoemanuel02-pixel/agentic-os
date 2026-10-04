@@ -2501,14 +2501,39 @@ function Start-AosProcessCore {
     $errTask = $p.StandardError.ReadToEndAsync()
     $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(1, $TimeoutSeconds))
     $stdinStuck = $false
+    $chunks = New-Object System.Text.StringBuilder
+    $buffer = New-Object char[] 8192
+    $read = $null
+    $lastOutput = [DateTime]::UtcNow
+    # With IdleSeconds, stdout is read in chunks (so the time of the last output is known) from before stdin is
+    # written, and completed reads are pumped while the write waits: a child that writes before it reads must
+    # not deadlock against us (Codex review 2). Dot-sourced, so it updates these variables.
+    $pump = {
+        while ($read -and $read.IsCompleted) {
+            $n = $read.Result
+            $read = $null
+            if ($n -gt 0) {
+                [void]$chunks.Append($buffer, 0, $n)
+                $lastOutput = [DateTime]::UtcNow
+                $read = $p.StandardOutput.ReadAsync($buffer, 0, $buffer.Length)
+            }
+        }
+    }
+    if ($IdleSeconds -gt 0) { $read = $p.StandardOutput.ReadAsync($buffer, 0, $buffer.Length) }
     try {
         if ($StdinFile) {
             # Raw UTF-8 bytes (Windows PowerShell 5.1 cannot set the stdin encoding), written asynchronously
             # inside the deadline: a child that never reads stdin must not block us past the timeout.
             $bytes = [System.IO.File]::ReadAllBytes($StdinFile)
             $write = $p.StandardInput.BaseStream.WriteAsync($bytes, 0, $bytes.Length)
-            $left = [int][Math]::Max(1, ($deadline - [DateTime]::UtcNow).TotalMilliseconds)
-            if ($write.Wait($left)) { $p.StandardInput.BaseStream.Flush() } else { $stdinStuck = $true }
+            if ($IdleSeconds -gt 0) {
+                while (-not $write.IsCompleted -and [DateTime]::UtcNow -lt $deadline) { [void]$write.Wait(200); . $pump }
+                if ($write.IsCompleted) { $write.Wait(); $p.StandardInput.BaseStream.Flush() } else { $stdinStuck = $true }
+            }
+            else {
+                $left = [int][Math]::Max(1, ($deadline - [DateTime]::UtcNow).TotalMilliseconds)
+                if ($write.Wait($left)) { $p.StandardInput.BaseStream.Flush() } else { $stdinStuck = $true }
+            }
         }
     }
     catch { }
@@ -2516,16 +2541,10 @@ function Start-AosProcessCore {
     $timedOut = $false
     $killFailed = $false
     $stalled = $false
-    $chunks = New-Object System.Text.StringBuilder
-    $buffer = New-Object char[] 8192
-    $read = $null
     if ($IdleSeconds -gt 0) {
-        # Chunked reads instead of ReadToEnd, so the time of the last output is known. The read starts even when
-        # stdin is stuck, so the drain below keeps what was written before the kill. The deadline is checked on
-        # every pass (steady output must not outlive it), and a closed stdout keeps the idle clock running until
-        # the process exits (Codex review).
-        $lastOutput = [DateTime]::UtcNow
-        $read = $p.StandardOutput.ReadAsync($buffer, 0, $buffer.Length)
+        # The deadline is checked on every pass (steady output must not outlive it), and a closed stdout keeps the
+        # idle clock running until the process exits (Codex review). A stuck stdin skips the loop; the drain below
+        # keeps what was written before the kill.
         while (-not $stdinStuck) {
             if ($read) {
                 if ($read.Wait(500)) {
@@ -3183,11 +3202,22 @@ function Read-AosCodexLimits {
     # went unnoticed because capacity knew only a hand-typed percent without a reset time.
     $root = Join-Path (Get-AosCodexHome) 'sessions'
     if (-not (Test-Path -LiteralPath $root)) { return $null }
+    # Only the tail of the two newest rollouts: one rollout reached 168 MB, and this runs before every delegation
+    # (Codex review 2). Readings are written every turn, so the newest one is near the end of a recent file.
     $files = @(Get-ChildItem -LiteralPath $root -Recurse -File -Filter 'rollout-*.jsonl' -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 5)
+        Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 2)
     $best = $null
     foreach ($f in $files) {
-        foreach ($line in [System.IO.File]::ReadLines($f.FullName)) {
+        $tail = 4MB
+        $fs = [System.IO.File]::Open($f.FullName, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        try {
+            $from = [Math]::Max([long]0, $fs.Length - $tail)
+            [void]$fs.Seek($from, [System.IO.SeekOrigin]::Begin)
+            $text = (New-Object System.IO.StreamReader($fs, $script:Utf8NoBom)).ReadToEnd()
+        } finally { $fs.Dispose() }
+        $lines = $text -split "`n"
+        if ($from -gt 0) { $lines = @($lines | Select-Object -Skip 1) }
+        foreach ($line in $lines) {
             if ($line.IndexOf('"rate_limits"') -lt 0 -or $line.IndexOf('"limit_id":"codex"') -lt 0) { continue }
             try { $e = ConvertFrom-Json -InputObject $line -ErrorAction Stop } catch { continue }
             $rl = $e.payload.rate_limits
