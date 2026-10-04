@@ -1012,6 +1012,10 @@ Describe 'Video input provenance' {
             Test-Path -LiteralPath $original | Should -BeTrue -Because $relative
             [System.IO.File]::ReadAllText($f.FullName).Replace("`r`n", "`n") | Should -BeExactly ([System.IO.File]::ReadAllText($original).Replace("`r`n", "`n")) -Because $relative
         }
+        # and the other way: every film-owned scaffold file has a snapshot copy, or a film's version would leak in (Codex review)
+        $filmFiles = @('claims.json', 'script.md') + @(Get-ChildItem -LiteralPath (Join-Path $video 'src\data') -File | ForEach-Object { 'src\data\' + $_.Name }) +
+            @(Get-ChildItem -LiteralPath (Join-Path $video 'src\shots') -Recurse -File | ForEach-Object { $_.FullName.Substring($video.Length + 1) })
+        foreach ($relative in $filmFiles) { Test-Path -LiteralPath (Join-Path $snapshot $relative) | Should -BeTrue -Because "$relative must be in the fixture snapshot" }
     }
 
     It 'runs the currency gate and export-day reverify tests (no network: a local fixture server)' -ForEach @(
@@ -3393,6 +3397,31 @@ Describe 'Vendor capacity (R34)' {
         InModuleScope aos { Add-AosCapacityEvent -Vendor 'claude' -Remaining 40 -Resets '' -Source 'agent' -Note '' }
         (InModuleScope aos { Get-AosCapacity -Now ([datetime]::UtcNow.AddHours(6)) })['claude'].state | Should -Be 'stale'
     }
+    It 'reads Codex''s own logged limits (5 h and weekly) so a reset is noticed without anyone reporting it' {
+        $saved = $env:CODEX_HOME
+        try {
+            $env:CODEX_HOME = Join-Path $caseRoot ('codex-home-' + [guid]::NewGuid().ToString('N').Substring(0, 6))
+            $five = [DateTimeOffset]::new([datetime]'2026-10-04T16:45:21Z').ToUnixTimeSeconds()
+            $week = [DateTimeOffset]::new([datetime]'2026-10-09T21:11:27Z').ToUnixTimeSeconds()
+            $line = { param($ts, $id, $p, $s) '{"timestamp":"' + $ts + '","type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"limit_id":"' + $id + '","primary":{"used_percent":' + $p + ',"window_minutes":300,"resets_at":' + $five + '},"secondary":{"used_percent":' + $s + ',"window_minutes":10080,"resets_at":' + $week + '}}}}' }
+            $log = (& $line '2026-10-04T15:00:00.000Z' 'codex' 60 80) + "`n" + '{"type":"other"}' + "`n" + (& $line '2026-10-04T16:27:10.550Z' 'codex' 99 89) + "`n" + (& $line '2026-10-04T16:30:00.000Z' 'base_model_inference' 5 5)
+            Write-TestFile (Join-Path $env:CODEX_HOME 'sessions\2026\10\04\rollout-2026-10-04T18-25-27-a.jsonl') $log
+            $cap = InModuleScope aos { Get-AosCapacity -Now ([datetime]'2026-10-04T16:30:00Z').ToUniversalTime() }
+            $cap['codex'].source | Should -Be 'codex-log'
+            $cap['codex'].remaining | Should -Be 1
+            $cap['codex'].window | Should -Be '5h'
+            $cap['codex'].resets | Should -Be ([datetime]'2026-10-04T16:45:21Z').ToUniversalTime()
+            # after the 5-hour reset the weekly window binds: 11 % left until Oct 9
+            $cap = InModuleScope aos { Get-AosCapacity -Now ([datetime]'2026-10-04T17:00:00Z').ToUniversalTime() }
+            $cap['codex'].remaining | Should -Be 11
+            $cap['codex'].window | Should -Be 'week'
+            $cap['codex'].state | Should -Be 'low'
+            $cap['codex'].resets | Should -Be ([datetime]'2026-10-09T21:11:27Z').ToUniversalTime()
+            # a report newer than the last logged reading still wins
+            InModuleScope aos { Add-AosCapacityEvent -Vendor 'codex' -Remaining 0 -Resets '' -Source 'delegate' -Note 'quota error' }
+            (InModuleScope aos { Get-AosCapacity -Now ([datetime]::UtcNow) })['codex'].source | Should -Be 'delegate'
+        } finally { $env:CODEX_HOME = $saved }
+    }
     It 'records capacity from a quota error so the next session sees it' {
         InModuleScope aos { Add-AosCapacityFromError -Vendor 'codex' -Message 'You have hit your usage limit. try again at 11:59 PM.' }
         $cap = InModuleScope aos { Get-AosCapacity -Now ([datetime]::UtcNow) }
@@ -3531,6 +3560,30 @@ Describe 'Process runner' {
         $r.Stalled | Should -BeTrue
         $r.KillFailed | Should -BeFalse
         ([DateTime]::UtcNow - $started).TotalSeconds | Should -BeLessThan 40
+    }
+    It 'still enforces the hard timeout while output keeps flowing (Codex review)' {
+        $started = [DateTime]::UtcNow
+        $r = InModuleScope aos -Parameters @{ P=$caseRoot } { param($P) Invoke-AosProcess -Exe 'powershell.exe' -Arguments @('-NoProfile','-Command','1..300 | ForEach-Object { Write-Output tick; Start-Sleep -Milliseconds 200 }') -WorkingDirectory $P -TimeoutSeconds 3 -IdleSeconds 30 }
+        $r.TimedOut | Should -BeTrue
+        $r.Stalled | Should -BeFalse
+        ([DateTime]::UtcNow - $started).TotalSeconds | Should -BeLessThan 25
+    }
+    It 'kills a process that closed stdout but keeps running once the no-progress limit passes (Codex review)' {
+        $py = Get-Command python.exe -ErrorAction SilentlyContinue
+        if (-not $py) { Set-ItResult -Skipped -Because 'python.exe is not on PATH (the child must really close its stdout handle)'; return }
+        $started = [DateTime]::UtcNow
+        $r = InModuleScope aos -Parameters @{ P=$caseRoot } { param($P) Invoke-AosProcess -Exe 'python.exe' -Arguments @('-c', 'import os,sys,time; print(1, flush=True); os.close(1); time.sleep(60)') -WorkingDirectory $P -TimeoutSeconds 50 -IdleSeconds 4 }
+        $r.TimedOut | Should -BeTrue
+        $r.Stalled | Should -BeTrue
+        ([DateTime]::UtcNow - $started).TotalSeconds | Should -BeLessThan 30
+    }
+    It 'keeps output written before a stuck stdin write in no-progress mode (Codex review)' {
+        $stdin = Join-Path $caseRoot 'big-stdin.txt'
+        [System.IO.File]::WriteAllBytes($stdin, (New-Object byte[] (8MB)))
+        $out = Join-Path $caseRoot 'stuck-out.txt'
+        $r = InModuleScope aos -Parameters @{ P=$caseRoot; I=$stdin; O=$out } { param($P,$I,$O) Invoke-AosProcess -Exe 'cmd.exe' -ArgumentString '/d /c "echo early& ping -n 30 127.0.0.1 >nul"' -WorkingDirectory $P -StdinFile $I -StdoutFile $O -TimeoutSeconds 4 -IdleSeconds 60 }
+        $r.TimedOut | Should -BeTrue
+        (Get-Content $out -Raw) | Should -Match 'early'
     }
     It 'keeps a process that writes steadily past the no-progress limit and returns all of its output' {
         $out = Join-Path $caseRoot 'steady.txt'

@@ -90,3 +90,9 @@ test("a straight apostrophe in JSX text inside braces is text, not a string star
   assert.deepEqual([...r.texts].sort(), ["Next", "an agent's note", "it isn't"]);
   assert.deepEqual([...extract(`{ text: 'It\\'s real', start: 1 }`).texts], ["It's real"]);
 });
+
+test("a string right after a keyword is still a string: return'}' does not close a brace (Codex review)", () => {
+  const r = extract(`<a onClick={() => {return'}'}}>Go</a>\n<b>{typeof"x"}</b>`);
+  assert.deepEqual(r.errors.filter((e) => /unclosed/.test(e)), []);
+  assert.ok(r.texts.has("Go"));
+});

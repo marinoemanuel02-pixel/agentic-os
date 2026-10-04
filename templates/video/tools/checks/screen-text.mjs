@@ -13,6 +13,14 @@ import {fileURLToPath} from 'node:url';
 // Author text as literal text properties/attributes or JSX children. Computed text is rejected.
 const STR = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`$]*`/.source;
 const literal = value => value[0] === '"' ? JSON.parse(value) : value.slice(1, -1).replace(/\\(['\\])/g, '$1');
+// A quote right after a word is an apostrophe in nested JSX text (agent's): no JS string starts there, except after
+// a keyword such as return'}' or typeof"x" (Codex review).
+const KEYWORDS = new Set(['return', 'typeof', 'case', 'in', 'of', 'void', 'yield', 'await', 'delete', 'throw', 'else', 'do', 'instanceof', 'new']);
+const apostrophe = (source, at) => {
+  if (source[at] === '`') return false;
+  const word = /[A-Za-z0-9_$]+$/.exec(source.slice(Math.max(0, at - 12), at));
+  return Boolean(word) && !KEYWORDS.has(word[0]);
+};
 // Track JSX nesting and balanced attribute expressions instead of interpreting every JS > as a tag end.
 const jsxChildren = source => {
   const texts = new Set(), errors = [];
@@ -29,8 +37,7 @@ const jsxChildren = source => {
     const braces = at => {
       let depth = 1;
       for (at++; at < source.length && depth; at++) {
-        // a quote right after a letter or digit is an apostrophe in nested JSX text (agent's); no JS string starts there
-        if ('"\'`'.includes(source[at]) && !(source[at] !== '`' && /[A-Za-z0-9]/.test(source[at - 1] || ''))) at = quoted(at) - 1;
+        if ('"\'`'.includes(source[at]) && !apostrophe(source, at)) at = quoted(at) - 1;
         else if (source.slice(at, at + 2) === '/*') at = source.indexOf('*/', at + 2) < 0 ? source.length : source.indexOf('*/', at + 2) + 1;
         else if (source[at] === '{') depth++;
         else if (source[at] === '}') depth--;

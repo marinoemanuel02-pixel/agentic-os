@@ -2519,20 +2519,26 @@ function Start-AosProcessCore {
     $chunks = New-Object System.Text.StringBuilder
     $buffer = New-Object char[] 8192
     $read = $null
-    if ($IdleSeconds -gt 0 -and -not $stdinStuck) {
-        # Chunked reads instead of ReadToEnd, so the time of the last output is known.
+    if ($IdleSeconds -gt 0) {
+        # Chunked reads instead of ReadToEnd, so the time of the last output is known. The read starts even when
+        # stdin is stuck, so the drain below keeps what was written before the kill. The deadline is checked on
+        # every pass (steady output must not outlive it), and a closed stdout keeps the idle clock running until
+        # the process exits (Codex review).
         $lastOutput = [DateTime]::UtcNow
         $read = $p.StandardOutput.ReadAsync($buffer, 0, $buffer.Length)
-        while ($true) {
-            if ($read.Wait(500)) {
-                $n = $read.Result
-                $read = $null
-                if ($n -le 0) { break }
-                [void]$chunks.Append($buffer, 0, $n)
-                $lastOutput = [DateTime]::UtcNow
-                $read = $p.StandardOutput.ReadAsync($buffer, 0, $buffer.Length)
-                continue
+        while (-not $stdinStuck) {
+            if ($read) {
+                if ($read.Wait(500)) {
+                    $n = $read.Result
+                    $read = $null
+                    if ($n -gt 0) {
+                        [void]$chunks.Append($buffer, 0, $n)
+                        $lastOutput = [DateTime]::UtcNow
+                        $read = $p.StandardOutput.ReadAsync($buffer, 0, $buffer.Length)
+                    }
+                }
             }
+            elseif ($p.WaitForExit(500)) { break }
             if ([DateTime]::UtcNow -ge $deadline) { break }
             if (([DateTime]::UtcNow - $lastOutput).TotalSeconds -ge $IdleSeconds) { $stalled = $true; break }
         }
@@ -3171,16 +3177,67 @@ function Add-AosCapacityFromError([string]$Vendor, [string]$Message) {
     Add-AosCapacityEvent -Vendor $Vendor -Remaining 0 -Resets $resets -Source 'delegate' -Note 'quota error in a delegate receipt'
 }
 
+function Read-AosCodexLimits {
+    # Codex logs its own rate limits (token_count events in ~/.codex/sessions rollouts): the newest 'codex' reading,
+    # each window with used percent and reset (UTC). Read-only; $null when there is none. On 2026-10-04 a 5 h reset
+    # went unnoticed because capacity knew only a hand-typed percent without a reset time.
+    $root = Join-Path (Get-AosCodexHome) 'sessions'
+    if (-not (Test-Path -LiteralPath $root)) { return $null }
+    $files = @(Get-ChildItem -LiteralPath $root -Recurse -File -Filter 'rollout-*.jsonl' -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 5)
+    $best = $null
+    foreach ($f in $files) {
+        foreach ($line in [System.IO.File]::ReadLines($f.FullName)) {
+            if ($line.IndexOf('"rate_limits"') -lt 0 -or $line.IndexOf('"limit_id":"codex"') -lt 0) { continue }
+            try { $e = ConvertFrom-Json -InputObject $line -ErrorAction Stop } catch { continue }
+            $rl = $e.payload.rate_limits
+            if (-not $rl -or -not $e.timestamp) { continue }
+            $ts = [datetime]::Parse([string]$e.timestamp, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal)
+            if ($best -and $best.observed -ge $ts) { continue }
+            $windows = @()
+            foreach ($w in @($rl.primary, $rl.secondary)) {
+                if (-not $w) { continue }
+                $label = 'week'
+                if ([int]$w.window_minutes -lt 1440) { $label = [string]([int]([int]$w.window_minutes / 60)) + 'h' }
+                $windows += [pscustomobject]@{ label = $label; used = [double]$w.used_percent
+                    resets = [DateTimeOffset]::FromUnixTimeSeconds([long]$w.resets_at).UtcDateTime }
+            }
+            $best = [pscustomobject]@{ observed = $ts; windows = $windows }
+        }
+    }
+    return $best
+}
+
 function Get-AosCapacity([datetime]$Now) {
     # Newest capacity event per vendor -> state: limited (0 % and the reset is ahead), reset (the reset has passed),
-    # stale (a report older than a window), low (<= 30 %), ok. $Now is UTC.
+    # stale (a report older than a window), low (<= 30 %), ok. $Now is UTC. For Codex its own logged limits are used
+    # when newer than the last event: a window whose reset has passed counts as empty, the tightest one binds.
     $out = [ordered]@{}
     $events = @(Get-AosLedger -Last 0 | Where-Object { $_['type'] -eq 'capacity' -and $_['vendor'] })
+    $codexLog = $null
+    try { $codexLog = Read-AosCodexLimits } catch { }
     foreach ($v in $script:CapacityVendors) {
         $last = @($events | Where-Object { $_['vendor'] -eq $v } | Select-Object -Last 1)
+        $lastTs = $null
+        if ($last.Count -gt 0) { $lastTs = [datetime]::Parse([string]$last[0]['ts'], [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal) }
+        if ($v -eq 'codex' -and $codexLog -and $codexLog.windows.Count -gt 0 -and (-not $lastTs -or $codexLog.observed -gt $lastTs)) {
+            $bind = $null
+            foreach ($w in $codexLog.windows) {
+                $left = 100 - $w.used
+                if ($w.resets -le $Now) { $left = 100 }
+                if (-not $bind -or $left -lt $bind.left) { $bind = [pscustomobject]@{ left = $left; w = $w } }
+            }
+            $remaining = [int][Math]::Floor($bind.left)
+            $state = 'ok'
+            if ($remaining -le 0) { $state = 'limited' }
+            elseif ($remaining -le $script:CapacityLowPercent) { $state = 'low' }
+            $note = (@($codexLog.windows | ForEach-Object { '{0} {1} % used, resets {2}' -f $_.label, $_.used, $_.resets.ToLocalTime().ToString('MMM d HH:mm', [System.Globalization.CultureInfo]::InvariantCulture) }) -join '; ')
+            $out[$v] = [pscustomobject]@{ vendor = $v; remaining = $remaining; resets = $bind.w.resets; reported = $codexLog.observed; source = 'codex-log'; note = $note; state = $state; window = $bind.w.label }
+            continue
+        }
         if ($last.Count -eq 0) { continue }
         $e = $last[0]
-        $ts = [datetime]::Parse([string]$e['ts'], [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal)
+        $ts = $lastTs
         $resets = $null
         if ($e['resets']) { $resets = [datetime]::Parse((ConvertTo-AosStamp $e['resets']), [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal) }
         $remaining = [int]$e['remaining']
@@ -3189,7 +3246,7 @@ function Get-AosCapacity([datetime]$Now) {
         elseif ($remaining -le 0 -and $resets) { $state = 'limited' }
         elseif (($Now - $ts).TotalHours -ge $script:CapacityStaleHours) { $state = 'stale' }
         elseif ($remaining -le $script:CapacityLowPercent) { $state = 'low' }
-        $out[$v] = [pscustomobject]@{ vendor = $v; remaining = $remaining; resets = $resets; reported = $ts; source = [string]$e['source']; note = [string]$e['note']; state = $state }
+        $out[$v] = [pscustomobject]@{ vendor = $v; remaining = $remaining; resets = $resets; reported = $ts; source = [string]$e['source']; note = [string]$e['note']; state = $state; window = '' }
     }
     return $out
 }
@@ -3238,6 +3295,7 @@ function Invoke-AosCapacity([string[]]$Arguments) {
         elseif ($c.state -eq 'stale') { $hint = 'report is old: ask for a fresh number before planning' }
         $age = [int]([datetime]::UtcNow - $c.reported).TotalMinutes
         Write-AosInfo ("{0,-6} {1,3} % left, {2} ({3}, {4} min ago) -> {5}" -f $v, $c.remaining, $c.state, $c.source, $age, $hint)
+        if ($c.source -eq 'codex-log') { Write-AosInfo ("       {0} binds; {1}" -f $c.window, $c.note) }
     }
 }
 

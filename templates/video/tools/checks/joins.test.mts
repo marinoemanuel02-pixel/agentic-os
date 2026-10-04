@@ -84,3 +84,14 @@ test("a shared stage that imports poses, a shot that imports another shot's pose
   assert.match(errs, /src\/shots\/S01One\.tsx imports poses\/S02/);
   assert.match(errs, /src\/shots\/S03Three\.tsx imports the shared pose table/);
 });
+
+test("a pose barrel (poses/index or the poses folder) and a pose file importing other poses fail (Codex review)", () => {
+  const { root, put } = film();
+  put("src/shots/poses/index.ts", 'export * from "./S01.ts";\nexport {poses as S02} from "./S02.ts";\n');
+  put("src/shots/S01One.tsx", 'import {poses} from "./poses/index.ts";\nexport const S01One = () => poses;\n');
+  put("src/shots/Chapter.tsx", 'import {S02} from "./poses";\nexport const S02Two = () => S02;\n');
+  const errs = poseImportErrors(root).join("\n");
+  assert.match(errs, /src\/shots\/S01One\.tsx imports a pose barrel/);
+  assert.match(errs, /src\/shots\/Chapter\.tsx imports a pose barrel/);
+  assert.match(errs, /src\/shots\/poses\/index\.ts imports other pose files/);
+});
