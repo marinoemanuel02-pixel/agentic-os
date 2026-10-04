@@ -22,6 +22,7 @@ export function checkCurrency(data, today, claims, exportMode = false) {
   if (!Number.isFinite(policy.reverifyWithinDays) || policy.reverifyWithinDays < 0) errors.push('invalid policy.reverifyWithinDays');
   if (!Number.isFinite(policy.defaultMaxSourceAgeDays) || policy.defaultMaxSourceAgeDays < 0) errors.push('invalid policy.defaultMaxSourceAgeDays');
   if (!Array.isArray(data?.items)) return [...errors, 'missing items array'];
+  if (!data.items.length) errors.push('empty currency items');
   const ids = new Set();
   for (const item of data.items) {
     const id = item?.id || '(unknown)';
@@ -52,16 +53,16 @@ export function checkCurrency(data, today, claims, exportMode = false) {
     for (const counter of counters) {
       const other = data.items.find((x) => x?.id === counter);
       if (!other) errors.push(`unknown counter: ${item.id} -> ${counter}`);
-      else if (other.camp === item.camp) errors.push(`counter from the same camp: ${item.id} -> ${counter}`);
+      else if (other.camp === item.camp) errors.push(`counter from the same camp: ${item.id} -> ${counter} (not a distinct voice)`);
     }
   }
-  // Export mode: every item carries a re-verification (tools/reverify.mjs --write) dated within the policy window,
+  // Export mode: every item carries a re-verification (tools/reverify.mjs --write) dated on the actual export day,
   // so a recent first retrieval cannot stand in for the export-day check.
   if (exportMode) {
     for (const item of data.items) {
       const dates = (Array.isArray(item?.reverified) ? item.reverified : []).filter((r) => r?.result === 'ok').map((r) => parseDate(r.date)).filter((ms) => ms !== null);
       const last = dates.length ? Math.max(...dates) : null;
-      if (last === null || last < todayMs - (policy.reverifyWithinDays ?? 0) * DAY_MS || last > todayMs) errors.push(`not re-verified for export: ${item?.id}`);
+      if (last !== todayMs) errors.push(`not re-verified for export: ${item?.id}`);
     }
   }
   if (claims) {
@@ -71,7 +72,7 @@ export function checkCurrency(data, today, claims, exportMode = false) {
         if (entry.currency) {
           covered++;
           if (!ids.has(entry.currency)) errors.push(`unknown currency id: ${entry.currency} (${section} ${entry.id ?? entry.shots ?? '?'})`);
-        } else if (entry.needsCurrency === true) errors.push(`needsCurrency without currency: ${section} ${entry.id ?? entry.shots ?? '?'}`);
+        } else if (entry.needsCurrency === true || ['fact', 'quote'].includes(entry.kind)) errors.push(`needsCurrency without currency: ${section} ${entry.id ?? entry.shots ?? '?'}`);
       }
     }
     console.log(`currency coverage: ${covered} claims entry(s)`);

@@ -946,6 +946,23 @@ Describe 'aos video preflight' {
 }
 
 Describe 'Video input provenance' {
+    It 'runs reviewed export evidence guards (<Check>) in TestDrive fixtures' -ForEach @(
+        @{ Check = 'fact coverage and entry-point refusal'; File = 'currency-hardening.test.mjs' },
+        @{ Check = 'actual export day'; File = 'currency-export-day.test.mjs' },
+        @{ Check = 'dated evidence identity'; File = 'input-manifest-evidence.test.mjs' },
+        @{ Check = 'explicit timeless exception'; File = 'currency-wiring.test.mjs' }
+    ) {
+        $testFile = Join-Path $PSScriptRoot "..\templates\video\tools\checks\$File"
+        $savedScratch = $env:AOS_VIDEO_TEST_ROOT
+        try {
+            $env:AOS_VIDEO_TEST_ROOT = Join-Path $TestDrive 'export-evidence-regressions'
+            $result = & node --no-warnings --test $testFile 2>&1 | Out-String
+            $LASTEXITCODE | Should -Be 0 -Because $result
+        } finally {
+            $env:AOS_VIDEO_TEST_ROOT = $savedScratch
+        }
+    }
+
     It 'runs reusable video <Check> regressions in isolated fixtures' -ForEach @(
         @{ Check = 'joins'; File = 'joins.test.mts' },
         @{ Check = 'screen text'; File = 'screen-text.test.mjs' },

@@ -74,6 +74,15 @@ export function assertRendererSource(expected, rendered, label = 'source') {
   return true;
 }
 
+export function projectEvidenceFiles(root) {
+  const files = {};
+  for (const name of ['script.md', 'sources.md', 'qa.env']) files[name] = path.join(root, name);
+  for (const name of ['claims.json', 'currency.json']) {
+    if (fs.existsSync(path.join(root, name))) files[name] = path.join(root, name);
+  }
+  return files;
+}
+
 export function projectInputs(root) {
   const home = process.env.USERPROFILE;
   if (!home || !process.env.WINDIR) throw new Error('Windows USERPROFILE/WINDIR required');
@@ -83,10 +92,8 @@ export function projectInputs(root) {
   const shared = path.dirname(modules);
   assertRendererSource(path.join(root, 'src'), path.join(media, 'app/src'));
   assertRendererSource(modules, path.join(media, 'app/node_modules'), 'dependencies');
-  const files = {};
+  const files = projectEvidenceFiles(root);
   for (const name of ['remotion.config.ts', 'package.json', 'tsconfig.json', 'render.sh', 'build.sh', 'mix.sh', 'audio.mts', 'make-voice.cjs', 'package-outputs.mts']) files[`tools/${name}`] = path.join(root, 'tools', name);
-  for (const name of ['script.md', 'sources.md', 'qa.env']) files[name] = path.join(root, name);
-  if (fs.existsSync(path.join(root, 'claims.json'))) files['claims.json'] = path.join(root, 'claims.json');
   files['dependencies/package-lock.json'] = path.join(shared, 'package-lock.json');
   const fontRoot = path.join(process.env.WINDIR, 'Fonts');
   const fonts = fs.readdirSync(fontRoot).filter(name => /^(bahnschrift|sitka|georgia|arial|segoeui).*\.(ttf|ttc|otf)$/i.test(name));

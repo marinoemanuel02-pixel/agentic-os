@@ -6,7 +6,11 @@ P="$(cd "$(dirname "$0")/.." && pwd)"
 H="${AOS_VIDEO_MEDIA_ROOT:-$HOME/.aos/video/{{name}}}"
 label="${1:-v1}"
 cd "$P"
-[ -f currency.json ] && node tools/checks/currency.mjs currency.json
+currency_mode=""
+if [ -f "$P/qa.env" ]; then currency_mode="$(unset CURRENCY; . "$P/qa.env"; echo "${CURRENCY:-}")"; fi
+if [ -f currency.json ]; then node tools/checks/currency.mjs currency.json --claims claims.json --export
+elif [ "$currency_mode" = none ]; then echo "no currency ledger: qa.env declares a timeless topic (CURRENCY=none)"
+else echo "currency.json missing: keep a ledger (R27) or declare CURRENCY=none in qa.env for a timeless topic" >&2; exit 1; fi
 node tools/checks/claims.mjs
 node tools/checks/screen-text.mjs
 node --no-warnings tools/checks/joins.mts

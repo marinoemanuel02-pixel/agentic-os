@@ -12,7 +12,7 @@ echo "# QA report: $(basename "$video") ($(date '+%Y-%m-%d %H:%M'))" > "$R"; ech
 
 # Source coverage and camera joins are gates, not proof of factual truth or full-size legibility.
 currency_mode="$( [ -f "$P/qa.env" ] && (unset CURRENCY; . "$P/qa.env"; echo "${CURRENCY:-}") )"
-if [ -f "$P/currency.json" ]; then node "$P/tools/checks/currency.mjs" "$P/currency.json" --export || { bad "currency ledger stale or invalid"; cat "$R"; exit 1; }
+if [ -f "$P/currency.json" ]; then node "$P/tools/checks/currency.mjs" "$P/currency.json" --claims "$P/claims.json" --export || { bad "currency ledger stale or invalid"; cat "$R"; exit 1; }
 elif [ "$currency_mode" = none ]; then ok "no currency ledger: qa.env declares a timeless topic (CURRENCY=none)"
 else bad "currency.json missing: keep a ledger (R27) or declare CURRENCY=none in qa.env for a timeless topic"; cat "$R"; exit 1; fi
 node "$P/tools/checks/claims.mjs" || { bad "claims ledger incomplete"; cat "$R"; exit 1; }

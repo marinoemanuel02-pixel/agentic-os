@@ -3,6 +3,23 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-04 - Bind dated source evidence and require the actual export day
+
+- The independent alignment-now source review found that build/QA omitted `--claims`, factual coverage was
+  optional, and `currency.json` was absent from the sealed input identity. A ledger could be changed after
+  rendering without invalidating QA. The reviewed guard transfer passes claims at both entry points, rejects
+  empty source ledgers and unmapped factual/quoted claims, and binds the ledger bytes before sealing.
+- A three-day draft research window is retained for writing, but cannot certify an export-day reopening.
+  Build and QA use `--export`, which requires a successful recheck dated on the actual local day. Fresh evidence
+  must precede a rebuild; changing a recheck after sealing invalidates the seal. Crossing midnight requires
+  rechecking and rebuilding. Browser-only confirmation remains a manual assertion, not automated source truth.
+- Build now matches QA's missing-ledger rule: only an explicit `CURRENCY=none` in qa.env declares a timeless
+  topic. Ambient environment variables cannot bypass it, and a present invalid ledger still fails. Entry-point
+  fixtures exercise refusals before any renderer or media dependency is reached.
+- New regressions failed before transfer and run through four added Pester cases using TestDrive. Existing
+  measured tests and the render cache are unchanged. Film approval, playback/listening and factual interpretation
+  remain independent release requirements; passing these guards does not establish them.
+
 ## 2026-10-04 - The alignment-now run: tools behind R27/R29/R32, and a capacity rule (R34)
 
 - **What was missing.** R27 (currency), R29 (engagement) and R32 (render only what changed) described capabilities

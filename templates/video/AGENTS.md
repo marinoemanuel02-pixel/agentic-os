@@ -28,7 +28,7 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
 - Soundtrack stems: `node --no-warnings tools/audio.mts`; full build: `bash tools/build.sh v1`
 - QA: `bash tools/qa.sh exports/{{name}}.mp4 exports/{{name}}.srt` (length from `qa.env`; includes the motion
   check on a texture-free proxy, report `qa/motion.md`), then `node tools/screen.mjs` (on-screen text)
-- Currency gate (R27): `node tools/checks/currency.mjs currency.json`; export day: `node tools/reverify.mjs currency.json --browser-ok <ids checked in a browser> --write`
+- Currency gate (R27): `node tools/checks/currency.mjs currency.json --claims claims.json`; export day: `node tools/reverify.mjs currency.json --browser-ok <ids checked in a browser> --write`, then rebuild and QA on that local day. Build and QA pass `--export`; the dated ledger is part of the input manifest.
 - Pacing report (R29): `node tools/checks/pacing.mjs <film.mp4> --shots src/data/shots.json --claims claims.json --lines src/data/lines.json --out qa/pacing`
 - Render cache (R32, default in build.sh): `bash tools/render-cached.sh`; `AOS_RENDER_CACHE=0` renders Main whole; tests `node --test tools/cache/cache.test.mjs`
 - Motion check alone: `node --no-warnings tools/checks/motion.mjs <proxy.mp4>`; its tests: `node --test tools/checks/`
