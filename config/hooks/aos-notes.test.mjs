@@ -47,17 +47,17 @@ test('a new note after the last one shown is reported; old notes before a sessio
 
 test('long notes are truncated; at most five per call, oldest first, the rest delivered on the next calls (Codex review)', () => {
   const dir = coord();
-  write(dir, Array.from({length: 7}, (_, i) => ({ts: iso(70000 - i * 1000), type: 'note', agent: 'claude', text: `n${i} ` + 'x'.repeat(2000)})));
-  const text = context(run(dir, 'codex')).additionalContext;
-  assert.match(text, /7 unread aos notes from claude, showing 5/);
+  write(dir, Array.from({length: 7}, (_, i) => ({ts: iso(70000 - i * 1000), type: 'note', agent: 'codex', text: `n${i} ` + 'x'.repeat(2000)})));
+  const text = context(run(dir, 'claude')).additionalContext;
+  assert.match(text, /7 unread aos notes from codex, showing 5/);
   assert.match(text, /2 more after your next tool call/);
   assert.ok(text.length < 5000);
   assert.match(text, /n0 /);
   assert.doesNotMatch(text, /n5 /);
-  const next = context(run(dir, 'codex')).additionalContext;
+  const next = context(run(dir, 'claude')).additionalContext;
   assert.match(next, /n5 /);
   assert.match(next, /n6 /);
-  assert.equal(run(dir, 'codex').stdout, '');
+  assert.equal(run(dir, 'claude').stdout, '');
 });
 
 test('a note written in the same second as the last one shown is still delivered (Codex review)', () => {
@@ -106,4 +106,35 @@ test('fails open: no ledger, a malformed ledger, bad stdin or a delegate run pri
   const bad = spawnSync(process.execPath, [hook, 'claude'], {input: 'not json', env: {...process.env, AOS_COORD: dir}, encoding: 'utf8'});
   assert.equal(bad.status, 0);
   assert.equal(bad.stdout, '');
+});
+
+test('more notes than the queue holds are not dropped: the offset stops at the last queued line (Codex review 3)', () => {
+  const dir = coord();
+  write(dir, Array.from({length: 230}, (_, i) => ({ts: iso(500000 - i * 1000), type: 'note', agent: 'codex', text: `q${i}`})));
+  const seen = new Set();
+  for (let k = 0; k < 60; k++) {
+    const r = run(dir, 'claude');
+    if (!r.stdout) break;
+    for (const m of context(r).additionalContext.matchAll(/: (q[0-9]+)$/gm)) seen.add(m[1]);
+  }
+  assert.equal(seen.size, 230);
+});
+
+test('a first look reaches back the full six hours even past a large tail of other events (Codex review 3)', () => {
+  const dir = coord();
+  write(dir, [{ts: iso(2 * 3600 * 1000), type: 'note', agent: 'codex', text: 'two hours ago'}]);
+  const filler = JSON.stringify({ts: iso(3600 * 1000), type: 'claim', agent: 'codex', checkout: 'C:\\x'.padEnd(300, 'x')});
+  fs.appendFileSync(path.join(dir, 'ledger.jsonl'), (filler + '\n').repeat(4000));
+  assert.match(context(run(dir, 'claude')).additionalContext, /two hours ago/);
+});
+
+test('Codex sees each note on two separate calls (its subagents share the session and carry no marker) (Codex review 3)', () => {
+  const dir = coord();
+  write(dir, [{ts: iso(2000), type: 'note', agent: 'claude', text: 'for codex'}]);
+  assert.match(context(run(dir, 'codex')).additionalContext, /for codex/);
+  assert.match(context(run(dir, 'codex')).additionalContext, /for codex/);
+  assert.equal(run(dir, 'codex').stdout, '');
+  write(dir, [{ts: iso(2000), type: 'note', agent: 'codex', text: 'for claude'}]);
+  assert.match(context(run(dir, 'claude', 's7')).additionalContext, /for claude/);
+  assert.equal(run(dir, 'claude', 's7').stdout, '', 'Claude marks subagents, so once is enough');
 });
