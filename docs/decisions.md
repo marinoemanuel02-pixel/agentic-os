@@ -3,6 +3,22 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-04 - Per-shot pose files, scaffold fixtures, and a no-progress limit for delegates
+
+- alignment-now v6: every 3D shot imported one shared `joins.ts`, so any pose edit re-rendered all of them.
+  The template now keeps each shot's poses in `src/shots/poses/<id>.ts`, imported only by that shot's module;
+  the joins gate loads them per shot and rejects shared pose tables and stages that import poses. The cache key
+  rule itself is unchanged: it already follows imports, so the coupling was the file layout, not the cache.
+- `pipeline.test.mjs` copied the whole checkout, so inside a film it tested the film's plan, lines and shots
+  (5 failures in alignment-now). Fixtures now overlay a scaffold snapshot; a Pester test keeps the snapshot
+  equal to the template scaffold and another runs the pipeline tests inside a film-like copy.
+- screen-text read a straight apostrophe in JSX text nested inside braces as a string start ("unclosed JSX tag").
+  A quote right after a letter or digit is text: no JS string can start there.
+- Codex delegates stuck on a dropped connection held their claim until the hard timeout. `aos delegate` now
+  kills a Codex run whose `--json` event stream is silent for `--idle` minutes (default 15) and records
+  `stalled`. Claude delegates get no idle limit: `claude -p --output-format json` prints only at the end, so
+  silence there is not a stall. Not yet reviewed by Codex (its window was spent); review queued.
+
 ## 2026-10-04 - Bind dated source evidence and require the actual export day
 
 - The independent alignment-now source review found that build/QA omitted `--claims`, factual coverage was

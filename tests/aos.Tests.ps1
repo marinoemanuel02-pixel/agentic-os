@@ -3524,6 +3524,22 @@ Describe 'Process runner' {
         $r.TimedOut | Should -BeTrue
         $r.KillFailed | Should -BeFalse
     }
+    It 'kills a process whose output stalls long before the hard timeout (no-progress limit)' {
+        $started = [DateTime]::UtcNow
+        $r = InModuleScope aos -Parameters @{ P=$caseRoot } { param($P) Invoke-AosProcess -Exe 'powershell.exe' -Arguments @('-NoProfile','-Command','Write-Output first; Start-Sleep 60') -WorkingDirectory $P -TimeoutSeconds 120 -IdleSeconds 3 }
+        $r.TimedOut | Should -BeTrue
+        $r.Stalled | Should -BeTrue
+        $r.KillFailed | Should -BeFalse
+        ([DateTime]::UtcNow - $started).TotalSeconds | Should -BeLessThan 40
+    }
+    It 'keeps a process that writes steadily past the no-progress limit and returns all of its output' {
+        $out = Join-Path $caseRoot 'steady.txt'
+        $r = InModuleScope aos -Parameters @{ P=$caseRoot; O=$out } { param($P,$O) Invoke-AosProcess -Exe 'powershell.exe' -Arguments @('-NoProfile','-Command','1..6 | ForEach-Object { Write-Output "tick $_"; Start-Sleep -Milliseconds 900 }') -WorkingDirectory $P -StdoutFile $O -TimeoutSeconds 60 -IdleSeconds 3 }
+        $r.TimedOut | Should -BeFalse
+        $r.Stalled | Should -BeFalse
+        $r.Code | Should -Be 0
+        @((Get-Content $out) | Where-Object { $_ -match '^tick \d$' }).Count | Should -Be 6
+    }
     It 'refuses a cmd script target' {
         $script = Join-Path $caseRoot 'a.cmd'
         Write-TestFile $script '@echo off'
@@ -3777,6 +3793,28 @@ Describe 'aos delegate' {
         $r.outcome | Should -Be 'failed'
         $r.error.category | Should -Be 'quota'
         $global:LASTEXITCODE | Should -Be 1
+    }
+    It 'reports a Codex run whose event stream stalled as stalled, with the no-progress limit passed to the process' {
+        Mock Invoke-AosProcess -ModuleName aos {
+            Write-TestFile $StdoutFile '{"type":"thread.started","thread_id":"thread-2"}'
+            @{ Code=-1; TimedOut=$true; KillFailed=$false; Stalled=$true }
+        } -ParameterFilter { $Exe -eq 'codex.exe' -and $IdleSeconds -eq 420 }
+        $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate -Vendor 'codex' -TaskFile $T -Repo $R -IdleMinutes 7 }
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Exe -eq 'codex.exe' -and $IdleSeconds -eq 420 }
+        $r.accepted | Should -BeFalse
+        $r.outcome | Should -Be 'timed-out'
+        $r.stalled | Should -BeTrue
+        $r.error.category | Should -Be 'stalled'
+        $r.error.message | Should -Match 'no progress for 7 min'
+        $global:LASTEXITCODE | Should -Be 1
+    }
+    It 'gives Claude no no-progress limit (its JSON arrives only at the end)' {
+        Mock Invoke-AosProcess -ModuleName aos {
+            Write-TestFile $StdoutFile '{"is_error":false,"session_id":"claude-2","structured_output":{"status":"done","summary":"done","files_changed":[],"tests_run":[],"unverified":[]}}'
+            @{ Code=0; TimedOut=$false; KillFailed=$false }
+        }
+        $null = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate -Vendor 'claude' -TaskFile $T -Repo $R }
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Exe -eq 'claude.exe' -and -not $IdleSeconds }
     }
     It 'refuses write mode without verify before launching a process' {
         if (InModuleScope aos { Get-Command Invoke-AosProcess -ErrorAction SilentlyContinue }) { Mock Invoke-AosProcess -ModuleName aos { throw 'unexpected process' } }

@@ -137,7 +137,8 @@ Claude Code and Codex share one coordination layer in `~\.aos\coord` (outside On
 - **Delegation.** `aos delegate codex --task task.md` (read-only) or `aos delegate codex --task task.md
   --write --verify "<test command>" [--allow <glob>]`. The model is probed once a day, the verify tool
   is checked inside the delegate's sandbox, a writer works in `~\.aos\worktrees\<repo>-<id>` on
-  `delegate/<id>`, the host commits and verifies, and the receipt says accepted or why not.
+  `delegate/<id>`, the host commits and verifies, and the receipt says accepted or why not. A Codex run
+  that emits no event for `--idle` minutes (default 15, `0` off) is killed as `stalled` before `--timeout`.
   `aos delegate ls | show <id> | clean <id>`.
 - After `aos sync` changes Codex hooks (also after a cc plugin update, which aos repairs), trust them
   once in Codex with `/hooks`.
