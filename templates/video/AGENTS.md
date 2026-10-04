@@ -63,7 +63,9 @@ heard the voice.
 - Every number and quote on screen matches `script.md` and a row in `sources.md`.
 ## Production checks
 
-Author `src/shots/joins.ts` for every shot and use `src/lib/shot-camera.ts` for frame-keyed cameras that hold
+Author `src/shots/poses/<id>.ts` (`export const poses = {start, end}`) for every shot, imported only by that shot's
+module and passed to its stage, so a pose edit re-renders one shot; the joins gate rejects shared pose tables. Use
+`src/lib/shot-camera.ts` for frame-keyed cameras that hold
 through dissolves. The empty scaffold intentionally fails the joins gate until these poses exist.
 Review narration and every authored on-screen string in `claims.json`. Write screen words as literal `text`
 properties/attributes or JSX children in shot/library consumers; stock forwarding helpers contain no authored

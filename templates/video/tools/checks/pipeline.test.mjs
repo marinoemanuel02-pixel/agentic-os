@@ -10,9 +10,14 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 const template = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const scratch = process.env.AOS_VIDEO_TEST_ROOT || path.join(os.homedir(), '.aos/scratch/video-template-tests');
 fs.mkdirSync(scratch, {recursive: true});
+// Fixtures start from the template scaffold even inside a film: the film's own plan, lines, ledger and shots are
+// replaced by the snapshot in fixtures/scaffold (a template test keeps that snapshot equal to the scaffold).
+const scaffold = path.join(template, 'tools/checks/fixtures/scaffold');
 const fixture = () => {
   const root = fs.mkdtempSync(path.join(scratch, 'case space-'));
   fs.cpSync(template, root, {recursive: true});
+  fs.rmSync(path.join(root, 'src/shots'), {recursive: true, force: true});
+  fs.cpSync(scaffold, root, {recursive: true});
   return root;
 };
 const put = (r, p, text) => {fs.mkdirSync(path.dirname(path.join(r, p)), {recursive: true}); fs.writeFileSync(path.join(r, p), text);};

@@ -42,3 +42,45 @@ test("a cut that barely moves the camera is a jump cut", () => {
 test("a shot without join poses fails", () => {
   assert.match(checkJoins([["S01", 10, "c"]], {})[0], /no start\/end poses/);
 });
+
+// Per-shot pose files: a shot imports only src/shots/poses/<id>.ts, so one pose edit re-renders one shot
+// (alignment-now v6: one global joins.ts in every 3D shot's imports re-rendered all of them for any pose change).
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { loadPoses, poseImportErrors } from "./joins.mts";
+
+const film = () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "joins-poses-"));
+  const put = (p: string, s: string) => { fs.mkdirSync(path.dirname(path.join(root, p)), { recursive: true }); fs.writeFileSync(path.join(root, p), s); };
+  const pose = (x: number) => `export const poses = {start: {pos: [${x}, 2, 8], target: [0, 1, 0], fov: 32}, end: {pos: [${x}, 2, 8], target: [0, 1, 0], fov: 32}};\n`;
+  put("src/shots/poses/S01.ts", pose(0));
+  put("src/shots/poses/S02.ts", pose(9));
+  put("src/shots/S01One.tsx", 'import {poses} from "./poses/S01.ts";\nexport const S01One = () => poses;\n');
+  put("src/shots/Chapter.tsx", 'import {poses} from "./poses/S02";\nexport const S02Two = () => poses;\n');
+  put("src/lib/Stage.tsx", "export const Stage = () => null;\n");
+  return { root, put };
+};
+
+test("poses load from one file per shot; a missing file is reported as missing poses", async () => {
+  const { root } = film();
+  const joins = await loadPoses(root, ["S01", "S02", "S03"]);
+  assert.deepEqual(Object.keys(joins).sort(), ["S01", "S02"]);
+  assert.equal(joins.S02.start.pos[0], 9);
+  assert.match(checkJoins([["S03", 10, "c"]], joins)[0], /no start\/end poses in src\/shots\/poses\/S03\.ts/);
+});
+
+test("shots that import only their own pose files pass", () => {
+  assert.deepEqual(poseImportErrors(film().root), []);
+});
+
+test("a shared stage that imports poses, a shot that imports another shot's poses, or an aggregate pose table fail", () => {
+  const { root, put } = film();
+  put("src/lib/Stage.tsx", 'import {poses} from "../shots/poses/S01";\nexport const Stage = () => poses;\n');
+  put("src/shots/S01One.tsx", 'import {poses} from "./poses/S01.ts";\nimport {poses as b} from "./poses/S02.ts";\nexport const S01One = () => [poses, b];\n');
+  put("src/shots/S03Three.tsx", 'import {JOINS} from "./joins";\nexport const S03Three = () => JOINS;\n');
+  const errs = poseImportErrors(root).join("\n");
+  assert.match(errs, /src\/lib\/Stage\.tsx imports poses\/S01/);
+  assert.match(errs, /src\/shots\/S01One\.tsx imports poses\/S02/);
+  assert.match(errs, /src\/shots\/S03Three\.tsx imports the shared pose table/);
+});

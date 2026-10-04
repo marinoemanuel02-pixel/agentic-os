@@ -980,6 +980,40 @@ Describe 'Video input provenance' {
         }
     }
 
+    It 'pipeline regressions pass inside a film checkout (its own plan, lines, shots and poses do not leak into fixtures)' {
+        $film = Join-Path $TestDrive 'film copy'
+        Copy-Item -Recurse (Join-Path $PSScriptRoot '..\templates\video') $film
+        $pose = 'export const poses = {start: {pos: [0, 2, 8], target: [0, 1, 0], fov: 32}, end: {pos: [0, 2, 8], target: [0, 1, 0], fov: 32}};'
+        Write-TestFile (Join-Path $film 'src\shots\poses\S01.ts') $pose
+        Write-TestFile (Join-Path $film 'src\shots\poses\S02.ts') $pose
+        Write-TestFile (Join-Path $film 'src\shots\S01Film.tsx') 'export const S01Film = () => <div>{"A film-only headline"}</div>;'
+        Write-TestFile (Join-Path $film 'src\data\lines.json') '[{"id": "L1", "text": "A film line.", "caption": "A film line."}, {"id": "L2", "text": "Another."}]'
+        $plan = Join-Path $film 'src\data\plan.ts'
+        $planText = [System.IO.File]::ReadAllText($plan).Replace('["L1", 2, 8],', '["L1", 2, 8], ["L2", 10, 4],').Replace('["S02", 8, "x"],', '["S02", 8, "x"], ["S03", 4, "c"],')
+        Write-TestFile $plan $planText
+        $savedScratch = $env:AOS_VIDEO_TEST_ROOT
+        try {
+            $env:AOS_VIDEO_TEST_ROOT = Join-Path $TestDrive 'film-regressions'
+            $result = & node --no-warnings --test (Join-Path $film 'tools\checks\pipeline.test.mjs') 2>&1 | Out-String
+            $LASTEXITCODE | Should -Be 0 -Because $result
+        } finally {
+            $env:AOS_VIDEO_TEST_ROOT = $savedScratch
+        }
+    }
+
+    It 'the pipeline fixture snapshot equals the template scaffold file for file' {
+        $video = (Get-Item -LiteralPath (Join-Path $PSScriptRoot '..\templates\video')).FullName
+        $snapshot = Join-Path $video 'tools\checks\fixtures\scaffold'
+        $files = @(Get-ChildItem -LiteralPath $snapshot -Recurse -File)
+        $files.Count | Should -BeGreaterThan 5
+        foreach ($f in $files) {
+            $relative = $f.FullName.Substring($snapshot.Length + 1)
+            $original = Join-Path $video $relative
+            Test-Path -LiteralPath $original | Should -BeTrue -Because $relative
+            [System.IO.File]::ReadAllText($f.FullName).Replace("`r`n", "`n") | Should -BeExactly ([System.IO.File]::ReadAllText($original).Replace("`r`n", "`n")) -Because $relative
+        }
+    }
+
     It 'runs the currency gate and export-day reverify tests (no network: a local fixture server)' -ForEach @(
         @{ Name = 'currency'; File = 'checks\currency.test.mjs' },
         @{ Name = 'reverify'; File = 'reverify.test.mjs' }

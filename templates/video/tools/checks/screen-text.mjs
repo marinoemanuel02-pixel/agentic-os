@@ -29,7 +29,8 @@ const jsxChildren = source => {
     const braces = at => {
       let depth = 1;
       for (at++; at < source.length && depth; at++) {
-        if ('"\'`'.includes(source[at])) at = quoted(at) - 1;
+        // a quote right after a letter or digit is an apostrophe in nested JSX text (agent's); no JS string starts there
+        if ('"\'`'.includes(source[at]) && !(source[at] !== '`' && /[A-Za-z0-9]/.test(source[at - 1] || ''))) at = quoted(at) - 1;
         else if (source.slice(at, at + 2) === '/*') at = source.indexOf('*/', at + 2) < 0 ? source.length : source.indexOf('*/', at + 2) + 1;
         else if (source[at] === '{') depth++;
         else if (source[at] === '}') depth--;

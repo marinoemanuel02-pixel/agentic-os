@@ -83,3 +83,10 @@ test('ternary and concatenated children are computed expressions rather than str
     '<Reveal>{"Up " + pct}</Reveal>',
   ]) assert.match(extract(source).errors.join('\n'), /computed screen text/);
 });
+
+test("a straight apostrophe in JSX text inside braces is text, not a string start (alignment-now S20)", () => {
+  const r = extract(`<Scene>{show && <b>an agent's note</b>}<i>{"Next"}</i></Scene>\n<Card label={<span>it isn't</span>} />`);
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual([...r.texts].sort(), ["Next", "an agent's note", "it isn't"]);
+  assert.deepEqual([...extract(`{ text: 'It\\'s real', start: 1 }`).texts], ["It's real"]);
+});
