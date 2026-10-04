@@ -62,8 +62,12 @@ export function segmentKeys(root, segs, envDigest) {
   });
 }
 
-/** Environment digest from an input manifest: every entry outside src/ plus the manifest metadata. */
-export function envDigest(manifest) {
-  const outside = manifest.entries.filter((e) => !e.path.startsWith('src/'));
-  return sha(JSON.stringify({metadata: manifest.metadata, outside}));
+// What the picture depends on outside src/: fonts, public assets, the lockfile and the renderer's own config files.
+// Mixed audio, ledgers and docs are left out so a sound or wording change does not re-render the picture.
+const PICTURE = ['fonts/', 'public/', 'dependencies/', 'tools/remotion.config.ts', 'tools/package.json', 'tools/tsconfig.json', 'tools/render.sh'];
+
+/** Environment digest from an input manifest: picture inputs outside src/ plus the runtime metadata. */
+export function envDigest(manifest, extra = '') {
+  const picture = manifest.entries.filter((e) => PICTURE.some((p) => e.path === p || e.path.startsWith(p)));
+  return sha(JSON.stringify({metadata: manifest.metadata, picture, extra}));
 }

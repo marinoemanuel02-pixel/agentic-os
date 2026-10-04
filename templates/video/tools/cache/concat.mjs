@@ -6,7 +6,12 @@ import {execFileSync} from 'node:child_process';
 export const frameCount = (file) => Number(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-count_frames',
   '-show_entries', 'stream=nb_read_frames', '-of', 'csv=p=0', file], {encoding: 'utf8'}).trim());
 
-export function concat(parts, out, expectedFrames) {
+// Git Bash hands scripts /c/Users/... paths; Node on Windows would resolve them to C:\c\Users\... (alignment-now v3).
+const native = (p) => (process.platform === 'win32' ? p.replace(/^\/([a-zA-Z])\//, (_, d) => `${d.toUpperCase()}:/`) : p);
+
+export function concat(rawParts, rawOut, expectedFrames) {
+  const parts = rawParts.map(native);
+  const out = native(rawOut);
   const list = `${out}.txt`;
   fs.writeFileSync(list, parts.map((p) => `file '${path.resolve(p).replaceAll('\\', '/').replaceAll("'", "'\\''")}'`).join('\n') + '\n');
   execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', out]);

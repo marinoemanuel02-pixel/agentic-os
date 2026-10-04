@@ -12,7 +12,9 @@ import {segmentKeys, envDigest} from "./keys.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const manifestFile = process.argv[2];
 if (!manifestFile) throw new Error("usage: plan.mts <input-manifest.json>");
-const env = envDigest(JSON.parse(fs.readFileSync(manifestFile, "utf8")));
+// The render script's encoder flags shape every segment, so its bytes are part of the environment too.
+const flags = fs.readFileSync(path.join(root, "tools/render-cached.sh"), "utf8");
+const env = envDigest(JSON.parse(fs.readFileSync(manifestFile, "utf8")), flags);
 const segs = segments(SHOT_BEATS, BEAT);
 const keys = segmentKeys(root, segs, env);
 segs.forEach((s, i) => console.log(`${keys[i]} ${s.from} ${s.to - 1} ${s.shots.join(",")}`));

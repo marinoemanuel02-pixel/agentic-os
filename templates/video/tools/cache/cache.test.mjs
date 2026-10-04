@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {segments} from './segments.mjs';
-import {closure, segmentKeys} from './keys.mjs';
+import {closure, segmentKeys, envDigest} from './keys.mjs';
 import {concat} from './concat.mjs';
 
 test('segments split at cuts, merge dissolve runs and tile the edit without gaps', () => {
@@ -81,4 +81,26 @@ test('concat keeps every frame of H.264 segments and rejects a wrong total', () 
   const out = path.join(dir, 'all.mp4');
   assert.equal(concat(parts, out, 39), 39);
   assert.throws(() => concat(parts, path.join(dir, 'bad.mp4'), 40), /frame count/);
+});
+
+test('concat accepts Git Bash style paths (/c/Users/...) from render-cached.sh', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cache-msys-'));
+  const part = path.join(dir, 'p.mp4');
+  execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=30:duration=0.4', '-frames:v', '12',
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', part]);
+  const msys = (p) => p.replace(/^([A-Za-z]):[\\/]/, (_, d) => `/${d.toLowerCase()}/`).replaceAll(path.sep, '/');
+  if (process.platform !== 'win32') return;
+  assert.equal(concat([msys(part)], msys(path.join(dir, 'out.mp4')), 12), 12);
+});
+
+test('the environment digest follows picture inputs only (fonts, public, renderer config), not audio or docs', () => {
+  const base = {metadata: {remotion: '4'}, entries: [
+    {path: 'fonts/a.ttf', sha256: '1'}, {path: 'public/vo/L1.wav', sha256: '2'}, {path: 'tools/remotion.config.ts', sha256: '3'},
+    {path: 'audio/sfx.wav', sha256: '4'}, {path: 'claims.json', sha256: '5'}, {path: 'script.md', sha256: '6'}, {path: 'src/x.ts', sha256: '7'}]};
+  const change = (p, v) => ({...base, entries: base.entries.map((e) => (e.path === p ? {...e, sha256: v} : e))});
+  assert.equal(envDigest(change('audio/sfx.wav', 'x')), envDigest(base));
+  assert.equal(envDigest(change('claims.json', 'x')), envDigest(base));
+  assert.notEqual(envDigest(change('fonts/a.ttf', 'x')), envDigest(base));
+  assert.notEqual(envDigest(change('tools/remotion.config.ts', 'x')), envDigest(base));
+  assert.notEqual(envDigest({...base, metadata: {remotion: '5'}}), envDigest(base));
 });
