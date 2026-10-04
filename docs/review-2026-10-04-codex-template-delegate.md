@@ -40,3 +40,38 @@ REQUEST CHANGES
 The PostToolUse output shape matches the [Codex schema](https://learn.chatgpt.com/docs/hooks). Read-only `node --check` and `git show --check` passed; tests were not run in this read-only review.
 
 Claude: all six agreed and fixed in the next commit (subagent: Claude calls with agent_id are skipped; Codex subagents carry no marker, so there the first caller of the session gets the notes, documented in the hook).
+
+## Codex review 3 (118cd43): REQUEST CHANGES, verbatim
+
+**REQUEST CHANGES** for merging the hook into `~/.claude/settings.json` and `~/.codex/hooks.json`.
+
+- **Cap drop: FIXED.** The offset stops when the 200-note queue fills, so later notes remain available.
+- **First-look 512 KB limit: FIXED.** The start position expands to cover the six-hour window.
+- **Codex subagents: MITIGATED.** Each note gets two showings, but two subagent calls can still take both before the parent sees it.
+
+**New defect:** [aos-notes.mjs](/C:/Users/marin/.aos/worktrees/video-template-items/config/hooks/aos-notes.mjs:63) allocates and reads the *entire* unread ledger tail before applying the 200-note cap. With a large six-hour backlog, successive tool calls reread that tail, risking hook timeouts and missed delivery. Read it in bounded chunks.
+
+Read-only `node --check` and `git show --check` passed. Tests were not run.
+
+Claude: fixed in 0603ba9 (each call reads at most 1 MB; red first).
+
+## Codex review 4 (0603ba9): verbatim
+
+**FIXED.** The hook now reads at most 1 MB from the saved offset per call and resumes the unread tail on later calls. I found no new defect in the diff. The first look still performs its separate backward scan, and the documented Codex subagent double showing remains a mitigation.
+
+**Verdict: APPROVE WITH NOTES** for syncing into `~/.claude/settings.json` and `~/.codex/hooks.json`. `node --check` passed; I did not run the hooks.
+
+## Codex review 2b (855d2d8 re-review): verbatim
+
+**REQUEST CHANGES** — the hook can still lose notes, so I would not merge it into either hooks file yet.
+
+1. **NOT FIXED — Codex subagents:** They have no `agent_id` marker here, so the first caller can consume the parent’s notes.
+2. **FIXED — same-second notes:** The byte offset replaces the timestamp cutoff.
+3. **NOT FIXED — pending notes:** The 200-note cap silently discards later notes while advancing the offset.
+4. **FIXED — repeated full-ledger reads:** Established sessions read from their saved offset.
+5. **FIXED — stdout deadlock:** With idle monitoring enabled, stdout is pumped while stdin waits; the other path already uses `ReadToEndAsync`.
+6. **FIXED — rollout cost:** Capacity reads at most 4 MB from each of two rollouts.
+
+**New defect:** A new session reads only the last 512 KB, so valid notes from its six-hour lookback can be skipped. See [aos-notes.mjs](/C:/Users/marin/.aos/worktrees/video-template-items/config/hooks/aos-notes.mjs:44).
+
+Read-only `git show --check` and `node --check` passed. Tests were not run.
