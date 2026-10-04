@@ -3,8 +3,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 
-export const frameCount = (file) => Number(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-count_frames',
-  '-show_entries', 'stream=nb_read_frames', '-of', 'csv=p=0', file], {encoding: 'utf8'}).trim());
+// ffprobe's csv can carry a trailing empty field on real exports ("7092,"): take the first field, refuse non-numbers.
+export const parseCount = (text) => {
+  const n = Number(String(text).trim().split(',')[0]);
+  if (!Number.isInteger(n)) throw new Error(`unreadable frame count: ${JSON.stringify(text)}`);
+  return n;
+};
+
+export const frameCount = (file) => parseCount(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-count_frames',
+  '-show_entries', 'stream=nb_read_frames', '-of', 'csv=p=0', file], {encoding: 'utf8'}));
 
 // Git Bash hands scripts /c/Users/... paths; Node on Windows would resolve them to C:\c\Users\... (alignment-now v3).
 const native = (p) => (process.platform === 'win32' ? p.replace(/^\/([a-zA-Z])\//, (_, d) => `${d.toUpperCase()}:/`) : p);

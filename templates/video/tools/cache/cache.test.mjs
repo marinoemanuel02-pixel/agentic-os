@@ -8,7 +8,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {segments} from './segments.mjs';
 import {closure, segmentKeys, envDigest} from './keys.mjs';
-import {concat} from './concat.mjs';
+import {concat, parseCount} from './concat.mjs';
 
 test('segments split at cuts, merge dissolve runs and tile the edit without gaps', () => {
   const s = segments([['S01', 2, 'c'], ['S02', 3, 'x'], ['S03', 1, 'c'], ['S04', 2, 'c']], 10);
@@ -103,4 +103,10 @@ test('the environment digest follows picture inputs only (fonts, public, rendere
   assert.notEqual(envDigest(change('fonts/a.ttf', 'x')), envDigest(base));
   assert.notEqual(envDigest(change('tools/remotion.config.ts', 'x')), envDigest(base));
   assert.notEqual(envDigest({...base, metadata: {remotion: '5'}}), envDigest(base));
+});
+
+test('frame counts parse ffprobe csv with a trailing empty field ("7092,") from real exports', () => {
+  assert.equal(parseCount('7092,\r\n'), 7092);
+  assert.equal(parseCount('39\n'), 39);
+  assert.throws(() => parseCount('N/A'), /frame count/);
 });
