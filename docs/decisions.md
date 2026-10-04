@@ -3,6 +3,32 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-04 - The alignment-now run: tools behind R27/R29/R32, and a capacity rule (R34)
+
+- **What was missing.** R27 (currency), R29 (engagement) and R32 (render only what changed) described capabilities
+  no template tool had. The alignment-now film built and exercised them, so they move into templates/video:
+  `tools/checks/currency.mjs` + `tools/reverify.mjs` (a ledger with source date, retrieval date, version and an
+  anchor string per item; build and QA refuse a stale or one-sided item; export day re-opens every page),
+  `tools/checks/pacing.mjs` (shots per minute, longest hold, practice changes, on-screen words not in the narration,
+  first hook, loudness curve; it reports, reviewers judge) and `tools/render-cached.sh` + `tools/cache/`
+  (cut-to-cut segments keyed on each shot's transitive src/ imports and the input manifest's environment, one shared
+  bundle, lossless concat with a frame-count check). R27 and R29 become `[check: ...]` rules wired into qa.sh.
+- **Why a cache and not a faster renderer.** v4 re-rendered the whole film four times for fixes touching one or two
+  shots; alignment-now's builds took 16-21 min each. The key covers transitive imports because a chapter file and a
+  shared library are where stale hits hide (the regression test changes a library two imports down; a mutation to
+  direct imports only is caught). Decoded frames are not bit-identical to a whole-film render (lossy H.264 encodes a
+  frame differently next to a different keyframe), so equivalence is checked by frame count and PSNR, not framemd5.
+- **R34, capacity.** Codex hit its 5-hour limit three times in one night and Claude scheduled work for Codex's reset
+  instead of taking it; the user had to step in. The split is now read from both limits and written down at every
+  gate, and a limited vendor triggers a re-split, never a wait.
+- **Rejected.** Running the pacing and cache tests in CI: the runners have no ffmpeg, so those Pester cases skip with
+  the reason instead of pretending to pass; they run on this machine with `aos test`.
+- **Fixes found on this run, at the source.** `verify.mjs` sorted sheet frames with `Number("161.png")` (NaN, so the
+  "last" column was sometimes the middle frame); `word-times.py` decodes with ffmpeg because newer PyAV breaks
+  faster-whisper's decoder. Reported, not changed here: `pipeline.test.mjs` copies a project but keeps its real
+  plan.ts (fails in any filled project), and `screen-text.mjs` reads a straight apostrophe in JSX text as a string
+  start.
+
 ## 2026-10-03 - What the AGI/ASI run taught the pipeline (rules R26-R33, a review-sheet tool)
 
 - **Verdict that drives it.** v4 passed every technical gate and an independent Codex re-review (SHIP WITH NOTES, after a

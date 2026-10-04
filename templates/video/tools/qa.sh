@@ -11,6 +11,7 @@ ok() { echo "- PASS $*" >> "$R"; }; bad() { echo "- FAIL $*" >> "$R"; fail=1; }
 echo "# QA report: $(basename "$video") ($(date '+%Y-%m-%d %H:%M'))" > "$R"; echo >> "$R"
 
 # Source coverage and camera joins are gates, not proof of factual truth or full-size legibility.
+if [ -f "$P/currency.json" ]; then node "$P/tools/checks/currency.mjs" "$P/currency.json" || { bad "currency ledger stale or invalid"; cat "$R"; exit 1; }; fi
 node "$P/tools/checks/claims.mjs" || { bad "claims ledger incomplete"; cat "$R"; exit 1; }
 node "$P/tools/checks/screen-text.mjs" || { bad "screen-text ledger coverage incomplete"; cat "$R"; exit 1; }
 node --no-warnings "$P/tools/checks/joins.mts" || { bad "camera joins invalid"; cat "$R"; exit 1; }
@@ -92,6 +93,13 @@ fi
 
 node "$P/tools/checks/input-manifest.mjs" verify "$P/exports/input-manifest.json" >/dev/null \
   && ok "inputs unchanged through QA" || bad "inputs changed during QA; evidence invalid"
+
+pacing_args=(); [ -f "$P/src/data/shots.json" ] && pacing_args+=(--shots "$P/src/data/shots.json"); pacing_args+=(--claims "$P/claims.json" --lines "$P/src/data/lines.json")
+if node "$P/tools/checks/pacing.mjs" "$video" "${pacing_args[@]}" --out "$P/qa/pacing" > "$H/qa/pacing.log" 2>&1; then
+  ok "pacing report: qa/pacing.md (reviewer judgment)"
+else
+  echo "- Pacing report unavailable (see media root qa/pacing.log)" >> "$R"
+fi
 
 echo >> "$R"; [ $fail = 0 ] && echo "**All technical checks pass.**" >> "$R" || echo "**Technical checks FAILED.**" >> "$R"
 cat "$R"; exit $fail

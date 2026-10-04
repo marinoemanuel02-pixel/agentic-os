@@ -10,8 +10,18 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
+import numpy as np
 from faster_whisper import WhisperModel
+
+
+def pcm16k(wav):
+    """Decode with ffmpeg to mono float32 at 16 kHz: newer PyAV builds break faster-whisper's own decoder."""
+    raw = subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(wav), "-f", "f32le", "-ac", "1", "-ar", "16000", "-"],
+                         capture_output=True, check=True).stdout
+    return np.frombuffer(raw, dtype=np.float32)
+
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 root = Path(__file__).resolve().parent.parent
@@ -33,7 +43,7 @@ for line in lines:
     entry = next(v for v in voice if v["id"] == line["id"])
     wav = vo_dir / Path(entry["file"]).name if vo_dir else public / entry["file"]
     meta[line["id"]] = hashlib.sha256(wav.read_bytes()).hexdigest()
-    segments, _ = model.transcribe(str(wav), language="en", beam_size=5, word_timestamps=True)
+    segments, _ = model.transcribe(pcm16k(wav), language="en", beam_size=5, word_timestamps=True)
     words = [[w.word.strip(), round(w.start, 2), round(w.end, 2)] for s in segments for w in s.words]
     out[line["id"]] = words
     print(line["id"], len(words), "words")

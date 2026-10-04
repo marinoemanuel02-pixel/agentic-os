@@ -6,6 +6,7 @@ P="$(cd "$(dirname "$0")/.." && pwd)"
 H="${AOS_VIDEO_MEDIA_ROOT:-$HOME/.aos/video/{{name}}}"
 label="${1:-v1}"
 cd "$P"
+[ -f currency.json ] && node tools/checks/currency.mjs currency.json
 node tools/checks/claims.mjs
 node tools/checks/screen-text.mjs
 node --no-warnings tools/checks/joins.mts
@@ -14,7 +15,8 @@ node --no-warnings tools/audio.mts
 node tools/checks/input-manifest.mjs write "$H/renders/Main.inputs.json"
 # the source the picture is rendered from, so QA can refuse to judge an export against changed code
 (cd "$P" && find src -type f | sort | xargs cat | sha1sum | cut -d" " -f1) > "$H/renders/Main.src-hash"
-bash tools/render.sh Main
+# Rebuild only the segments whose sources changed (tools/render-cached.sh); AOS_RENDER_CACHE=0 renders Main whole.
+if [ "${AOS_RENDER_CACHE:-1}" != 0 ]; then bash tools/render-cached.sh; else bash tools/render.sh Main; fi
 bash tools/mix.sh "$H/renders/Main.mp4" "$H/renders/{{name}}-$label.mp4"
 node tools/checks/input-manifest.mjs verify "$H/renders/Main.inputs.json"
 node --no-warnings tools/package-outputs.mts

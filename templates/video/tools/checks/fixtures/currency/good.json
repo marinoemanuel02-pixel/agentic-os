@@ -1,0 +1,7 @@
+{
+  "policy": {"reverifyWithinDays": 3, "defaultMaxSourceAgeDays": 120},
+  "items": [
+    {"id":"C01","tag":"fact","camp":"lab","claim":"A sourced claim","url":"http://127.0.0.1/example","sourceDate":"2026-09-01","retrieved":"2026-10-03","version":"v1","anchor":"Evidence here","fetch":"curl"},
+    {"id":"C02","tag":"contested","camp":"critic","claim":"A contested claim","url":"http://127.0.0.1/other","sourceDate":"2026-09-02","retrieved":"2026-10-03","version":"v1","anchor":"Other evidence","fetch":"browser","counter":["C01"]}
+  ]
+}

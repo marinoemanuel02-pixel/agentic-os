@@ -963,6 +963,25 @@ Describe 'Video input provenance' {
         }
     }
 
+    It 'runs the currency gate and export-day reverify tests (no network: a local fixture server)' -ForEach @(
+        @{ Name = 'currency'; File = 'checks\currency.test.mjs' },
+        @{ Name = 'reverify'; File = 'reverify.test.mjs' }
+    ) {
+        $testFile = Join-Path $PSScriptRoot "..\templates\video\tools\$File"
+        $result = & node --no-warnings --test $testFile 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $result
+    }
+
+    It 'runs the pacing report and render cache tests when ffmpeg is installed (<Name>)' -ForEach @(
+        @{ Name = 'pacing'; File = 'checks\pacing.test.mjs' },
+        @{ Name = 'render cache'; File = 'cache\cache.test.mjs' }
+    ) {
+        if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { Set-ItResult -Skipped -Because 'ffmpeg is not on PATH (CI runners have none); the tests build synthetic H.264 clips' ; return }
+        $testFile = Join-Path $PSScriptRoot "..\templates\video\tools\$File"
+        $result = & node --no-warnings --test $testFile 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $result
+    }
+
     It 'rejects changed render inputs and mismatched exports in an isolated fixture' {
         $testFile = Join-Path $PSScriptRoot '..\templates\video\tools\checks\input-manifest.test.mjs'
         $savedScratch = $env:AOS_MANIFEST_TEST_ROOT

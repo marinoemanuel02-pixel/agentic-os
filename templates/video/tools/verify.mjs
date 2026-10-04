@@ -75,7 +75,7 @@ for (const id of ids) {
 // One contact sheet (first / middle / last frame per row) for the director's review of a delegated batch.
 try {
   const pngs = ids.flatMap((id) => fs.readdirSync(out).filter((f) => f.startsWith(id + "-") && f.endsWith(".png"))
-    .sort((a, b) => Number(a.split("-")[1]) - Number(b.split("-")[1])).map((f) => path.join(out, f)));
+    .sort((a, b) => parseInt(a.split("-")[1], 10) - parseInt(b.split("-")[1], 10)).map((f) => path.join(out, f)));
   if (pngs.length) {
     execFileSync("magick", ["montage", ...pngs, "-tile", "3x", "-geometry", "560x315+4+4", "-background", "#333", path.join(out, "sheet.jpg")]);
     console.log(`contact sheet: ${path.join(out, "sheet.jpg")}`);
