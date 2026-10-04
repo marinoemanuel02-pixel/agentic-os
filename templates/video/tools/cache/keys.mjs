@@ -6,9 +6,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const EXTS = ['', '.ts', '.tsx', '.mts', '.js', '.mjs', '.json', '/index.ts', '/index.tsx'];
-// The edit's wiring is hashed by its own bytes only: following it would pull every shot into every key (registry.ts
-// imports them all), so one changed shot would re-render the whole film (Codex template review, 2026-10-04).
-const WIRING = ['src/Main.tsx', 'src/Root.tsx', 'src/index.ts', 'src/shots/registry.ts'];
+// The edit's wiring is followed (Main's fades and libraries shape every frame), but the registry is a stop: it is
+// hashed and never traversed, because it imports every shot and would tie every key to every shot (Codex reviews).
+const WIRING = ['src/Main.tsx', 'src/Root.tsx', 'src/index.ts'];
+const STOPS = ['src/shots/registry.ts'];
 // The timeline is followed: slot lengths, the beat and the measured voice shape every segment.
 const TIMELINE = ['src/data/timeline.ts', 'src/data/plan.ts'];
 const IMPORT = /(?:(?:import|export)\s+(?:[^'"]*?\sfrom\s+)?|import\s*\(\s*)["'](\.{1,2}\/[^"']+)["']/g;
@@ -25,14 +26,15 @@ function resolve(fromFile, spec) {
 }
 
 /** Every file reachable from `entries` (paths relative to root) through relative imports; cycles terminate. */
-export function closure(root, entries) {
+export function closure(root, entries, stops = []) {
+  const stop = new Set(stops.map((s) => path.resolve(root, s)));
   const seen = new Set();
   const stack = entries.map((e) => path.resolve(root, e));
   while (stack.length) {
     const file = stack.pop();
     if (seen.has(file)) continue;
     seen.add(file);
-    if (file.endsWith('.json')) continue;
+    if (file.endsWith('.json') || stop.has(file)) continue;
     const text = fs.readFileSync(file, 'utf8');
     for (const m of text.matchAll(IMPORT)) stack.push(resolve(file, m[1]));
   }
@@ -56,12 +58,13 @@ export function segmentKeys(root, segs, envDigest) {
   const present = (files) => files.filter((f) => fs.existsSync(path.join(root, f)));
   const wiring = present(WIRING);
   const timeline = present(TIMELINE);
+  const stops = present(STOPS);
   return segs.map((seg) => {
     const entries = seg.shots.map((id) => {
       if (!modules[id]) throw new Error(`no module exports shot ${id}`);
       return modules[id];
     });
-    const files = [...new Set([...closure(root, [...entries, ...timeline]), ...wiring])].sort();
+    const files = [...new Set([...closure(root, [...entries, ...timeline, ...wiring], stops), ...stops])].sort();
     const parts = [`range ${seg.from}-${seg.to}`, `shots ${seg.shots.join(',')}`, `env ${envDigest}`];
     for (const f of files) parts.push(`${f} ${sha(fs.readFileSync(path.join(root, f)))}`);
     return sha(parts.join('\n'));

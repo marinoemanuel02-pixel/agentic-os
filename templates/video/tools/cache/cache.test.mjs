@@ -130,3 +130,18 @@ test('dynamic import() is followed like a static import', () => {
   put('src/lib/lazy.ts', 'export const L = 2;\n');
   assert.notEqual(keysOf(root)[1], before[1]);
 });
+
+test('a library imported by the wiring (Main.tsx -> lib/fade) changes every key; the registry still does not couple shots', () => {
+  const {root, put} = tree();
+  put('src/lib/fade.ts', 'export const FADE = 1;\n');
+  put('src/shots/registry.ts', 'import {S01One} from "./S01One";\nimport {S02Two} from "./S02Two";\nexport const R = {S01One, S02Two};\n');
+  put('src/Main.tsx', 'import {FADE} from "./lib/fade";\nimport {R} from "./shots/registry";\nexport const Main = () => [FADE, R];\n');
+  const before = keysOf(root);
+  put('src/lib/fade.ts', 'export const FADE = 2;\n');
+  const after = keysOf(root);
+  after.forEach((k, i) => assert.notEqual(k, before[i], `segment ${i} must change with Main's fade`));
+  put('src/shots/S02Two.tsx', 'import words from "../data/words.json";\nexport const S02Two = () => [words, 2];\n');
+  const third = keysOf(root);
+  assert.equal(third[0], after[0], 'S01 must not change when only S02 changed');
+  assert.notEqual(third[1], after[1]);
+});
