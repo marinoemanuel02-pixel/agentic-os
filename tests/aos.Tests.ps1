@@ -3375,6 +3375,11 @@ Describe 'Vendor capacity (R34)' {
         (aos capacity set gemini 50 *>&1 | Out-String) | Should -Match 'usage:'
         (aos capacity set codex 150 *>&1 | Out-String) | Should -Match 'usage:'
     }
+    It 'ignores a malformed capacity row instead of throwing (advice must not stop a delegation)' {
+        InModuleScope aos { Add-AosLedgerEvent ([ordered]@{ type = 'capacity'; vendor = 'codex'; remaining = 0; resets = 'not a date'; source = 'x'; note = '' }) }
+        { InModuleScope aos { Get-AosCapacityWarning -Vendor 'codex' } } | Should -Not -Throw
+        InModuleScope aos { Get-AosCapacityWarning -Vendor 'codex' } | Should -BeNullOrEmpty
+    }
     It 'warns before delegating to a limited vendor' {
         InModuleScope aos { Add-AosCapacityEvent -Vendor 'codex' -Remaining 0 -Resets ([datetime]::UtcNow.AddHours(1).ToString('yyyy-MM-ddTHH:mm:ssZ')) -Source 'delegate' -Note '' }
         $msg = InModuleScope aos { Get-AosCapacityWarning -Vendor 'codex' }

@@ -3111,14 +3111,18 @@ $script:CapacityStaleHours = 5
 
 function ConvertFrom-AosQuotaReset([string]$Message, [datetime]$Now) {
     # "try again at 6:25 PM" (today, or tomorrow if already past) or "try again at Oct 4th, 2026 1:21 AM"; local time.
-    if ($Message -notmatch '(?i)try again at\s+(?:(?<date>[A-Za-z]{3,9} \d{1,2}(?:st|nd|rd|th)?, \d{4})\s+)?(?<time>\d{1,2}:\d{2}\s*[AP]M)') { return $null }
+    if ($Message -notmatch '(?i)try again at\s+(?:(?<date>[A-Za-z]{3,9} \d{1,2}(?:st|nd|rd|th)?, \d{4})\s+)?(?<time>\d{1,2}:\d{2}\s*[AP]M)(?<utc>\s*UTC)?') { return $null }
+    $isUtc = [bool]$Matches['utc']
     $culture = [System.Globalization.CultureInfo]::InvariantCulture
     $clock = [datetime]::ParseExact((($Matches['time'] -replace '\s+', ' ').ToUpperInvariant() -replace '(\d)([AP]M)', '$1 $2'), 'h:mm tt', $culture)
     if ($Matches['date']) {
         $day = [datetime]::ParseExact(($Matches['date'] -replace '(\d)(st|nd|rd|th)', '$1'), [string[]]@('MMM d, yyyy', 'MMMM d, yyyy'), $culture, [System.Globalization.DateTimeStyles]::None)
-        return $day.Date.Add($clock.TimeOfDay)
+        $at = $day.Date.Add($clock.TimeOfDay)
+        if ($isUtc) { $at = [datetime]::SpecifyKind($at, [System.DateTimeKind]::Utc).ToLocalTime() }
+        return $at
     }
     $at = $Now.Date.Add($clock.TimeOfDay)
+    if ($isUtc) { $at = [datetime]::SpecifyKind($Now.ToUniversalTime().Date.Add($clock.TimeOfDay), [System.DateTimeKind]::Utc).ToLocalTime() }
     if ($at -lt $Now) { $at = $at.AddDays(1) }
     return $at
 }
@@ -3158,7 +3162,7 @@ function Get-AosCapacity([datetime]$Now) {
 }
 
 function Get-AosCapacityWarning([string]$Vendor) {
-    $cap = Get-AosCapacity -Now ([datetime]::UtcNow)
+    try { $cap = Get-AosCapacity -Now ([datetime]::UtcNow) } catch { return $null }
     if (-not $cap.Contains($Vendor)) { return $null }
     $c = $cap[$Vendor]
     if ($c.state -eq 'limited') { return "$Vendor is limited until $($c.resets.ToLocalTime().ToString('HH:mm')) (quota): give this task to the other vendor, or schedule it after the reset" }
@@ -3214,8 +3218,8 @@ function Invoke-AosDelegate {
         return [pscustomobject]@{ accepted = $false; outcome = 'refused'; error = [ordered]@{ category = 'usage'; message = $m } }
     }
     if ($Vendor -notin @('codex', 'claude')) { return (& $refuse "unknown vendor '$Vendor' (codex or claude)") }
-    $capacityWarning = Get-AosCapacityWarning -Vendor $Vendor
-    if ($capacityWarning) { Write-AosWarn "capacity: $capacityWarning" }
+    # Capacity is advice: a malformed ledger row must never stop a delegation (Codex review).
+    try { $capacityWarning = Get-AosCapacityWarning -Vendor $Vendor; if ($capacityWarning) { Write-AosWarn "capacity: $capacityWarning" } } catch { }
     if (-not $TaskFile -or -not (Test-Path -LiteralPath $TaskFile)) { return (& $refuse "task file not found: $TaskFile") }
     if ($Write -and -not $Verify) { return (& $refuse 'write mode needs --verify <command>: the host checks the result, not the delegate') }
     $taskText = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $TaskFile).ProviderPath)
@@ -3243,7 +3247,7 @@ function Invoke-AosDelegate {
         error = $null; delegate = $null; changed = @(); outside_allow = @(); verify = $null; accepted = $false; outcome = 'failed' }
     $finish = {
         param($outcome)
-        if ($receipt.error -and $receipt.error.category -eq 'quota') { Add-AosCapacityFromError -Vendor $Vendor -Message ([string]$receipt.error.message) }
+        if ($receipt.error -and $receipt.error.category -eq 'quota') { try { Add-AosCapacityFromError -Vendor $Vendor -Message ([string]$receipt.error.message) } catch { } }
         $receipt.outcome = $outcome
         $receipt.ended = (Get-AosUtcStamp)
         $receipt.seconds = [int]([DateTime]::UtcNow - $started).TotalSeconds
