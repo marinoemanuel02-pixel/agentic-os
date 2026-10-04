@@ -70,3 +70,39 @@ test('claim references and required coverage fail, optional coverage stays infor
   assert.match(result.stdout, /needsCurrency without currency/);
   assert.equal(run(data, {lines:[{text:'no marker'}],screen:[]}).status, 0);
 });
+
+test('a contested item needs a counter-voice from another camp (Codex template review)', () => {
+  const same = structuredClone(GOOD);
+  same.items[0].camp = 'critic';
+  const r1 = run(same);
+  assert.equal(r1.status, 1);
+  assert.match(r1.stdout, /counter from the same camp: C02 -> C01/);
+  const urlOnly = structuredClone(GOOD);
+  delete urlOnly.items[1].counter;
+  urlOnly.items[1].url2 = 'http://127.0.0.1/second';
+  const r2 = run(urlOnly);
+  assert.equal(r2.status, 1);
+  assert.match(r2.stdout, /contested needs a counter-voice from another camp: C02/);
+});
+
+test('--export requires a dated re-verification of every item within the policy window', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'currency-export-'));
+  try {
+    const file = join(dir, 'currency.json');
+    const exportRun = (data) => {
+      writeFileSync(file, JSON.stringify(data));
+      return spawnSync(process.execPath, [SCRIPT, file, '--today', TODAY, '--export'], {encoding: 'utf8'});
+    };
+    const r1 = exportRun(GOOD);
+    assert.equal(r1.status, 1);
+    assert.match(r1.stdout, /not re-verified for export: C01/);
+    const ok = structuredClone(GOOD);
+    for (const item of ok.items) item.reverified = [{date: TODAY, result: 'ok'}];
+    assert.equal(exportRun(ok).status, 0);
+    const old = structuredClone(ok);
+    old.items[0].reverified = [{date: '2026-09-20', result: 'ok'}];
+    assert.match(exportRun(old).stdout, /not re-verified for export: C01/);
+  } finally {
+    rmSync(dir, {recursive: true, force: true});
+  }
+});

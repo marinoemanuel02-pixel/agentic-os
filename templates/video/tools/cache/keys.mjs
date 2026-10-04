@@ -6,8 +6,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const EXTS = ['', '.ts', '.tsx', '.mts', '.js', '.mjs', '.json', '/index.ts', '/index.tsx'];
-const ALWAYS = ['src/Main.tsx', 'src/Root.tsx', 'src/index.ts', 'src/data/timeline.ts', 'src/data/plan.ts', 'src/shots/registry.ts'];
-const IMPORT = /(?:import|export)\s+(?:[^'"]*?\sfrom\s+)?["'](\.{1,2}\/[^"']+)["']/g;
+// The edit's wiring is hashed by its own bytes only: following it would pull every shot into every key (registry.ts
+// imports them all), so one changed shot would re-render the whole film (Codex template review, 2026-10-04).
+const WIRING = ['src/Main.tsx', 'src/Root.tsx', 'src/index.ts', 'src/shots/registry.ts'];
+// The timeline is followed: slot lengths, the beat and the measured voice shape every segment.
+const TIMELINE = ['src/data/timeline.ts', 'src/data/plan.ts'];
+const IMPORT = /(?:(?:import|export)\s+(?:[^'"]*?\sfrom\s+)?|import\s*\(\s*)["'](\.{1,2}\/[^"']+)["']/g;
 const sha = (data) => crypto.createHash('sha256').update(data).digest('hex');
 const rel = (root, file) => path.relative(root, file).split(path.sep).join('/');
 
@@ -49,13 +53,15 @@ export function shotModules(root) {
 
 export function segmentKeys(root, segs, envDigest) {
   const modules = shotModules(root);
-  const always = ALWAYS.filter((f) => fs.existsSync(path.join(root, f)));
+  const present = (files) => files.filter((f) => fs.existsSync(path.join(root, f)));
+  const wiring = present(WIRING);
+  const timeline = present(TIMELINE);
   return segs.map((seg) => {
     const entries = seg.shots.map((id) => {
       if (!modules[id]) throw new Error(`no module exports shot ${id}`);
       return modules[id];
     });
-    const files = closure(root, [...entries, ...always]);
+    const files = [...new Set([...closure(root, [...entries, ...timeline]), ...wiring])].sort();
     const parts = [`range ${seg.from}-${seg.to}`, `shots ${seg.shots.join(',')}`, `env ${envDigest}`];
     for (const f of files) parts.push(`${f} ${sha(fs.readFileSync(path.join(root, f)))}`);
     return sha(parts.join('\n'));

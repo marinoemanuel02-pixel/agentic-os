@@ -110,3 +110,23 @@ test('frame counts parse ffprobe csv with a trailing empty field ("7092,") from 
   assert.equal(parseCount('39\n'), 39);
   assert.throws(() => parseCount('N/A'), /frame count/);
 });
+
+test('a registry that imports every shot does not tie the keys together (one changed shot -> one changed key)', () => {
+  const {root, put} = tree();
+  put('src/shots/registry.ts', 'import {S01One} from "./S01One";\nimport {S02Two} from "./S02Two";\nimport {S03Three, S04Four} from "./Chapter";\nexport const R = {S01One, S02Two, S03Three, S04Four};\n');
+  put('src/Main.tsx', 'import {R} from "./shots/registry";\nexport const Main = () => R;\n');
+  const before = keysOf(root);
+  put('src/shots/S01One.tsx', 'import {MID} from "../lib/mid";\nexport const S01One = () => MID + 2;\n');
+  const after = keysOf(root);
+  assert.notEqual(after[0], before[0]);
+  assert.deepEqual(after.slice(1), before.slice(1), 'S02-S04 keys must not change when only S01 changed');
+});
+
+test('dynamic import() is followed like a static import', () => {
+  const {root, put} = tree();
+  put('src/lib/lazy.ts', 'export const L = 1;\n');
+  put('src/shots/S02Two.tsx', 'export const S02Two = async () => (await import("../lib/lazy")).L;\n');
+  const before = keysOf(root);
+  put('src/lib/lazy.ts', 'export const L = 2;\n');
+  assert.notEqual(keysOf(root)[1], before[1]);
+});

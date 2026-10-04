@@ -21,6 +21,11 @@ don't rewrite the old one: the record of what was rejected is the part that ages
 - **R34, capacity.** Codex hit its 5-hour limit three times in one night and Claude scheduled work for Codex's reset
   instead of taking it; the user had to step in. The split is now read from both limits and written down at every
   gate, and a limited vendor triggers a re-split, never a wait.
+- **Independent review (Codex, 2026-10-04): REQUEST CHANGES, all five acted on.** The cache key followed the
+  registry, which imports every shot, so one changed shot changed every key (the wiring is now hashed, not followed;
+  a regression test and a mutation prove it); dynamic `import()` was not followed; a recent first retrieval could stand
+  in for the export-day check (QA now runs the gate with `--export`); a contested item could pass with a same-side
+  second source (it now needs a counter from another camp); a pacing failure did not fail QA (it does now).
 - **Rejected.** Running the pacing and cache tests in CI: the runners have no ffmpeg, so those Pester cases skip with
   the reason instead of pretending to pass; they run on this machine with `aos test`.
 - **Fixes found on this run, at the source.** `verify.mjs` sorted sheet frames with `Number("161.png")` (NaN, so the

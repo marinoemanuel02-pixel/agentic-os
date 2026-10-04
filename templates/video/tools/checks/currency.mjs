@@ -14,7 +14,7 @@ function parseDate(value) {
   return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === value ? ms : null;
 }
 
-export function checkCurrency(data, today, claims) {
+export function checkCurrency(data, today, claims, exportMode = false) {
   const errors = [];
   const todayMs = parseDate(today);
   if (todayMs === null) return [`invalid --today: ${today}`];
@@ -47,8 +47,22 @@ export function checkCurrency(data, today, claims) {
   for (const item of data.items) {
     if (item?.tag !== 'contested') continue;
     const counters = Array.isArray(item.counter) ? item.counter : [];
-    if (!item.url2 && counters.length === 0) errors.push(`contested needs two sources or both voices: ${item.id}`);
-    for (const counter of counters) if (!ids.has(counter)) errors.push(`unknown counter: ${item.id} -> ${counter}`);
+    // Both voices: a counter item from another camp. A second URL alone can repeat the same side (Codex review).
+    if (counters.length === 0) errors.push(item.url2 ? `contested needs a counter-voice from another camp: ${item.id}` : `contested needs two sources or both voices: ${item.id}`);
+    for (const counter of counters) {
+      const other = data.items.find((x) => x?.id === counter);
+      if (!other) errors.push(`unknown counter: ${item.id} -> ${counter}`);
+      else if (other.camp === item.camp) errors.push(`counter from the same camp: ${item.id} -> ${counter}`);
+    }
+  }
+  // Export mode: every item carries a re-verification (tools/reverify.mjs --write) dated within the policy window,
+  // so a recent first retrieval cannot stand in for the export-day check.
+  if (exportMode) {
+    for (const item of data.items) {
+      const dates = (Array.isArray(item?.reverified) ? item.reverified : []).filter((r) => r?.result === 'ok').map((r) => parseDate(r.date)).filter((ms) => ms !== null);
+      const last = dates.length ? Math.max(...dates) : null;
+      if (last === null || last < todayMs - (policy.reverifyWithinDays ?? 0) * DAY_MS || last > todayMs) errors.push(`not re-verified for export: ${item?.id}`);
+    }
   }
   if (claims) {
     let covered = 0;
@@ -74,15 +88,17 @@ function main(args) {
   let file = 'currency.json';
   let today = localDate();
   let claimsFile;
+  let exportMode = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--today') today = args[++i];
     else if (args[i] === '--claims') claimsFile = args[++i];
+    else if (args[i] === '--export') exportMode = true;
     else if (args[i].startsWith('--')) throw new Error(`unknown option: ${args[i]}`);
     else file = args[i];
   }
   const data = JSON.parse(readFileSync(file, 'utf8'));
   const claims = claimsFile ? JSON.parse(readFileSync(claimsFile, 'utf8')) : undefined;
-  const errors = checkCurrency(data, today, claims);
+  const errors = checkCurrency(data, today, claims, exportMode);
   for (const error of errors) console.log(error);
   if (errors.length) process.exitCode = 1;
   else console.log(`currency ok: ${data.items.length} item(s)`);
