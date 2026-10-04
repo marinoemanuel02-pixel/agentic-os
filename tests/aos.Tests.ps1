@@ -3788,6 +3788,29 @@ Describe 'Presence hooks sync' {
         Get-Content $target -Raw | Should -BeExactly $one
         Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'Codex hooks changed: trust them once' }
     }
+    It 'declares the PostToolUse notes hook for both vendors and syncs it once, owned and expanded to this repo' {
+        $claude = Get-Content (Join-Path $PSScriptRoot '..\config\claude\settings.json') -Raw | ConvertFrom-Json
+        $codex = Get-Content (Join-Path $PSScriptRoot '..\config\codex\hooks.json') -Raw | ConvertFrom-Json
+        @($claude.hooks.PostToolUse)[0].matcher | Should -Be 'Bash|PowerShell|Edit|Write|MultiEdit|NotebookEdit'
+        @($codex.hooks.PostToolUse)[0].matcher | Should -Be 'Bash|apply_patch|Edit|Write'
+        @($claude.hooks.PostToolUse)[0].hooks[0].command | Should -Match 'aos-notes\.mjs" claude$'
+        @($codex.hooks.PostToolUse)[0].hooks[0].commandWindows | Should -Match 'aos-notes\.mjs" codex$'
+        $target = Join-Path $caseRoot 'codex notes hooks.json'
+        if (InModuleScope aos { Get-Command Get-AosCodexHooksPath -ErrorAction SilentlyContinue }) { Mock Get-AosCodexHooksPath -ModuleName aos { $target } }
+        Mock Write-AosWarn -ModuleName aos { }
+        InModuleScope aos { Sync-AosCodexHooks }
+        InModuleScope aos { Sync-AosCodexHooks }
+        $text = Get-Content $target -Raw
+        $text | Should -Not -Match '\{\{root\}\}'
+        ([regex]::Matches($text, 'aos-notes\.mjs')).Count | Should -Be 2
+        $script = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..')).ProviderPath 'config\hooks\aos-notes.mjs')
+        Test-Path -LiteralPath $script | Should -BeTrue
+        (@((Get-Content $target -Raw | ConvertFrom-Json).hooks.PostToolUse)[0].hooks[0].command) | Should -BeExactly ('node "' + $script + '" codex')
+    }
+    It 'runs the notes hook tests (node --test, temp AOS_COORD)' {
+        $result = & node --no-warnings --test (Join-Path $PSScriptRoot '..\config\hooks\aos-notes.test.mjs') 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $result
+    }
     It 'creates Codex hooks when missing and previews without writing' {
         $target = Join-Path $caseRoot 'hooks.json'
         if (InModuleScope aos { Get-Command Get-AosCodexHooksPath -ErrorAction SilentlyContinue }) { Mock Get-AosCodexHooksPath -ModuleName aos { $target } }

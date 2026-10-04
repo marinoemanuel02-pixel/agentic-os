@@ -140,6 +140,8 @@ Claude Code and Codex share one coordination layer in `~\.aos\coord` (outside On
   `delegate/<id>`, the host commits and verifies, and the receipt says accepted or why not. A Codex run
   that emits no event for `--idle` minutes (default 15, `0` off) is killed as `stalled` before `--timeout`.
   `aos delegate ls | show <id> | clean <id>`.
+- **Notes between agents.** `aos note "<text>" --as <claude|codex>` writes to the shared ledger; a PostToolUse hook
+  (`config/hooks/aos-notes.mjs`) shows each agent the other's unread notes after its next shell or edit call.
 - After `aos sync` changes Codex hooks (also after a cc plugin update, which aos repairs), trust them
   once in Codex with `/hooks`.
 

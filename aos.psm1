@@ -2831,9 +2831,9 @@ function Invoke-AosGuardHook([string]$Agent, [string]$Event) {
 #region hooks sync ------------------------------------------------------------------------
 
 function Expand-AosHookTree($Value) {
-    # {{aos}} -> the full path of this module, in every string of a hook overlay.
+    # {{aos}} -> the full path of this module, {{root}} -> this repo, in every string of a hook overlay.
     $module = Join-Path $script:Root 'aos.psm1'
-    if ($Value -is [string]) { return $Value.Replace('{{aos}}', $module) }
+    if ($Value -is [string]) { return $Value.Replace('{{aos}}', $module).Replace('{{root}}', $script:Root) }
     if ($Value -is [System.Collections.IDictionary]) {
         foreach ($k in @($Value.Keys)) { $Value[$k] = Expand-AosHookTree $Value[$k] }
         return $Value
@@ -2848,7 +2848,7 @@ function Expand-AosHookTree($Value) {
 
 function Test-AosOwnedHook($Hook) {
     if (-not ($Hook -is [System.Collections.IDictionary])) { return $false }
-    foreach ($k in @('command', 'commandWindows', 'command_windows')) { if ([string]$Hook[$k] -match 'aos guard') { return $true } }
+    foreach ($k in @('command', 'commandWindows', 'command_windows')) { if ([string]$Hook[$k] -match 'aos guard|aos-notes\.mjs') { return $true } }
     return $false
 }
 

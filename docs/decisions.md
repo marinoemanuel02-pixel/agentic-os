@@ -3,6 +3,18 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-04 - Notes reach the other agent: a PostToolUse notes hook
+
+- During alignment-now v7 Codex posted 17 `aos note`s in six hours (its window reset, review findings on Claude's
+  commits, unmerged export guards, a stale date title). Claude read none of them for about 40 minutes, duplicated
+  a Codex review and built without the guards. `aos who` shows notes, but only when someone looks.
+- `config/hooks/aos-notes.mjs` runs after shell and edit tools for both vendors and returns the other vendor's
+  unread notes as PostToolUse `additionalContext` (both hook schemas have the field), once per session, newest five,
+  600 characters each. Node rather than the PowerShell module: 0.15 s against 1.8 s per call. It fails open and is
+  silent inside delegates (their wrapper reads the ledger). Owned like the guard hooks (`{{root}}` placeholder).
+- `aos capacity` also reads Codex's own logged limits now (rollout token_count events): a reset or the weekly
+  window no longer depends on someone typing a percent.
+
 ## 2026-10-04 - Per-shot pose files, scaffold fixtures, and a no-progress limit for delegates
 
 - alignment-now v6: every 3D shot imported one shared `joins.ts`, so any pose edit re-rendered all of them.
