@@ -20,6 +20,19 @@ don't rewrite the old one: the record of what was rejected is the part that ages
   measured tests and the render cache are unchanged. Film approval, playback/listening and factual interpretation
   remain independent release requirements; passing these guards does not establish them.
 
+## 2026-10-04 - Capacity as data: `aos capacity` (R34 gets a tool)
+
+- **Why.** R34 was a sentence; the run that wrote it then stalled twice more on a limited vendor, and the user had to
+  report Codex's remaining window by hand ("codex is at 23 percent ... make sure both agents are leverageing proprely
+  both quotas"). Neither vendor can read the other's usage card, so the shared ledger now carries it: `capacity`
+  events from the user or an agent (`aos capacity set`), and from quota errors in delegate receipts (the reset time is
+  parsed from "try again at ..."). `aos capacity` shows each vendor as ok, low (<= 30 %), limited (until the reset),
+  reset (time passed: check before a big task) or stale (older than a window), with the planning hint; `aos delegate`
+  warns before giving work to a limited or low vendor. It warns, it does not refuse: the human decides.
+- **Also in this change.** The render cache splits segments over 150 frames into chunks rendered by separate
+  processes: alignment-now v6's S36 (306 heavy 3D frames) went white for its last 11 frames in one process while the
+  same frames rendered clean in halves.
+
 ## 2026-10-04 - The alignment-now run: tools behind R27/R29/R32, and a capacity rule (R34)
 
 - **What was missing.** R27 (currency), R29 (engagement) and R32 (render only what changed) described capabilities

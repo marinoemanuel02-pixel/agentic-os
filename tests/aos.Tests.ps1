@@ -3327,6 +3327,62 @@ Describe 'Coordination ledger' {
     }
 }
 
+Describe 'Vendor capacity (R34)' {
+    BeforeEach { $env:AOS_COORD = Join-Path $caseRoot ('coord-cap-' + [guid]::NewGuid().ToString('N').Substring(0, 6)) }
+    It 'parses the reset time out of a Codex quota message, today or tomorrow, with or without a date' {
+        $now = [datetime]'2026-10-04T15:00:00'
+        $r = InModuleScope aos -Parameters @{ n = $now } { param($n) ConvertFrom-AosQuotaReset -Message 'You have hit your usage limit ... try again at 6:25 PM.' -Now $n }
+        $r | Should -Be ([datetime]'2026-10-04T18:25:00')
+        $r = InModuleScope aos -Parameters @{ n = $now } { param($n) ConvertFrom-AosQuotaReset -Message 'try again at 6:25 AM.' -Now $n }
+        $r | Should -Be ([datetime]'2026-10-05T06:25:00')
+        $r = InModuleScope aos -Parameters @{ n = $now } { param($n) ConvertFrom-AosQuotaReset -Message 'try again at Oct 4th, 2026 1:21 AM.' -Now $n }
+        $r | Should -Be ([datetime]'2026-10-04T01:21:00')
+        InModuleScope aos -Parameters @{ n = $now } { param($n) ConvertFrom-AosQuotaReset -Message 'connection refused' -Now $n } | Should -BeNullOrEmpty
+    }
+    It 'records a reported window and reports low and limited vendors from the newest event' {
+        InModuleScope aos {
+            Add-AosCapacityEvent -Vendor 'codex' -Remaining 23 -Resets '' -Source 'user' -Note 'from the app'
+            Add-AosCapacityEvent -Vendor 'claude' -Remaining 70 -Resets '' -Source 'agent' -Note ''
+        }
+        $cap = InModuleScope aos { Get-AosCapacity -Now ([datetime]::UtcNow) }
+        $cap['codex'].state | Should -Be 'low'
+        $cap['codex'].remaining | Should -Be 23
+        $cap['claude'].state | Should -Be 'ok'
+        InModuleScope aos { Add-AosCapacityEvent -Vendor 'codex' -Remaining 0 -Resets ([datetime]::UtcNow.AddHours(2).ToString('yyyy-MM-ddTHH:mm:ssZ')) -Source 'delegate' -Note 'quota' }
+        $cap = InModuleScope aos { Get-AosCapacity -Now ([datetime]::UtcNow) }
+        $cap['codex'].state | Should -Be 'limited'
+    }
+    It 'treats a passed reset as unknown again and an old report as stale' {
+        InModuleScope aos { Add-AosCapacityEvent -Vendor 'codex' -Remaining 0 -Resets ([datetime]::UtcNow.AddMinutes(-5).ToString('yyyy-MM-ddTHH:mm:ssZ')) -Source 'delegate' -Note '' }
+        (InModuleScope aos { Get-AosCapacity -Now ([datetime]::UtcNow) })['codex'].state | Should -Be 'reset'
+        (InModuleScope aos { Get-AosCapacity -Now ([datetime]::UtcNow.AddHours(6)) })['codex'].state | Should -Be 'reset'
+        InModuleScope aos { Add-AosCapacityEvent -Vendor 'claude' -Remaining 40 -Resets '' -Source 'agent' -Note '' }
+        (InModuleScope aos { Get-AosCapacity -Now ([datetime]::UtcNow.AddHours(6)) })['claude'].state | Should -Be 'stale'
+    }
+    It 'records capacity from a quota error so the next session sees it' {
+        InModuleScope aos { Add-AosCapacityFromError -Vendor 'codex' -Message 'You have hit your usage limit. try again at 11:59 PM.' }
+        $cap = InModuleScope aos { Get-AosCapacity -Now ([datetime]::UtcNow) }
+        $cap['codex'].remaining | Should -Be 0
+        $cap['codex'].source | Should -Be 'delegate'
+        $cap['codex'].resets | Should -Not -BeNullOrEmpty
+    }
+    It 'sets and shows capacity through the CLI and rejects a bad vendor or percent' {
+        aos capacity set codex 23 --note 'app usage card' | Out-Null
+        $out = aos capacity *>&1 | Out-String
+        $out | Should -Match 'codex'
+        $out | Should -Match '23'
+        $out | Should -Match 'small'
+        (aos capacity set gemini 50 *>&1 | Out-String) | Should -Match 'usage:'
+        (aos capacity set codex 150 *>&1 | Out-String) | Should -Match 'usage:'
+    }
+    It 'warns before delegating to a limited vendor' {
+        InModuleScope aos { Add-AosCapacityEvent -Vendor 'codex' -Remaining 0 -Resets ([datetime]::UtcNow.AddHours(1).ToString('yyyy-MM-ddTHH:mm:ssZ')) -Source 'delegate' -Note '' }
+        $msg = InModuleScope aos { Get-AosCapacityWarning -Vendor 'codex' }
+        $msg | Should -Match 'limited until'
+        InModuleScope aos { Get-AosCapacityWarning -Vendor 'claude' } | Should -BeNullOrEmpty
+    }
+}
+
 Describe 'Coordination claims' {
     BeforeEach {
         $env:AOS_COORD = Join-Path $caseRoot 'coord'

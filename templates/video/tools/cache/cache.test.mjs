@@ -145,3 +145,10 @@ test('a library imported by the wiring (Main.tsx -> lib/fade) changes every key;
   assert.equal(third[0], after[0], 'S01 must not change when only S02 changed');
   assert.notEqual(third[1], after[1]);
 });
+
+test('long segments are split into chunks of at most maxFrames (fresh render processes; S36 v6 went white after ~290 frames)', () => {
+  const s = segments([['S01', 40, 'c'], ['S02', 3, 'c']], 10, 150);
+  assert.ok(s.every((x) => x.to - x.from <= 150), JSON.stringify(s));
+  assert.deepEqual(s.map((x) => [x.from, x.to]), [[0, 150], [150, 300], [300, 400], [400, 430]]);
+  assert.ok(s.slice(0, 3).every((x) => x.shots.join() === 'S01'));
+});

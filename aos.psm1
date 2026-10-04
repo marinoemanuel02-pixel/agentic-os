@@ -2133,6 +2133,7 @@ aos - agentic-os control
   aos who [--json]           live checkout claims and the latest coordination events
   aos claim|release [<path>] --as <agent>   hold or free a checkout (edits claim automatically via hooks)
   aos note <text> --as <agent>              leave a message other agents see in aos who
+  aos capacity [set <vendor> <pct> ...]    each vendor's known window left (R34); set what the app's usage card shows
   aos delegate codex|claude --task <file> [--write --verify <cmd>] [--needs <cmd>] [--allow <glob>]
                              hand a task to the other vendor; receipt in ~\.aos\coord (ls | show <id> | clean <id>)
 '@
@@ -2166,6 +2167,7 @@ function aos {
         'release' { Invoke-AosCoordCommand -Command 'release' -Arguments @($Rest) }
         'who'     { Invoke-AosCoordCommand -Command 'who' -Arguments @($Rest) }
         'note'    { Invoke-AosCoordCommand -Command 'note' -Arguments @($Rest) }
+        'capacity' { Invoke-AosCapacity -Arguments @($Rest) }
         'delegate' { Invoke-AosCoordCommand -Command 'delegate' -Arguments @($Rest) }
         'guard'   { Invoke-AosGuardHook -Agent $a1 -Event $a2 }
         'where'   { $script:Root }
@@ -3100,6 +3102,108 @@ function Get-AosDelegatePrompt([string]$TaskText, [string]$WorkDir, [string]$Bra
     return ($TaskText.TrimEnd() + "`n" + ($lines -join "`n") + "`n")
 }
 
+# Vendor capacity (R34): each vendor's last known 5-hour window, written to the coordination ledger by the user
+# (`aos capacity set`), by an agent, or by a quota error in a delegate receipt, so both vendors plan from the same
+# facts before handing each other work.
+$script:CapacityVendors = @('claude', 'codex')
+$script:CapacityLowPercent = 30
+$script:CapacityStaleHours = 5
+
+function ConvertFrom-AosQuotaReset([string]$Message, [datetime]$Now) {
+    # "try again at 6:25 PM" (today, or tomorrow if already past) or "try again at Oct 4th, 2026 1:21 AM"; local time.
+    if ($Message -notmatch '(?i)try again at\s+(?:(?<date>[A-Za-z]{3,9} \d{1,2}(?:st|nd|rd|th)?, \d{4})\s+)?(?<time>\d{1,2}:\d{2}\s*[AP]M)') { return $null }
+    $culture = [System.Globalization.CultureInfo]::InvariantCulture
+    $clock = [datetime]::ParseExact((($Matches['time'] -replace '\s+', ' ').ToUpperInvariant() -replace '(\d)([AP]M)', '$1 $2'), 'h:mm tt', $culture)
+    if ($Matches['date']) {
+        $day = [datetime]::ParseExact(($Matches['date'] -replace '(\d)(st|nd|rd|th)', '$1'), [string[]]@('MMM d, yyyy', 'MMMM d, yyyy'), $culture, [System.Globalization.DateTimeStyles]::None)
+        return $day.Date.Add($clock.TimeOfDay)
+    }
+    $at = $Now.Date.Add($clock.TimeOfDay)
+    if ($at -lt $Now) { $at = $at.AddDays(1) }
+    return $at
+}
+
+function Add-AosCapacityEvent([string]$Vendor, [int]$Remaining, [string]$Resets, [string]$Source, [string]$Note) {
+    Add-AosLedgerEvent ([ordered]@{ type = 'capacity'; vendor = $Vendor; remaining = $Remaining; resets = $Resets; source = $Source; note = $Note })
+}
+
+function Add-AosCapacityFromError([string]$Vendor, [string]$Message) {
+    $at = ConvertFrom-AosQuotaReset -Message $Message -Now ([datetime]::Now)
+    $resets = ''
+    if ($at) { $resets = $at.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
+    Add-AosCapacityEvent -Vendor $Vendor -Remaining 0 -Resets $resets -Source 'delegate' -Note 'quota error in a delegate receipt'
+}
+
+function Get-AosCapacity([datetime]$Now) {
+    # Newest capacity event per vendor -> state: limited (0 % and the reset is ahead), reset (the reset has passed),
+    # stale (a report older than a window), low (<= 30 %), ok. $Now is UTC.
+    $out = [ordered]@{}
+    $events = @(Get-AosLedger -Last 0 | Where-Object { $_['type'] -eq 'capacity' -and $_['vendor'] })
+    foreach ($v in $script:CapacityVendors) {
+        $last = @($events | Where-Object { $_['vendor'] -eq $v } | Select-Object -Last 1)
+        if ($last.Count -eq 0) { continue }
+        $e = $last[0]
+        $ts = [datetime]::Parse([string]$e['ts'], [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal)
+        $resets = $null
+        if ($e['resets']) { $resets = [datetime]::Parse((ConvertTo-AosStamp $e['resets']), [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal) }
+        $remaining = [int]$e['remaining']
+        $state = 'ok'
+        if ($resets -and $resets -le $Now) { $state = 'reset' }
+        elseif ($remaining -le 0 -and $resets) { $state = 'limited' }
+        elseif (($Now - $ts).TotalHours -ge $script:CapacityStaleHours) { $state = 'stale' }
+        elseif ($remaining -le $script:CapacityLowPercent) { $state = 'low' }
+        $out[$v] = [pscustomobject]@{ vendor = $v; remaining = $remaining; resets = $resets; reported = $ts; source = [string]$e['source']; note = [string]$e['note']; state = $state }
+    }
+    return $out
+}
+
+function Get-AosCapacityWarning([string]$Vendor) {
+    $cap = Get-AosCapacity -Now ([datetime]::UtcNow)
+    if (-not $cap.Contains($Vendor)) { return $null }
+    $c = $cap[$Vendor]
+    if ($c.state -eq 'limited') { return "$Vendor is limited until $($c.resets.ToLocalTime().ToString('HH:mm')) (quota): give this task to the other vendor, or schedule it after the reset" }
+    if ($c.state -eq 'low') { return "$Vendor has about $($c.remaining) % of its window left: keep this task small (a bounded review), and give builds to the other vendor" }
+    return $null
+}
+
+function Invoke-AosCapacity([string[]]$Arguments) {
+    $usage = 'usage: aos capacity [set <claude|codex> <percent left 0-100> [--resets <HH:MM|ISO>] [--note <text>]]'
+    $a = @($Arguments | Where-Object { $_ })
+    if ($a.Count -ge 1 -and $a[0] -eq 'set') {
+        $p = ConvertFrom-AosCliArgs @($a | Select-Object -Skip 1) @() @('resets', 'note') @()
+        $vendor = [string]@($p.Pos)[0]
+        $pct = -1
+        if (@($p.Pos).Count -ge 2) { [void][int]::TryParse([string]@($p.Pos)[1], [ref]$pct) }
+        if ($script:CapacityVendors -notcontains $vendor -or $pct -lt 0 -or $pct -gt 100) { Write-AosWarn $usage; return }
+        $resets = ''
+        if ($p.Opts['resets']) {
+            $r = [string]$p.Opts['resets']
+            if ($r -match '^\d{1,2}:\d{2}$') {
+                $at = [datetime]::Today.Add([timespan]::Parse($r))
+                if ($at -lt [datetime]::Now) { $at = $at.AddDays(1) }
+                $resets = $at.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+            }
+            else { $resets = ([datetime]::Parse($r)).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
+        }
+        Add-AosCapacityEvent -Vendor $vendor -Remaining $pct -Resets $resets -Source 'reported' -Note ([string]$p.Opts['note'])
+        Write-AosOk "capacity: $vendor $pct % left recorded"
+        return
+    }
+    if ($a.Count -ge 1) { Write-AosWarn $usage; return }
+    $cap = Get-AosCapacity -Now ([datetime]::UtcNow)
+    if ($cap.Count -eq 0) { Write-AosInfo 'capacity: nothing recorded yet (aos capacity set <vendor> <percent left>)'; return }
+    foreach ($v in $cap.Keys) {
+        $c = $cap[$v]
+        $hint = 'free for builds and reviews'
+        if ($c.state -eq 'low') { $hint = 'small tasks only (bounded reviews); builds go to the other vendor' }
+        elseif ($c.state -eq 'limited') { $hint = 'limited until ' + $c.resets.ToLocalTime().ToString('HH:mm') + ': hand work to the other vendor' }
+        elseif ($c.state -eq 'reset') { $hint = 'its reset has passed: check its real usage before a big task' }
+        elseif ($c.state -eq 'stale') { $hint = 'report is old: ask for a fresh number before planning' }
+        $age = [int]([datetime]::UtcNow - $c.reported).TotalMinutes
+        Write-AosInfo ("{0,-6} {1,3} % left, {2} ({3}, {4} min ago) -> {5}" -f $v, $c.remaining, $c.state, $c.source, $age, $hint)
+    }
+}
+
 function Invoke-AosDelegate {
     param([string]$Vendor, [string]$TaskFile, [switch]$Write, [string]$Model, [string[]]$Needs, [string]$Verify,
         [string[]]$Allow, [string[]]$Setup, [int]$TimeoutMinutes = 30, [string]$Repo)
@@ -3110,6 +3214,8 @@ function Invoke-AosDelegate {
         return [pscustomobject]@{ accepted = $false; outcome = 'refused'; error = [ordered]@{ category = 'usage'; message = $m } }
     }
     if ($Vendor -notin @('codex', 'claude')) { return (& $refuse "unknown vendor '$Vendor' (codex or claude)") }
+    $capacityWarning = Get-AosCapacityWarning -Vendor $Vendor
+    if ($capacityWarning) { Write-AosWarn "capacity: $capacityWarning" }
     if (-not $TaskFile -or -not (Test-Path -LiteralPath $TaskFile)) { return (& $refuse "task file not found: $TaskFile") }
     if ($Write -and -not $Verify) { return (& $refuse 'write mode needs --verify <command>: the host checks the result, not the delegate') }
     $taskText = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $TaskFile).ProviderPath)
@@ -3137,6 +3243,7 @@ function Invoke-AosDelegate {
         error = $null; delegate = $null; changed = @(); outside_allow = @(); verify = $null; accepted = $false; outcome = 'failed' }
     $finish = {
         param($outcome)
+        if ($receipt.error -and $receipt.error.category -eq 'quota') { Add-AosCapacityFromError -Vendor $Vendor -Message ([string]$receipt.error.message) }
         $receipt.outcome = $outcome
         $receipt.ended = (Get-AosUtcStamp)
         $receipt.seconds = [int]([DateTime]::UtcNow - $started).TotalSeconds
