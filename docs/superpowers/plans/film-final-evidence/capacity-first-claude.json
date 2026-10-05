@@ -1,0 +1,45 @@
+{
+  "id": "20261005-211532-7f00-claude-read-only-independent-review-o",
+  "vendor": "claude",
+  "mode": "read",
+  "base": "",
+  "branch": "",
+  "commit": "",
+  "started": "2026-10-05T19:15:32Z",
+  "ended": "2026-10-05T19:18:03Z",
+  "seconds": 151,
+  "exit_code": 0,
+  "timed_out": false,
+  "kill_failed": false,
+  "usage": {
+    "input": 12,
+    "cached": 256586,
+    "output": 9999
+  },
+  "cost_usd": 0.5930892,
+  "accepted": true,
+  "outcome": "accepted",
+  "changed": [],
+  "outside_allow": [],
+  "delegate": {
+    "status": "done",
+    "summary": "I reviewed the production diff in aos.psm1 for 24d1737..76308ea myself and looked over the new tests. I ran no tests. I found no blocking bug. The branch looks safe to land once the full dual-shell `aos test` passes, provided you accept the Medium item 1 below or fix it first; that fix is small and you can check it with a test.\n\nWHAT HOLDS (from reading the code)\n- Both observed windows stay on the result (`windows`), each with its own reset and state. The binding window is the one with the lowest known remaining, so the weekly window binds when it is tighter or after the 5h window resets.\n- A reset sets that window's remaining to null; it does not invent 100 %. If every window has reset, the overall state is 'reset' with remaining null.\n- Malformed Codex windows are skipped. That covers a non-numeric, NaN, Inf or out-of-range percent, minutes of 0 or less, a reset of 0 or less, and an epoch that won't parse. The old `[double]$null = 0` path, which invented full quota, is gone.\n- Readings observed more than 60 s in the future become 'unknown'. Readings 5 h or older become 'stale'.\n- Get-AosUtcStamp and ConvertTo-AosStamp only gained InvariantCulture; their format string and Kind handling are unchanged, so there is no regression there.\n- `--json` uses ConvertTo-Json with ISO-Z dates and null remaining.\n- Legacy ledger rows without `windows` still read: a valid percent becomes a '5h' window with reset unknown.\n- Warnings are still advice only. The only caller (aos.psm1:3418) wraps the call in try and only runs Write-AosWarn.\n- I saw no profile or auth writes, and no `??`, ternary or `&&` in the diff. I did not run the ASCII or parse check.\n\nBUGS\n1. Medium, aos.psm1:3302-3305. The per-window state checks 'stale' before 'limited'; the old code checked limited first. A 0 %-left report whose reset is still ahead is a certain fact, because usage only grows until the reset. Yet 5 h after it was reported it turns into stale with remaining null, and the delegate warning changes from 'limited until HH:mm' to 'refresh its real usage'.\n   - This hits weekly limits most: an `aos capacity set --weekly 0 --weekly-resets <+4 days>`, or a Codex log reading with the week at 100 %, stops reading as limited after 5 h.\n   - Fix: test `$left -le 0 -and $reset -and $reset -gt $Now` before the stale branch, or keep stale but carry `remaining = 0`.\n   - Check: a test with a weekly window at 0 % left, reset 3 days ahead, observed 6 h ago, should give state 'limited'.\n2. Low, aos.psm1:3371 (the `--resets` / `--weekly-resets` ISO branch). An ISO time with no offset (e.g. `2026-10-05T23:00`) was read as local time before (`[datetime]::Parse(...).ToUniversalTime()`). It is now read as UTC (AssumeUniversal), while HH:MM is still local. People copying a local time from a usage card get a reset off by their UTC offset.\n   - Fix: require a Z or an offset in the regex (reject anything else with the usage message), or use AssumeLocal for ISO without an offset.\n   - Check: a test that `--resets 2026-10-05T23:00` is either rejected or stored as local converted to UTC.\n3. Low, aos.psm1:3196 (ConvertTo-AosCapacityUtc). A [datetime] of Kind Unspecified goes through `.ToUniversalTime()`, which treats it as local time. The string path treats the same value as UTC. In PS7, ConvertFrom-Json turns an offset-less ISO string in a ledger row into an Unspecified DateTime, so the same row gives different instants under PS5.1 and PS7.\n   - Current writers always add Z, so this is latent.\n   - Fix: copy ConvertTo-AosStamp's `SpecifyKind(Utc)` for Unspecified.\n4. Low, pre-existing and not touched by this diff, aos.psm1:3220 (Add-AosCapacityFromError). It still calls `ToString('yyyy-MM-ddTHH:mm:ssZ')` without InvariantCulture, unlike the two helpers this change fixed. A non-Gregorian current culture would write a wrong year.\n\nPROPOSALS (not bugs)\n- P1, aos.psm1:3276. Codex log selection no longer requires `windows.Count -gt 0`. A newer rollout line whose windows are all malformed now hides a valid, older ledger report, such as a delegate quota-error 'limited', and the result becomes 'unknown'. This is defensible as \"don't invent\", but consider skipping log readings with no valid windows.\n- P2, aos.psm1:3313. When the 5h window has reset and the weekly window is ok, the overall state is 'ok' and the warning is null, so nothing prompts a refresh even though the session window is unknown. Consider an advisory note when any window is in reset.\n- P3, Read-AosCodexLimits: `$best.observed -ge $ts` keeps a future-dated reading over every real one until a later timestamp arrives. Consider ignoring readings more than 60 s in the future when choosing the best one.\n- P4, aos.psm1:3404: the text output's `{1} % used` uses `-f` with the current culture, so it prints '12,5' under it-IT. This is display only; the JSON is unaffected.\n- P5: Add-AosCapacityFromError always labels its window '5h', even when the quota error was a weekly limit.",
+    "files_changed": [],
+    "tests_run": [],
+    "unverified": [
+      "Did not run aos test (dual-shell); the user said a full run is in progress and I never saw its result",
+      "Did not run the targeted 20 capacity tests myself",
+      "Did not verify the ASCII-only and PS5.1 parse check on the diff by running it; checked by reading only",
+      "Did not check at runtime which DateTime Kind PS7 ConvertFrom-Json gives for ledger reset strings; finding 3 is based on reading the code",
+      "Did not run the proposed regression checks (weekly window limited after 5 h, ISO time without an offset); they are suggested tests only",
+      "Did not read the director plan response or the Codex findings, as instructed"
+    ]
+  },
+  "verify": {
+    "command": null,
+    "exit_code": null,
+    "passed": null
+  },
+  "task": "Read-only independent review of the committed orchestration change in24d173760b7dfe30ec0b74f4f64468fd1f8937bc..76308ea on codex/film-final-workflow. Goal: capacity decisions must keep both observed windows, source/time/reset together, preserve unknown after resets, exclude malformed quota, not invent full quota, provide machine-readable JSON, preserve PS5.1/7 ASCII and legacy callers. Inspect the production diff and tests yourself. Do not read director plan response or Codex findings. Focus resets/staleness/future/malformed data, culture/date correctness, warnings that remain advice, weekly binding and regressions in the two shared timestamp helpers. No profile/auth changes intended or allowed. Targeted20 capacity tests passed under both shells; full dual-shell aos test is currently running, not yet complete. You may run a bounded read-only check if useful; no edits or downloads. Give severity/file/line, separate bugs from proposals. Return whether the branch is safe to land after tests pass and any checkable fixes. Limit8minutes.\n",
+  "cost_meaning": "Provider reference estimate, not a measured subscription debit or purchased reset credit."
+}

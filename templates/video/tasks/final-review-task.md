@@ -5,16 +5,20 @@ Keep this review blind: do not read the director's findings, verdict or response
 
 - Export: <relative MP4 path>; expected SHA256: <hash>.
 - Prior export and SHA256: <paths/hashes, or none>.
+- Final input manifest: <relative path>; expected digest/file count: <values>.
 - Frame provenance and sheets: <relative paths>; shot count: <count>.
 - Changed shots: <ids>; full-size before/after crops: <paths>.
 - Narration, claims and currency: <paths>; export date/timezone: <date/zone>.
 - Technical QA, white scan and mix transcription: <paths, or pending>.
-- Time budget: <minutes>; no edits, installs, downloads or reset credits.
+- Time budget: <minutes>; no edits, software/asset installs or downloads, or reset credits. Read-only source-page
+  browsing is permitted; it does not require an install or an asset download.
 
-Verify the media hash and frame provenance yourself. Open each sheet covering every shot's middle and settled
-end frame; inspect changed or suspicious details at100%. Record the shot/frame ids visually opened. Numeric
+Verify the media hash, input-manifest digest/file count and frame provenance yourself. Open the prior version's
+sheets as well as each final sheet covering every shot's middle and settled end frame, to check regressions.
+Inspect changed or suspicious details at 100%. Record the shot/frame ids visually opened. Numeric
 image comparison is useful but does not count as looking at a frame. For animated text, check typing completion,
-caret overlap and readable hold before the cut. Distinguish a partial middle state from an incomplete end state.
+caret overlap and readable hold before the cut. Check label association, closing/terminal frames and narration-to-
+picture coherence. Distinguish a partial middle state from an incomplete end state.
 
 Read narration blind for naturalness and accuracy against the ledgers. If a short evidence excerpt omits a
 detail, mark it unresolved and identify the original source/anchor needed; do not automatically weaken a true

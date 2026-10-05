@@ -1,0 +1,53 @@
+{
+  "id": "20261005-204413-6857-claude-write-independent-regression-t",
+  "vendor": "claude",
+  "mode": "write",
+  "base": "24d173760b7dfe30ec0b74f4f64468fd1f8937bc",
+  "branch": "delegate/20261005-204413-6857-claude-write-independent-regression-t",
+  "commit": "a0058520b1c8b20c35dc6b97def7093437732939",
+  "started": "2026-10-05T18:44:13Z",
+  "ended": "2026-10-05T18:55:11Z",
+  "seconds": 657,
+  "exit_code": 0,
+  "timed_out": false,
+  "kill_failed": false,
+  "usage": {
+    "input": 56,
+    "cached": 2148834,
+    "output": 29155
+  },
+  "cost_usd": 1.8000988000000004,
+  "accepted": true,
+  "outcome": "accepted",
+  "changed": [
+    "tests/aos.Tests.ps1"
+  ],
+  "outside_allow": [],
+  "delegate": {
+    "status": "done",
+    "summary": "I added 12 regression tests in a new Describe 'Capacity telemetry regressions', placed inside the outer 'aos isolated suite' right after 'Vendor capacity (R34)'. tests/aos.Tests.ps1 is the only file changed: 206 lines added, 0 removed, so no existing test was edited. The new block is ASCII-only. Each test sets AOS_COORD and CODEX_HOME to throwaway folders under $TestDrive and puts CODEX_HOME back afterwards, so nothing touches the real ~/.codex, the profile or the network. aos.psm1 is unchanged.\n\nI ran the full suite once under PowerShell 7 with tests/Run-Tests.ps1. It exited 1 with 426 passed and 12 failed. The 12 failures are exactly the 12 new tests; every existing test, including the 8 'Vendor capacity (R34)' tests, passed. Here is why each new test fails today:\n1. Windows on a reported event: expected 15 left, got 60. The function quietly ignores -Windows (it ends up in $args), so the weekly window never binds.\n2. Every logged Codex window has passed: expected state 'reset', got 'ok'. Today a passed reset is counted as a fresh 100 %.\n3. Codex reading older than 5 h with its resets still ahead: expected 'stale', got 'ok'.\n4. Codex reading timestamped 10 minutes in the future: expected 'unknown', got 'ok'.\n5. Malformed window (150 % used): expected 80 left on the week window, got -50. The bad window is used to decide capacity instead of being excluded.\n6. Read-AosCodexLimits with a missing or zero resets_at: it returns 1970-01-01T00:00:00Z as the reset.\n7. Old ledger row without windows: still read correctly, but the result has no 'windows' property.\n8. `aos capacity set ... --weekly/--weekly-resets`: throws 'unknown or incomplete option: --weekly'.\n9. Malformed CLI input: `--resets 25:00` throws a TimeSpan.Parse exception instead of printing usage. This test also covers `--resets garbage`, a lone `--weekly`, a lone `--weekly-resets`, and bad weekly values.\n10. `aos capacity --json`: prints nothing on stdout, only the usage warning, so there is no JSON.\n11. Text output under the th-TH culture: the ISO time given to `--resets` is stored as year 3112 instead of 2026. This is a real bug today, not just a missing feature.\n12. Get-AosCapacityWarning for a reset, stale or future Codex reading: returns $null instead of a message telling you to refresh.\n\nAssumptions the tests make where the contract leaves details open:\n- The state names are 'reset', 'stale' and 'unknown'.\n- Window labels are '5h' and 'week'.\n- -Windows items are objects with label, used (percent used) and resets (ISO UTC).\n- Each window carries its own .state.\n- The text output contains the word 'reset' and the reset time as HH:mm, in either local time or UTC; an unknown reset shows the word 'unknown'.\n- The warning text contains 'refresh'.\n- The JSON is either an array of vendor objects or an object keyed by vendor.\n\nPossible conflict for the implementer: the existing test 'ignores a malformed capacity row' expects no warning for a ledger row whose reset is 'not a date'. If the fix marks such rows 'unknown' and warns on 'unknown', that existing test will break.",
+    "files_changed": [
+      "tests/aos.Tests.ps1"
+    ],
+    "tests_run": [
+      {
+        "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File tests/Run-Tests.ps1 (PowerShell 7, full suite)",
+        "exit_code": 1,
+        "passed": false
+      }
+    ],
+    "unverified": [
+      "Windows PowerShell 5.1 run of tests/Run-Tests.ps1: blocked because the command needed approval in this session, so I don't know how the new tests behave under 5.1. One risk: the th-TH culture switch in the text-output test may not take effect under 5.1.",
+      "`aos test` (both shells plus the parse and ASCII checks) was not run as a whole. I checked separately that the new block is ASCII-only.",
+      "A filtered run of only the capacity Describes was blocked by the command validator; I ran the full suite instead.",
+      "That these tests pass once the fix exists: they can't go green until the production change is made."
+    ]
+  },
+  "verify": {
+    "command": "pwsh -NoProfile -File <user-home>/.aos/video/alignment-now/verify-capacity-red.ps1",
+    "exit_code": 0,
+    "passed": null
+  },
+  "task": "Write independent regression tests only for the capacity reporting improvement in the current plan. Only edit tests/aos.Tests.ps1, preserve all existing tests unchanged. Use your isolated delegate worktree and disposable fixtures; no profile/network writes. New Describe 'Capacity telemetry regressions' inside the existing outer Describe. Tests should expose real pre-fix behavior, not mirror implementation. Verify the new tests fail for the intended reasons and report each failure; no production changes.\nContract: Add-AosCapacityEvent gains optional Windows (array objects label, used, resets) and existing callers work. Get-AosCapacity includes windows retaining individual state, never invents fresh100% after a reset; when all log windows have passed state=reset, remaining=null. Fresh live weekly window continues to bind after session reset (existing test untouched). Log older than5h with future reset is stale, future observation beyond60sec is unknown. Missing/zero resets_at or out-of-range used_percent => malformed window excluded from availability; no throw. Unknown stays unknown; no epoch reset implying full. Read-AosCodexLimits is tested via disposable CODEX_HOME. Existing old ledger capacity event without Windows remains compatible. CLI adds --weekly <percent-left> and --weekly-resets <ISO> as a paired option to capacity set, records both windows (5h/week); malformed reset25:00/garbage or incomplete weekly pair gives usage, writes no event and does not throw. CLI `aos capacity --json` outputs valid JSON with explicit depth, ISO UTC string reported and reset dates, windows/source/state and null remaining when reset/unknown. Text output includes reported resets (or explicit unknown), window and observation/source. Dates are culture independent. Get-AosCapacityWarning warns to refresh reset/stale/unknown observations without stopping a delegation. Keep test count bounded (about10-14 tests). Do not require future new features outside this contract. No existing test rewrites. Return tests and red evidence, not fixes.\n",
+  "cost_meaning": "Provider reference estimate, not a measured subscription debit or purchased reset credit."
+}

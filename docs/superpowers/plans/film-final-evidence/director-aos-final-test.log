@@ -1,0 +1,15 @@
+
+==> Static checks
+  ok   aos.psm1 parses
+  ok   aos.psm1 is ASCII
+  ok   bootstrap.ps1 parses
+  ok   bootstrap.ps1 is ASCII
+  ok   tests\Run-Tests.ps1 parses
+  ok   tests\Run-Tests.ps1 is ASCII
+
+==> Pester suite under powershell
+  ok   powershell: all tests passed
+
+==> Pester suite under pwsh
+  ok   pwsh: all tests passed
+  ok   aos test: all green

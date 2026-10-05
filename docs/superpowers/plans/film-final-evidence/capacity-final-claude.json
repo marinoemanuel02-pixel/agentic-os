@@ -1,0 +1,61 @@
+{
+  "id": "20261005-213651-59a2-claude-read-only-final-independent-re",
+  "vendor": "claude",
+  "mode": "read",
+  "base": "",
+  "branch": "",
+  "commit": "",
+  "started": "2026-10-05T19:36:52Z",
+  "ended": "2026-10-05T19:41:08Z",
+  "seconds": 257,
+  "exit_code": 0,
+  "timed_out": false,
+  "kill_failed": false,
+  "usage": {
+    "input": 24,
+    "cached": 598752,
+    "output": 9632
+  },
+  "cost_usd": 0.6698143999999998,
+  "accepted": true,
+  "outcome": "accepted",
+  "changed": [],
+  "outside_allow": [],
+  "delegate": {
+    "status": "done",
+    "summary": "VERDICT: ACCEPT, no shipping blockers. I reviewed 24d1737..HEAD plus the uncommitted diff of aos.psm1, README.md and docs/decisions.md, and read the capacity tests. I did not open the Codex review-response files.\n\nWhat checks out in the code:\n- Both windows are kept. `aos capacity set ... --weekly X --weekly-resets ISO` stores a 5h and a week window, and the two flags must be given together. For both the Codex log and the ledger, the tightest window with a known remaining value binds.\n- A passed reset sets remaining to null with state 'reset'. It never becomes 100%. If the session window has passed but the weekly one has not, the weekly still binds and the warning asks for a refresh.\n- A weekly limit at 0% stays 'limited' until its reset, even when the reading is stale, because 'limited' is checked before 'stale' (stale threshold is 5h).\n- An observation more than 60s in the future is 'unknown'.\n- Malformed values are skipped: NaN, Inf, used outside 0-100, window minutes <= 0, resets_at <= 0, unparseable timestamps or resets. Advice is wrapped in try/catch, so it cannot stop a delegation.\n- Dates use the invariant culture and DateTimeOffset.TryParse with AssumeUniversal|AdjustToUniversal. DateTime values with no kind are treated as UTC. The CLI only accepts ISO dates that carry an explicit Z or offset, and rejects HH:MM values with hours above 23 or minutes above 59. JSON export uses ISO UTC and Depth 8. The Windows PowerShell 5.1 compatibility rules hold in the changed lines: no ??, ternary, && or ||.\n\nDefects. All are non-blocking proposals:\n1. LOW-MED, aos.psm1:3249 (Read-AosCodexLimits) and :3282. The Codex log reader keeps the line with the latest timestamp, including one dated in the future. A single clock-skewed or corrupt future line would pin Codex at 'unknown' and hide newer ledger events, such as a delegate quota error that would otherwise show 'limited', until the clock catches up. The result fails safe, since it says unknown and asks for a refresh, but it is sticky. Proposal: ignore log lines dated more than about 60s after Now when choosing the newest reading.\n2. LOW, aos.psm1:3282. The old guard `windows.Count -gt 0` was removed. A newer Codex log reading whose windows are all malformed now overrides a fresher 'limited' event in the ledger and shows 'unknown'. This only affects advice, not scheduling, and it asks for a refresh.\n3. LOW, cosmetic, aos.psm1:3408. The per-window text line formats `used` with `-f`, which uses the current culture, so under de-DE it prints '42,5'. The JSON and ISO dates are invariant, so this is display only.\n4. LOW, existing before this branch, aos.psm1:3218. A quota error with no reset time it can parse is recorded as 0% with no reset, which shows as 'low' rather than 'limited'. Events from quota errors are also always labelled '5h', even when the error came from the weekly limit.\n\nThe README and decisions entries match the code. The decisions entry is added at the top, which keeps that file append-only.",
+    "files_changed": [],
+    "tests_run": [
+      {
+        "command": "pwsh 7.6.6: Invoke-Pester tests/aos.Tests.ps1 -Filter FullName '*apacity*' with the runner's isolation env (AOS_BACKUPS/AOS_COORD/CODEX_HOME/PI_CODING_AGENT_DIR in temp, TestRegistry off)",
+        "exit_code": 0,
+        "passed": true
+      },
+      {
+        "command": "powershell 5.1.26100: same filtered capacity run with the same isolation env",
+        "exit_code": 0,
+        "passed": true
+      },
+      {
+        "command": "First attempt in both shells: same filter but without the runner's isolation env; 0 passed, 25 failed. This was a setup problem, not a product failure. I checked the tail of ~/.aos/coord/ledger.jsonl and its last write (19:36:02Z) came before this run, so the real ledger was not touched.",
+        "exit_code": 0,
+        "passed": false
+      }
+    ],
+    "unverified": [
+      "Full 443-test dual-shell `aos test` (static parse/ASCII checks and the whole suite): not run by me; the user's separate run still has no known outcome",
+      "Whether the 12 + 5 regressions fail without the fix: I did not reproduce this; I relied on the brief's statement that Codex saw them fail",
+      "Behaviour under non-Gregorian cultures (th-TH etc.) beyond what the existing tests cover; I did not run separate culture experiments",
+      "Ledger rows written by older code under a non-invariant culture (e.g. Buddhist-calendar years) would now read as future and show 'unknown'; I did not test this",
+      "Behaviour of real Codex session logs; I did not read any live log files",
+      "Second opinion from the other vendor was not requested for this review"
+    ]
+  },
+  "verify": {
+    "command": null,
+    "exit_code": null,
+    "passed": null
+  },
+  "task": "Read-only final independent review of branch codex/film-final-workflow in this checkout. Compare24d1737..HEAD and the uncommitted diff; do not read Codex review-response files. Inspect production capacity/ledger code and tests. Focus on both observed windows, stale exhausted weekly limits, expired session windows without inventing new quota, future/malformed telemetry, invariant calendars and consistent UTC/offset handling in Windows PowerShell5.1 and7. Scope only aos.psm1, additive tests/aos.Tests.ps1 and the capacity README/decision entries. No edits, profile/auth changes, downloads or reset credits. Twelve independent regressions were written by Claude and seen red by Codex; five more additive review regressions were seen red, then all25 capacity tests passed under both shells. A fresh full443-test dual-shell aos test is running; its outcome remains unknown. Review the entire final change and give a clear accept/block verdict, severity/file/line for defects, and explicit checks you ran versus limitations. You may run bounded read-only tests. Finish within8minutes; distinguish proposals from shipping blockers.\n",
+  "cost_meaning": "Provider reference estimate, not a measured subscription debit or purchased reset credit."
+}

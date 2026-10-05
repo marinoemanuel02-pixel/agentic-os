@@ -13,7 +13,7 @@ added five regressions, and observed all five fail before fixing the code. No ex
 
 Codex ran all25 capacity tests under Windows PowerShell5.1 and PowerShell7:25pass/0fail in each. The five review
 regressions followed the12 independently authored Claude regressions, which Codex also saw fail before the fix.
-The original weekly-binding test remains intact. Full443-test verification is recorded separately once complete.
+The original weekly-binding test remains intact. Full443-test verification completed with `aos test`, exit0, both Windows PowerShell5.1 and PowerShell7 green. See the separate verification record and logs.
 
 The final blind review, receipt20261005-213651-59a2-claude-read-only-final-independent-re, accepted the branch with
 no shipping blockers. It independently passed all25 filtered capacity checks under both shells. Its first attempts
@@ -31,3 +31,6 @@ Review verdicts remain separate from this director response; receipt files retai
 
 The final-review task template is a documentation improvement, not new runtime behavior. Its final independent
 review is recorded with the film's closing review. Do not claim that the earlier capacity review covered it.
+
+
+The final film/template receipt20261005-220012-63da-claude-read-only-independent-final-sh accepted the template as usable. Codex read that receipt and accepted its omissions: review prior sheets as well as final sheets, include closing/picture coherence, and permit read-only original-source browsing without software/asset downloads. The mechanical documentation correction was inspected separately; runtime/tests were unchanged after full-suite verification.

@@ -1,0 +1,41 @@
+Pester v5.9.1
+
+Starting discovery in 1 files.
+Discovery found 443 tests in 4.81s.
+Filter 'FullName' set to ('*Capacity telemetry review regressions*').
+Filters selected 5 tests to run.
+Running tests.
+
+Running tests from '<user-home>\.codex\worktrees\film-final-workflow\agentic-os\tests\aos.Tests.ps1'
+Describing aos isolated suite
+ Describing Capacity telemetry review regressions
+   [-] retains known exhaustion until its weekly reset even when the observation is stale 2.35s (2.18s|171ms)
+    Expected strings to be the same, but they were different.
+    Expected length: 7
+    Actual length:   5
+    Strings differ at index 0.
+    Expected: 'limited'
+    But was:  'stale'
+               ^
+    at $c.state | Should -Be 'limited', <user-home>\.codex\worktrees\film-final-workflow\agentic-os\tests\aos.Tests.ps1:3676
+    at <ScriptBlock>, <user-home>\.codex\worktrees\film-final-workflow\agentic-os\tests\aos.Tests.ps1:3676
+   [-] requires an explicit offset on ISO CLI reset dates instead of guessing local or UTC 639ms (624ms|15ms)
+    Expected regular expression 'usage:' to match '  ok   capacity: claude 50 % left recorded
+    ', but it did not match.
+    at $out | Should -Match 'usage:', <user-home>\.codex\worktrees\film-final-workflow\agentic-os\tests\aos.Tests.ps1:3682
+    at <ScriptBlock>, <user-home>\.codex\worktrees\film-final-workflow\agentic-os\tests\aos.Tests.ps1:3682
+   [-] normalizes an unspecified DateTime as UTC consistently with legacy JSON strings 296ms (292ms|4ms)
+    Expected 2026-10-05T23:00:00.0000000Z, but got 2026-10-05T21:00:00.0000000Z.
+    at $actual | Should -Be ([datetime]::SpecifyKind($d, [DateTimeKind]::Utc)), <user-home>\.codex\worktrees\film-final-workflow\agentic-os\tests\aos.Tests.ps1:3688
+    at <ScriptBlock>, <user-home>\.codex\worktrees\film-final-workflow\agentic-os\tests\aos.Tests.ps1:3688
+   [-] records quota-error reset years using the invariant calendar 631ms (626ms|5ms)
+    Expected regular expression '^2026-' to match 2569-10-05T21:25:04.0000000Z, but it did not match.
+    at $e.resets | Should -Match ('^' + [datetime]::UtcNow.Year + '-'), <user-home>\.codex\worktrees\film-final-workflow\agentic-os\tests\aos.Tests.ps1:3700
+    at <ScriptBlock>, <user-home>\.codex\worktrees\film-final-workflow\agentic-os\tests\aos.Tests.ps1:3700
+   [-] keeps the observed week while asking to refresh a reset session window 396ms (390ms|5ms)
+    Expected regular expression 'refresh' to match $null, but it did not match.
+    at Get-AosCapacityWarning -Vendor 'codex' | Should -Match 'refresh', <user-home>\.codex\worktrees\film-final-workflow\agentic-os\tests\aos.Tests.ps1:3708
+    at <ScriptBlock>, <user-home>\.codex\worktrees\film-final-workflow\agentic-os\tests\aos.Tests.ps1:3708
+Tests completed in 11.97s
+Tests Passed: 0, Failed: 5, Skipped: 0, Inconclusive: 0, NotRun: 438
+Expected RED: all five review regressions fail before fix

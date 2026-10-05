@@ -1,0 +1,44 @@
+Pester v5.9.1
+
+Starting discovery in 1 files.
+Discovery found 443 tests in 1.54s.
+Filter 'FullName' set to ('*Capacity telemetry regressions*', '*Vendor capacity*', '*Capacity telemetry review regressions*').
+Filters selected 25 tests to run.
+Running tests.
+
+Running tests from '<user-home>\.codex\worktrees\film-final-workflow\agentic-os\tests\aos.Tests.ps1'
+Describing aos isolated suite
+ Describing Vendor capacity (R34)
+   [+] parses the reset time out of a Codex quota message, today or tomorrow, with or without a date 912ms (800ms|113ms)
+   [+] records a reported window and reports low and limited vendors from the newest event 459ms (449ms|10ms)
+   [+] treats a passed reset as unknown again and an old report as stale 190ms (185ms|5ms)
+   [+] reads Codex's own logged limits (5 h and weekly) so a reset is noticed without anyone reporting it 1.46s (1.46s|5ms)
+   [+] records capacity from a quota error so the next session sees it 177ms (173ms|4ms)
+  ok   capacity: codex 23 % left recorded
+   [+] sets and shows capacity through the CLI and rejects a bad vendor or percent 262ms (258ms|4ms)
+   [+] ignores a malformed capacity row instead of throwing (advice must not stop a delegation) 159ms (156ms|3ms)
+   [+] warns before delegating to a limited vendor 134ms (130ms|4ms)
+ Describing Capacity telemetry regressions
+   [+] keeps each reported window with its own state and lets the weekly window bind after the session reset 333ms (326ms|7ms)
+   [+] reports reset with no remaining percent when every logged Codex window has passed (never a fresh 100 %) 223ms (212ms|12ms)
+   [+] marks a Codex reading older than 5 h as stale even when its resets are still ahead 158ms (153ms|4ms)
+   [+] treats a Codex reading observed more than 60 s in the future as unknown 133ms (128ms|5ms)
+   [+] excludes malformed Codex windows (out-of-range percent, missing or zero reset) from availability without throwing 245ms (241ms|4ms)
+   [+] reads label, used percent and reset from a disposable CODEX_HOME and never turns a missing reset into the epoch 244ms (241ms|3ms)
+   [+] keeps reading an old capacity ledger row that has no windows 293ms (289ms|5ms)
+  ok   capacity: claude 60 % left recorded
+   [+] records the session and weekly windows from aos capacity set --weekly/--weekly-resets 217ms (214ms|3ms)
+   [+] answers malformed resets or an incomplete weekly pair with usage, writes nothing and does not throw 332ms (330ms|2ms)
+  ok   capacity: codex 40 % left recorded
+   [+] prints capacity as JSON with ISO UTC dates, windows, source, state and null remaining after a reset 266ms (262ms|4ms)
+  ok   capacity: codex 40 % left recorded
+   [+] shows the reported reset (or says unknown) in text output, independent of the current culture 234ms (228ms|6ms)
+   [+] warns to refresh a reset, stale or future Codex reading instead of staying silent 203ms (200ms|3ms)
+ Describing Capacity telemetry review regressions
+   [+] retains known exhaustion until its weekly reset even when the observation is stale 213ms (207ms|6ms)
+   [+] requires an explicit offset on ISO CLI reset dates instead of guessing local or UTC 81ms (77ms|3ms)
+   [+] normalizes an unspecified DateTime as UTC consistently with legacy JSON strings 80ms (77ms|3ms)
+   [+] records quota-error reset years using the invariant calendar 132ms (123ms|8ms)
+   [+] keeps the observed week while asking to refresh a reset session window 107ms (104ms|3ms)
+Tests completed in 10.56s
+Tests Passed: 25, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 418
