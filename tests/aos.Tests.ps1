@@ -3453,6 +3453,212 @@ Describe 'Vendor capacity (R34)' {
     }
 }
 
+Describe 'Capacity telemetry regressions' {
+    BeforeAll {
+        $capInv = [System.Globalization.CultureInfo]::InvariantCulture
+        function ConvertTo-CapIso([datetime]$At) { return $At.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ', $capInv) }
+        function ConvertTo-CapUtc($Value) {
+            if ($null -eq $Value -or $Value -eq '') { return $null }
+            if ($Value -is [datetime]) { return $Value.ToUniversalTime() }
+            return [datetime]::Parse([string]$Value, $capInv, [System.Globalization.DateTimeStyles]::AdjustToUniversal)
+        }
+        # One Codex token_count reading in a disposable CODEX_HOME. Each window: @{ minutes; used; resets }, where
+        # resets is a DateTime (written as unix seconds), a raw value (0), or absent (key left out).
+        function Write-CapCodexLog([datetime]$Observed, [object[]]$Windows) {
+            $rl = [ordered]@{ limit_id = 'codex' }
+            $names = @('primary', 'secondary')
+            for ($i = 0; $i -lt $Windows.Count; $i++) {
+                $w = $Windows[$i]
+                $o = [ordered]@{ used_percent = $w.used; window_minutes = $w.minutes }
+                if ($w.ContainsKey('resets')) {
+                    if ($w.resets -is [datetime]) { $o['resets_at'] = [DateTimeOffset]::new($w.resets.ToUniversalTime()).ToUnixTimeSeconds() }
+                    else { $o['resets_at'] = $w.resets }
+                }
+                $rl[$names[$i]] = $o
+            }
+            $line = [ordered]@{ timestamp = $Observed.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ', $capInv); type = 'event_msg'
+                payload = [ordered]@{ type = 'token_count'; info = $null; rate_limits = $rl } }
+            Write-TestFile (Join-Path $env:CODEX_HOME 'sessions\2026\10\05\rollout-2026-10-05T00-00-00-cap.jsonl') ((ConvertTo-Json -InputObject $line -Depth 10 -Compress) + "`n")
+        }
+        function Get-CapLedgerEvents {
+            return @(InModuleScope aos { Get-AosLedger -Last 0 } | Where-Object { $_['type'] -eq 'capacity' })
+        }
+        function Get-CapJsonVendor($Json, [string]$Vendor) {
+            if ($Json -is [array]) { return @($Json | Where-Object { $_.vendor -eq $Vendor })[0] }
+            if ($Json.PSObject.Properties[$Vendor]) { return $Json.$Vendor }
+            return $null
+        }
+    }
+    BeforeEach {
+        $env:AOS_COORD = Join-Path $caseRoot ('coord-capt-' + [guid]::NewGuid().ToString('N').Substring(0, 6))
+        $capSavedCodexHome = $env:CODEX_HOME
+        # Never the real ~/.codex: an empty disposable home unless a test writes a reading into it.
+        $env:CODEX_HOME = Join-Path $caseRoot ('codex-home-' + [guid]::NewGuid().ToString('N').Substring(0, 6))
+    }
+    AfterEach { $env:CODEX_HOME = $capSavedCodexHome }
+
+    It 'keeps each reported window with its own state and lets the weekly window bind after the session reset' {
+        $now = [datetime]::UtcNow
+        $w = @(
+            [pscustomobject]@{ label = '5h'; used = 40; resets = (ConvertTo-CapIso $now.AddMinutes(-10)) },
+            [pscustomobject]@{ label = 'week'; used = 85; resets = (ConvertTo-CapIso $now.AddDays(3)) })
+        InModuleScope aos -Parameters @{ w = $w; r = (ConvertTo-CapIso $now.AddMinutes(-10)) } { param($w, $r)
+            Add-AosCapacityEvent -Vendor 'claude' -Remaining 60 -Resets $r -Source 'reported' -Note '' -Windows $w }
+        $c = (InModuleScope aos -Parameters @{ n = $now } { param($n) Get-AosCapacity -Now $n })['claude']
+        $c.remaining | Should -Be 15
+        $c.window | Should -Be 'week'
+        @($c.windows).Count | Should -Be 2
+        (@($c.windows) | Where-Object { $_.label -eq '5h' }).state | Should -Be 'reset'
+        (@($c.windows) | Where-Object { $_.label -eq 'week' }).state | Should -Not -Be 'reset'
+    }
+    It 'reports reset with no remaining percent when every logged Codex window has passed (never a fresh 100 %)' {
+        $t = [datetime]'2026-10-05T10:00:00Z'
+        Write-CapCodexLog -Observed $t -Windows @(
+            @{ minutes = 300; used = 97; resets = $t.AddHours(1) }, @{ minutes = 10080; used = 60; resets = $t.AddHours(2) })
+        $c = (InModuleScope aos -Parameters @{ n = $t.AddHours(3).ToUniversalTime() } { param($n) Get-AosCapacity -Now $n })['codex']
+        $c.state | Should -Be 'reset'
+        $c.remaining | Should -BeNullOrEmpty
+    }
+    It 'marks a Codex reading older than 5 h as stale even when its resets are still ahead' {
+        $t = [datetime]'2026-10-05T04:00:00Z'
+        Write-CapCodexLog -Observed $t -Windows @(
+            @{ minutes = 300; used = 10; resets = $t.AddHours(30) }, @{ minutes = 10080; used = 20; resets = $t.AddDays(4) })
+        $c = (InModuleScope aos -Parameters @{ n = $t.AddHours(6).ToUniversalTime() } { param($n) Get-AosCapacity -Now $n })['codex']
+        $c.state | Should -Be 'stale'
+    }
+    It 'treats a Codex reading observed more than 60 s in the future as unknown' {
+        $now = [datetime]'2026-10-05T12:00:00Z'
+        Write-CapCodexLog -Observed $now.AddMinutes(10) -Windows @(
+            @{ minutes = 300; used = 10; resets = $now.AddHours(3) }, @{ minutes = 10080; used = 20; resets = $now.AddDays(4) })
+        $c = (InModuleScope aos -Parameters @{ n = $now.ToUniversalTime() } { param($n) Get-AosCapacity -Now $n })['codex']
+        $c.state | Should -Be 'unknown'
+        $c.remaining | Should -BeNullOrEmpty
+    }
+    It 'excludes malformed Codex windows (out-of-range percent, missing or zero reset) from availability without throwing' {
+        $now = [datetime]'2026-10-05T12:00:00Z'
+        # 150 % used is not a reading: the valid weekly window binds
+        Write-CapCodexLog -Observed $now.AddMinutes(-5) -Windows @(
+            @{ minutes = 300; used = 150; resets = $now.AddHours(2) }, @{ minutes = 10080; used = 20; resets = $now.AddDays(4) })
+        $h = @{ cap = $null }
+        { $h.cap = InModuleScope aos -Parameters @{ n = $now.ToUniversalTime() } { param($n) Get-AosCapacity -Now $n } } | Should -Not -Throw
+        $h.cap['codex'].remaining | Should -Be 80
+        $h.cap['codex'].window | Should -Be 'week'
+        # no usable reset at all: nothing is known, and an epoch reset must not read as a full window
+        Write-CapCodexLog -Observed $now.AddMinutes(-5) -Windows @(@{ minutes = 300; used = 0; resets = 0 }, @{ minutes = 10080; used = 0 })
+        { $h.cap = InModuleScope aos -Parameters @{ n = $now.ToUniversalTime() } { param($n) Get-AosCapacity -Now $n } } | Should -Not -Throw
+        if ($h.cap.Contains('codex')) {
+            $h.cap['codex'].remaining | Should -BeNullOrEmpty
+            $h.cap['codex'].state | Should -Not -BeIn @('ok', 'low', 'limited')
+        }
+    }
+    It 'reads label, used percent and reset from a disposable CODEX_HOME and never turns a missing reset into the epoch' {
+        $t = [datetime]'2026-10-05T09:00:00Z'
+        Write-CapCodexLog -Observed $t -Windows @(@{ minutes = 300; used = 42.5; resets = $t.AddHours(2) }, @{ minutes = 10080; used = 7; resets = 0 })
+        $r = InModuleScope aos { Read-AosCodexLimits }
+        $r.observed | Should -Be $t.ToUniversalTime()
+        $five = @($r.windows | Where-Object { $_.label -eq '5h' })[0]
+        $five.used | Should -Be 42.5
+        ConvertTo-CapUtc $five.resets | Should -Be $t.AddHours(2).ToUniversalTime()
+        $epoch = [datetime]::new(1970, 1, 1, 0, 0, 0, [System.DateTimeKind]::Utc)
+        foreach ($w in @($r.windows)) { if ($null -ne $w.resets -and $w.resets -ne '') { ConvertTo-CapUtc $w.resets | Should -Not -Be $epoch } }
+    }
+    It 'keeps reading an old capacity ledger row that has no windows' {
+        InModuleScope aos { Add-AosLedgerEvent ([ordered]@{ type = 'capacity'; vendor = 'claude'; remaining = 23; resets = ''; source = 'user'; note = 'pre-windows row' }) }
+        $h = @{ cap = $null }
+        { $h.cap = InModuleScope aos { Get-AosCapacity -Now ([datetime]::UtcNow) } } | Should -Not -Throw
+        $c = $h.cap['claude']
+        $c.remaining | Should -Be 23
+        $c.state | Should -Be 'low'
+        $c.source | Should -Be 'user'
+        @($c.PSObject.Properties.Name) | Should -Contain 'windows'
+    }
+    It 'records the session and weekly windows from aos capacity set --weekly/--weekly-resets' {
+        $now = [datetime]::UtcNow
+        $session = ConvertTo-CapIso $now.AddHours(2)
+        $week = ConvertTo-CapIso $now.AddDays(3)
+        aos capacity set claude 60 --resets $session --weekly 25 --weekly-resets $week | Out-Null
+        @(Get-CapLedgerEvents).Count | Should -Be 1
+        $c = (InModuleScope aos { Get-AosCapacity -Now ([datetime]::UtcNow) })['claude']
+        $c.remaining | Should -Be 25
+        $c.window | Should -Be 'week'
+        @(@($c.windows) | ForEach-Object { $_.label }) | Should -Be @('5h', 'week')
+        ConvertTo-CapUtc (@($c.windows) | Where-Object { $_.label -eq 'week' }).resets | Should -Be (ConvertTo-CapUtc $week)
+        ConvertTo-CapUtc (@($c.windows) | Where-Object { $_.label -eq '5h' }).resets | Should -Be (ConvertTo-CapUtc $session)
+    }
+    It 'answers malformed resets or an incomplete weekly pair with usage, writes nothing and does not throw' {
+        $iso = ConvertTo-CapIso ([datetime]::UtcNow.AddDays(2))
+        $bad = @(
+            @('set', 'codex', '40', '--resets', '25:00'),
+            @('set', 'codex', '40', '--resets', 'garbage'),
+            @('set', 'codex', '40', '--weekly', '30'),
+            @('set', 'codex', '40', '--weekly-resets', $iso),
+            @('set', 'codex', '40', '--weekly', '30', '--weekly-resets', '25:00'),
+            @('set', 'codex', '40', '--weekly', '30', '--weekly-resets', 'garbage'),
+            @('set', 'codex', '40', '--weekly', '130', '--weekly-resets', $iso))
+        foreach ($argv in $bad) {
+            $h = @{ out = '' }
+            { $h.out = aos capacity @argv *>&1 | Out-String } | Should -Not -Throw -Because ($argv -join ' ')
+            $h.out | Should -Match 'usage:' -Because ($argv -join ' ')
+            @(Get-CapLedgerEvents).Count | Should -Be 0 -Because ($argv -join ' ')
+        }
+    }
+    It 'prints capacity as JSON with ISO UTC dates, windows, source, state and null remaining after a reset' {
+        $future = [datetime]::UtcNow.AddHours(3)
+        $future = [datetime]::new($future.Year, $future.Month, $future.Day, $future.Hour, 47, 0, [System.DateTimeKind]::Utc)
+        aos capacity set codex 40 --resets (ConvertTo-CapIso $future) | Out-Null
+        InModuleScope aos { Add-AosCapacityEvent -Vendor 'claude' -Remaining 0 -Resets ([datetime]::UtcNow.AddMinutes(-5).ToString('yyyy-MM-ddTHH:mm:ssZ')) -Source 'reported' -Note '' }
+        $raw = (aos capacity --json) | Out-String
+        $h = @{ json = $null }
+        { $h.json = $raw | ConvertFrom-Json } | Should -Not -Throw
+        $raw | Should -Not -Match 'System\.Collections|@\{'
+        $raw | Should -Match '"reported"\s*:\s*"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z"'
+        $raw | Should -Match ('"resets"\s*:\s*"' + [regex]::Escape($future.ToString('yyyy-MM-ddTHH:mm', $capInv)))
+        $codex = Get-CapJsonVendor $h.json 'codex'
+        $codex | Should -Not -BeNullOrEmpty
+        @($codex.PSObject.Properties.Name) | Should -Contain 'windows'
+        $codex.source | Should -Be 'reported'
+        $codex.state | Should -Be 'ok'
+        $claude = Get-CapJsonVendor $h.json 'claude'
+        $claude.state | Should -Be 'reset'
+        @($claude.PSObject.Properties.Name) | Should -Contain 'remaining'
+        $claude.remaining | Should -BeNullOrEmpty
+    }
+    It 'shows the reported reset (or says unknown) in text output, independent of the current culture' {
+        $savedCulture = [System.Threading.Thread]::CurrentThread.CurrentCulture
+        try {
+            [System.Threading.Thread]::CurrentThread.CurrentCulture = [System.Globalization.CultureInfo]::GetCultureInfo('th-TH')
+            $future = [datetime]::UtcNow.AddHours(3)
+            $future = [datetime]::new($future.Year, $future.Month, $future.Day, $future.Hour, 47, 0, [System.DateTimeKind]::Utc)
+            aos capacity set codex 40 --resets ($future.ToString('yyyy-MM-ddTHH:mm:ssZ', $capInv)) | Out-Null
+            InModuleScope aos { Add-AosCapacityEvent -Vendor 'claude' -Remaining 50 -Resets '' -Source 'reported' -Note '' }
+            $c = (InModuleScope aos { Get-AosCapacity -Now ([datetime]::UtcNow) })['codex']
+            ConvertTo-CapUtc $c.resets | Should -Be $future
+            $out = aos capacity *>&1 | Out-String
+        } finally { [System.Threading.Thread]::CurrentThread.CurrentCulture = $savedCulture }
+        $lines = @($out -split "`r?`n")
+        $codexLine = @($lines | Where-Object { $_ -match '^\s*codex\b' }) -join "`n"
+        $claudeLine = @($lines | Where-Object { $_ -match '^\s*claude\b' }) -join "`n"
+        $codexLine | Should -Match 'reset'
+        $codexLine | Should -Match ('{0}|{1}' -f [regex]::Escape($future.ToLocalTime().ToString('HH:mm', $capInv)), [regex]::Escape($future.ToString('HH:mm', $capInv)))
+        $claudeLine | Should -Match 'unknown'
+        $out | Should -Match 'reported'
+        $out | Should -Not -Match '25\d\d-'
+    }
+    It 'warns to refresh a reset, stale or future Codex reading instead of staying silent' {
+        $now = [datetime]::UtcNow
+        $cases = @(
+            @{ name = 'reset'; observed = $now.AddHours(-2); w = @(@{ minutes = 300; used = 50; resets = $now.AddHours(-1) }, @{ minutes = 10080; used = 50; resets = $now.AddMinutes(-30) }) },
+            @{ name = 'stale'; observed = $now.AddHours(-6); w = @(@{ minutes = 300; used = 10; resets = $now.AddDays(1) }, @{ minutes = 10080; used = 10; resets = $now.AddDays(4) }) },
+            @{ name = 'unknown'; observed = $now.AddMinutes(10); w = @(@{ minutes = 300; used = 10; resets = $now.AddHours(3) }, @{ minutes = 10080; used = 10; resets = $now.AddDays(4) }) })
+        foreach ($k in $cases) {
+            Write-CapCodexLog -Observed $k.observed -Windows $k.w
+            $h = @{ msg = $null }
+            { $h.msg = InModuleScope aos { Get-AosCapacityWarning -Vendor 'codex' } } | Should -Not -Throw -Because $k.name
+            $h.msg | Should -Match 'refresh' -Because $k.name
+        }
+    }
+}
+
 Describe 'Coordination claims' {
     BeforeEach {
         $env:AOS_COORD = Join-Path $caseRoot 'coord'
