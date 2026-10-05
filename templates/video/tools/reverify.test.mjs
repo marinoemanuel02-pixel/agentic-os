@@ -61,3 +61,43 @@ test('finds normalized anchor, reports changed pages, and requires browser confi
     rmSync(dir, {recursive:true, force:true});
   }
 });
+
+// Retro 32: a recheck must leave proof. With --evidence, each page gets <id>.txt: URL, time, length, the SHA-256 of
+// its full normalized text and a short excerpt around the anchor (no full copy of the article); the hash is recorded
+// in the ledger. A browser row passes only with such a file, saved from the browser, that contains its anchor.
+test('--evidence keeps each page text with its hash and checks browser rows against their saved text', async () => {
+  const {createHash} = await import('node:crypto');
+  const {existsSync, mkdirSync} = await import('node:fs');
+  const server = createServer((req, res) => { res.statusCode = 200; res.end('<p>Evidence &amp; more</p>'); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const dir = mkdtempSync(join(tmpdir(), 'reverify-evidence-'));
+  try {
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const file = join(dir, 'currency.json');
+    const ev = join(dir, 'evidence');
+    const items = [
+      {id:'C01', url:`${base}/good`, fetch:'curl', anchor:'Evidence & more', retrieved:'2026-09-01'},
+      {id:'C03', url:`${base}/browser`, fetch:'browser', anchor:'manual anchor', retrieved:'2026-09-01'},
+    ];
+    writeFileSync(file, JSON.stringify({items}));
+    const noText = await run([file, '--today', TODAY, '--browser-ok', 'C03', '--evidence', ev, '--write']);
+    assert.equal(noText.status, 1, 'a confirmed browser row without saved page text fails');
+    assert.match(noText.stdout, /BROWSER C03 .*no saved page text/);
+    mkdirSync(ev, {recursive: true});
+    writeFileSync(join(ev, 'C03.txt'), ['url: x', 'via: browser', 'sha256: ' + 'a'.repeat(64), 'excerpt: page text with the manual anchor in it'].join('\n') + '\n');
+    writeFileSync(file, JSON.stringify({items}));
+    const ok = await run([file, '--today', TODAY, '--browser-ok', 'C03', '--evidence', ev, '--write']);
+    assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+    assert.ok(existsSync(join(ev, 'C01.txt')));
+    const kept = readFileSync(join(ev, 'C01.txt'), 'utf8');
+    assert.match(kept, /^excerpt: .*Evidence & more/m);
+    const saved = JSON.parse(readFileSync(file)).items;
+    const sha = (t) => createHash('sha256').update(t).digest('hex');
+    assert.deepEqual(saved[0].reverified.at(-1), {date: TODAY, result: 'ok', evidence: 'C01.txt', sha256: sha('Evidence & more')});
+    assert.match(kept, new RegExp('^sha256: ' + sha('Evidence & more') + '$', 'm'));
+    assert.equal(saved[1].reverified.at(-1).sha256, 'a'.repeat(64));
+  } finally {
+    server.close();
+    rmSync(dir, {recursive: true, force: true});
+  }
+});
