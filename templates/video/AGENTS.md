@@ -101,3 +101,6 @@ images (`codex exec -i`) at the look gate, the hero, the animatic and the final 
 cuts at `--scale=0.5` or quarter scale. Do not edit hashed inputs, build scripts or this checkout while `build.sh` or
 QA runs; reviews, docs and the next brief can run beside a render, edits to the tree cannot. Keep the computer awake
 for long jobs, and log each stage's minutes with `aos video log`. Use `-nostdin` for ffmpeg inside shell loops.
+For the final independent review, fill `tasks/final-review-task.md`. Its receipt distinguishes frames actually
+opened from numeric comparisons, and keeps playback/listening and pending QA explicit. Preserve superseded
+exports and reviews; bind the final review, white scan and transcription to the final MP4 SHA256.

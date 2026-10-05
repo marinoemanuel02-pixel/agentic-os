@@ -2431,6 +2431,7 @@ function Get-AosLedger([int]$Last = 20) {
         try {
             $e = ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $line -ErrorAction Stop)
             if ($e -is [System.Collections.IDictionary] -and $e.Contains('ts')) { $e['ts'] = ConvertTo-AosStamp $e['ts'] }
+            if ($e -is [System.Collections.IDictionary] -and $e.Contains('resets')) { $e['resets'] = ConvertTo-AosStamp $e['resets'] }
             [void]$out.Add($e)
         }
         catch { }
@@ -3193,7 +3194,10 @@ function Add-AosCapacityEvent([string]$Vendor, [int]$Remaining, [string]$Resets,
 
 function ConvertTo-AosCapacityUtc($Value) {
     if ($null -eq $Value -or [string]$Value -eq '') { return $null }
-    if ($Value -is [datetime]) { return $Value.ToUniversalTime() }
+    if ($Value -is [datetime]) {
+        if ($Value.Kind -eq [DateTimeKind]::Unspecified) { $Value = [datetime]::SpecifyKind($Value, [DateTimeKind]::Utc) }
+        return $Value.ToUniversalTime()
+    }
     if ($Value -is [DateTimeOffset]) { return $Value.UtcDateTime }
     $at = [DateTimeOffset]::MinValue
     $style = [System.Globalization.DateTimeStyles]::AssumeUniversal -bor [System.Globalization.DateTimeStyles]::AdjustToUniversal
@@ -3210,7 +3214,7 @@ function Format-AosCapacityUtc($Value) {
 function Add-AosCapacityFromError([string]$Vendor, [string]$Message) {
     $at = ConvertFrom-AosQuotaReset -Message $Message -Now ([datetime]::Now)
     $resets = ''
-    if ($at) { $resets = $at.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
+    if ($at) { $resets = Format-AosCapacityUtc $at }
     Add-AosCapacityEvent -Vendor $Vendor -Remaining 0 -Resets $resets -Source 'delegate' -Note 'quota error in a delegate receipt'
 }
 
@@ -3301,8 +3305,8 @@ function Get-AosCapacity([datetime]$Now) {
             $left = [int][Math]::Floor(100 - $used); $state = 'ok'
             if (($ts - $Now).TotalSeconds -gt 60) { $state = 'unknown' }
             elseif ($reset -and $reset -le $Now) { $state = 'reset' }
-            elseif (($Now - $ts).TotalHours -ge $script:CapacityStaleHours) { $state = 'stale' }
             elseif ($left -le 0 -and $reset) { $state = 'limited' }
+            elseif (($Now - $ts).TotalHours -ge $script:CapacityStaleHours) { $state = 'stale' }
             elseif ($left -le $script:CapacityLowPercent) { $state = 'low' }
             if ($state -in @('reset', 'stale', 'unknown')) { $left = $null }
             $window = [pscustomobject]@{ label = [string]$w.label; used = $used; remaining = $left; resets = $reset; state = $state }
@@ -3327,6 +3331,7 @@ function Get-AosCapacityWarning([string]$Vendor) {
     $c = $cap[$Vendor]
     if ($c.state -eq 'limited') { return "$Vendor is limited until $($c.resets.ToLocalTime().ToString('HH:mm')) (quota): give this task to the other vendor, or schedule it after the reset" }
     if ($c.state -in @('reset', 'stale', 'unknown')) { return "$Vendor capacity is $($c.state): refresh its real usage before planning work" }
+    if (@($c.windows | Where-Object { $_.state -eq 'reset' }).Count -gt 0) { return "$Vendor has a reset window: refresh that window's real usage; the observed $($c.window) limit still binds" }
     if ($c.state -eq 'low') {
         $reset = 'unknown'
         if ($c.resets) { $reset = Format-AosCapacityUtc $c.resets }
@@ -3358,7 +3363,7 @@ function Invoke-AosCapacity([string[]]$Arguments) {
                 if ($hours -gt 23 -or $minutes -gt 59) { Write-AosWarn $usage; return }
                 $at = [datetime]::Today.AddHours($hours).AddMinutes($minutes)
                 if ($at -lt [datetime]::Now) { $at = $at.AddDays(1) }
-            } elseif ($r -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}') { $at = ConvertTo-AosCapacityUtc $r }
+            } elseif ($r -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$') { $at = ConvertTo-AosCapacityUtc $r }
             if ($null -eq $at) { Write-AosWarn $usage; return }
             $dates[$key] = Format-AosCapacityUtc $at
         }
@@ -3391,6 +3396,7 @@ function Invoke-AosCapacity([string[]]$Arguments) {
         elseif ($c.state -eq 'reset') { $hint = 'its reset has passed: check its real usage before a big task' }
         elseif ($c.state -eq 'stale') { $hint = 'report is old: ask for a fresh number before planning' }
         elseif ($c.state -eq 'unknown') { $hint = 'refresh its real usage before planning' }
+        if ($c.state -in @('ok', 'low') -and @($c.windows | Where-Object { $_.state -eq 'reset' }).Count -gt 0) { $hint = 'refresh the reset window; the observed ' + $c.window + ' limit still binds' }
         $age = [int]([datetime]::UtcNow - $c.reported).TotalMinutes
         $left = 'unknown'; $reset = 'unknown'
         if ($null -ne $c.remaining) { $left = [string]$c.remaining + ' %' }

@@ -3659,6 +3659,57 @@ Describe 'Capacity telemetry regressions' {
     }
 }
 
+Describe 'Capacity telemetry review regressions' {
+    BeforeEach {
+        $env:AOS_COORD = Join-Path $caseRoot ('coord-cap-review-' + [guid]::NewGuid().ToString('N'))
+        $savedCapReviewHome = $env:CODEX_HOME
+        $env:CODEX_HOME = Join-Path $caseRoot ('codex-cap-review-' + [guid]::NewGuid().ToString('N'))
+    }
+    AfterEach { $env:CODEX_HOME = $savedCapReviewHome }
+    It 'retains known exhaustion until its weekly reset even when the observation is stale' {
+        $c = InModuleScope aos {
+            Mock Read-AosCodexLimits { [pscustomobject]@{ observed=[datetime]::UtcNow.AddHours(-6); windows=@(
+                [pscustomobject]@{ label='5h'; used=10; resets=[datetime]::UtcNow.AddHours(2) },
+                [pscustomobject]@{ label='week'; used=100; resets=[datetime]::UtcNow.AddDays(3) }) } }
+            (Get-AosCapacity -Now ([datetime]::UtcNow))['codex']
+        }
+        $c.state | Should -Be 'limited'
+        $c.remaining | Should -Be 0
+        $c.window | Should -Be 'week'
+    }
+    It 'requires an explicit offset on ISO CLI reset dates instead of guessing local or UTC' {
+        $out = aos capacity set claude 50 --resets '2026-10-05T23:00' *>&1 | Out-String
+        $out | Should -Match 'usage:'
+        @(InModuleScope aos { Get-AosLedger } | Where-Object { $_.type -eq 'capacity' }).Count | Should -Be 0
+    }
+    It 'normalizes an unspecified DateTime as UTC consistently with legacy JSON strings' {
+        $d = [datetime]::SpecifyKind([datetime]'2026-10-05T23:00:00', [DateTimeKind]::Unspecified)
+        $actual = InModuleScope aos -Parameters @{ d=$d } { param($d) ConvertTo-AosCapacityUtc $d }
+        $actual | Should -Be ([datetime]::SpecifyKind($d, [DateTimeKind]::Utc))
+    }
+    It 'records quota-error reset years using the invariant calendar' {
+        $savedCulture = [Threading.Thread]::CurrentThread.CurrentCulture
+        try {
+            [Threading.Thread]::CurrentThread.CurrentCulture = [Globalization.CultureInfo]::GetCultureInfo('th-TH')
+            InModuleScope aos {
+                Mock ConvertFrom-AosQuotaReset { [datetime]::UtcNow.AddHours(2) }
+                Add-AosCapacityFromError -Vendor 'claude' -Message 'fixture quota'
+            }
+            $e = @(InModuleScope aos { Get-AosLedger })[0]
+        } finally { [Threading.Thread]::CurrentThread.CurrentCulture = $savedCulture }
+        $e.resets | Should -Match ('^' + [datetime]::UtcNow.Year + '-')
+    }
+    It 'keeps the observed week while asking to refresh a reset session window' {
+        InModuleScope aos {
+            Mock Read-AosCodexLimits { [pscustomobject]@{ observed=[datetime]::UtcNow.AddMinutes(-1); windows=@(
+                [pscustomobject]@{ label='5h'; used=10; resets=[datetime]::UtcNow.AddMinutes(-1) },
+                [pscustomobject]@{ label='week'; used=10; resets=[datetime]::UtcNow.AddDays(3) }) } }
+            (Get-AosCapacity -Now ([datetime]::UtcNow))['codex'].window | Should -Be 'week'
+            Get-AosCapacityWarning -Vendor 'codex' | Should -Match 'refresh'
+        }
+    }
+}
+
 Describe 'Coordination claims' {
     BeforeEach {
         $env:AOS_COORD = Join-Path $caseRoot 'coord'
