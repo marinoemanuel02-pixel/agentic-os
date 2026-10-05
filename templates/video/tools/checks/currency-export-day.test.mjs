@@ -11,3 +11,10 @@ test('export-day evidence must match today even when draft research has a three-
   data.items[0].reverified.push({date:'2026-10-04',result:'ok'});
   assert.deepEqual(checkCurrency(data,'2026-10-04',undefined,true),[]);
 });
+test('a re-verification recorded without proof cannot certify an export (Codex review, 2026-10-05)', () => {
+  const data = fixture();
+  data.items[0].reverified.push({date: '2026-10-04', result: 'ok', proof: 'none'});
+  assert.ok(checkCurrency(data, '2026-10-04', undefined, true).some((error) => /re-verified without proof/.test(error)));
+  data.items[0].reverified.push({date: '2026-10-04', result: 'ok', evidence: 'C1.txt', sha256: 'a'.repeat(64)});
+  assert.deepEqual(checkCurrency(data, '2026-10-04', undefined, true), []);
+});

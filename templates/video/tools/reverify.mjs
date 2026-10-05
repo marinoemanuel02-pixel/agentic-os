@@ -37,12 +37,19 @@ export async function reverify(data, today, browserOk = new Set(), evidence = nu
   for (const item of data.items) {
     if (item.fetch === 'browser') {
       if (!browserOk.has(item.id)) { console.log(`BROWSER ${item.id} ${item.url} anchor: "${item.anchor}"`); problems.push(item.id); continue; }
+      if (!evidence) proof.set(item.id, {proof: 'none'}); // the export gate refuses this (Codex review)
       if (evidence) {
         const saved = join(evidence, `${item.id}.txt`);
         const text = existsSync(saved) ? readFileSync(saved, 'utf8') : null;
         const hash = text && /^sha256: ([0-9a-f]{64})$/m.exec(text);
-        if (text === null || !hash || !normalizeText(text).includes(normalizeText(item.anchor))) {
-          console.log(`BROWSER ${item.id} ${item.url}: ${text === null ? 'no saved page text' : 'saved page text lacks the anchor or a sha256 line'}`);
+        const url = text && /^url: (\S+)$/m.exec(text);
+        const captured = text && /^captured: (\d{4}-\d{2}-\d{2})/m.exec(text);
+        const why = text === null ? 'no saved page text'
+          : !hash || !normalizeText(text).includes(normalizeText(item.anchor)) ? 'saved page text lacks the anchor or a sha256 line'
+          : !url || url[1] !== item.url ? 'proof names another URL'
+          : !captured || captured[1] !== today ? 'proof is not from today' : null;
+        if (why) {
+          console.log(`BROWSER ${item.id} ${item.url}: ${why}`);
           problems.push(item.id);
           continue;
         }

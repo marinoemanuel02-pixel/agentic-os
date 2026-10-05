@@ -63,6 +63,9 @@ export function checkCurrency(data, today, claims, exportMode = false) {
       const dates = (Array.isArray(item?.reverified) ? item.reverified : []).filter((r) => r?.result === 'ok').map((r) => parseDate(r.date)).filter((ms) => ms !== null);
       const last = dates.length ? Math.max(...dates) : null;
       if (last !== todayMs) errors.push(`not re-verified for export: ${item?.id}`);
+      // a browser confirmation recorded without a proof file cannot certify an export (Codex review, 2026-10-05)
+      const today = (Array.isArray(item?.reverified) ? item.reverified : []).filter((r) => r?.result === 'ok' && parseDate(r.date) === todayMs);
+      if (today.length && today.every((r) => r.proof === 'none')) errors.push(`re-verified without proof for export: ${item?.id}`);
     }
   }
   if (claims) {

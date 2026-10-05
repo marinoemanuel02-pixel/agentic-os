@@ -84,7 +84,7 @@ test('--evidence keeps each page text with its hash and checks browser rows agai
     assert.equal(noText.status, 1, 'a confirmed browser row without saved page text fails');
     assert.match(noText.stdout, /BROWSER C03 .*no saved page text/);
     mkdirSync(ev, {recursive: true});
-    writeFileSync(join(ev, 'C03.txt'), ['url: x', 'via: browser', 'sha256: ' + 'a'.repeat(64), 'excerpt: page text with the manual anchor in it'].join('\n') + '\n');
+    writeFileSync(join(ev, 'C03.txt'), ['url: ' + base + '/browser', 'captured: ' + TODAY + 'T09:00:00Z', 'via: browser', 'sha256: ' + 'a'.repeat(64), 'excerpt: page text with the manual anchor in it'].join('\n') + '\n');
     writeFileSync(file, JSON.stringify({items}));
     const ok = await run([file, '--today', TODAY, '--browser-ok', 'C03', '--evidence', ev, '--write']);
     assert.equal(ok.status, 0, ok.stdout + ok.stderr);
@@ -98,6 +98,34 @@ test('--evidence keeps each page text with its hash and checks browser rows agai
     assert.equal(saved[1].reverified.at(-1).sha256, 'a'.repeat(64));
   } finally {
     server.close();
+    rmSync(dir, {recursive: true, force: true});
+  }
+});
+
+test('browser proof must name the row URL and today; without --evidence a browser row is recorded as unproven (Codex review)', async () => {
+  const {mkdirSync} = await import('node:fs');
+  const dir = mkdtempSync(join(tmpdir(), 'reverify-proof-'));
+  try {
+    const file = join(dir, 'currency.json');
+    const ev = join(dir, 'evidence');
+    mkdirSync(ev, {recursive: true});
+    const items = [{id: 'C03', url: 'https://example.invalid/page', fetch: 'browser', anchor: 'manual anchor', retrieved: '2026-09-01'}];
+    const proof = (url, captured) => writeFileSync(join(ev, 'C03.txt'), ['url: ' + url, 'captured: ' + captured, 'via: browser', 'sha256: ' + 'b'.repeat(64), 'excerpt: the manual anchor'].join('\n') + '\n');
+    writeFileSync(file, JSON.stringify({items}));
+    proof('https://example.invalid/other', TODAY + 'T10:00:00Z');
+    let r = await run([file, '--today', TODAY, '--browser-ok', 'C03', '--evidence', ev, '--write']);
+    assert.equal(r.status, 1, 'a proof for another URL fails');
+    proof('https://example.invalid/page', '2026-09-30T10:00:00Z');
+    r = await run([file, '--today', TODAY, '--browser-ok', 'C03', '--evidence', ev, '--write']);
+    assert.equal(r.status, 1, 'an old proof fails');
+    proof('https://example.invalid/page', TODAY + 'T10:00:00Z');
+    r = await run([file, '--today', TODAY, '--browser-ok', 'C03', '--evidence', ev, '--write']);
+    assert.equal(r.status, 0, r.stdout);
+    writeFileSync(file, JSON.stringify({items}));
+    r = await run([file, '--today', TODAY, '--browser-ok', 'C03', '--write']);
+    assert.equal(r.status, 0);
+    assert.equal(JSON.parse(readFileSync(file)).items[0].reverified.at(-1).proof, 'none');
+  } finally {
     rmSync(dir, {recursive: true, force: true});
   }
 });
