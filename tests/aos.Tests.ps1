@@ -967,7 +967,8 @@ Describe 'Video input provenance' {
         @{ Check = 'joins'; File = 'joins.test.mts' },
         @{ Check = 'screen text'; File = 'screen-text.test.mjs' },
         @{ Check = 'pipeline'; File = 'pipeline.test.mjs' },
-        @{ Check = 'review sheets'; File = 'review-sheets.test.mts' }
+        @{ Check = 'review sheets'; File = 'review-sheets.test.mts' },
+        @{ Check = 'grade (no fringes, no SAO halos)'; File = 'grade.test.mjs' }
     ) {
         $testFile = Join-Path $PSScriptRoot "..\templates\video\tools\checks\$File"
         $savedScratch = $env:AOS_VIDEO_TEST_ROOT

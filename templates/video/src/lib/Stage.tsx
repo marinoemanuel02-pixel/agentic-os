@@ -35,12 +35,9 @@ const GradeShader = {
     void main(){
       vec2 c = vUv - 0.5;
       float r = length(c);
-      // slight lateral chromatic aberration toward the edges, like a real lens
-      vec2 off = c * r * 0.0035;
-      vec3 col;
-      col.r = texture2D(tDiffuse, vUv + off).r;
-      col.g = texture2D(tDiffuse, vUv).g;
-      col.b = texture2D(tDiffuse, vUv - off).b;
+      // one sample for all channels: lateral chromatic aberration fringed every edge with orange/blue, which
+      // viewers read as outlines around objects (alignment-now v7 verdict)
+      vec3 col = texture2D(tDiffuse, vUv).rgb;
       float vig = smoothstep(0.85, 0.2, r * (1.0 + uVignette));
       col *= mix(1.0 - uVignette, 1.0, vig);
       float g = hash(floor(vUv * uRes) + mod(uFrame, 97.0) * 17.0) - 0.5;
