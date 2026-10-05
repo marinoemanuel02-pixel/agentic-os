@@ -56,9 +56,9 @@ Files: `templates/video/tools/qa.sh`, matching fixtures in `tests/aos.Tests.ps1`
 
 - [x] Assemble sanitized operation records: tools/versions, exact commands and exit results, stage timings, notes, delegation receipts, capacity observations with resets, UI fallback result/failures, builds/cache outcomes, reviews/responses and source receipts. No secrets or unrelated chats/logs.
 - [x] Write the closing retro and an evidence-linked workflow report. Distinguish measured outcomes, retained unknowns, already implemented fixes and deferred proposals. Include the avoidable clarification loop and failed native Claude capacity lookup.
-- [ ] Commit/push harness improvements on `codex/film-final-workflow`; no merge into the user's active harness branch or profile sync without review.
-- [ ] Package to a new Inbox delivery: README, film/captions/metadata/480p preview, exact SHA256 receipt, separate review records, workflow report, sanitized operation data and tests/review receipts. For a changed film tag/push film-v9; for unchanged v8 retain film-v8 and push review/retro metadata on a branch.
-- [ ] Independently verify every packaged hash/size, matching final seal, and complete the director's shipping decision.
+- [x] Commit/push harness improvements on `codex/film-final-workflow`; no merge into the user's active harness branch or profile sync without review.
+- [x] Package to a new Inbox delivery: README, film/captions/metadata/480p preview, exact SHA256 receipt, separate review records, workflow report, sanitized operation data and tests/review receipts. For a changed film tag/push film-v9; for unchanged v8 retain film-v8 and push review/retro metadata on a branch.
+- [x] Independently verify every packaged hash/size, matching final seal, and complete the director's shipping decision.
 
 ## Review focus
 
@@ -69,4 +69,4 @@ Files: `templates/video/tools/qa.sh`, matching fixtures in `tests/aos.Tests.ps1`
 5. Failed tools/reviewers: record failure and retry boundedly or retain the unknown; never convert failure to a clean verdict.
 
 
-Final execution evidence is in `2026-10-05-film-final-verification.md`. Delivery/push checkboxes are closed by the film delivery receipt; they remain pending here until that receipt exists. The shared template pacing guard was already correct; only the film copy required a repair.
+Final execution evidence is in `2026-10-05-film-final-verification.md`. Delivery/push checkboxes are closed by the film delivery receipt and independent destination verification at2026-10-05T20:40:35.490150Z:192 files, all hashes/sizes and sealed media/QA bindings passed. The shared template pacing guard was already correct; only the film copy required a repair.
