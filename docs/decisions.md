@@ -3,6 +3,27 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-05 - Capacity observations keep both windows and preserve uncertainty
+
+- During the alignment-now director pass, Codex's capacity reader treated every expired log window as100%
+  available, ignored log staleness and converted missing reset times to1970. Reported Claude limits retained
+  only one structured window; weekly limits and reset times were lost in free text. These were scheduling
+  defects, not evidence of usable quota. Claude authored12 failing regressions; Codex verified their red
+  failures and implemented the fix, preserving the existing weekly-binding test.
+- Capacity events optionally retain session and weekly windows. The tightest fresh unexpired observation
+  binds; elapsed resets, stale or future readings do not invent availability. JSON uses explicit depth and
+  ISO UTC dates. CLI dates and coordination timestamps use the invariant culture: the regression exposed
+  Buddhist-calendar year conversion under th-TH. Legacy events remain readable and malformed advice must
+  not stop delegation.
+- The existing native Paseo usage API first returned Claude unavailable, then returned both limits after
+  normal Claude CLI work. That sequence does not establish the cause. No credentials were inspected,
+  copied or refreshed by the director. Prefer native read-only telemetry when it reports available, and
+  retain the usage-card fallback and unknown state when it does not. Do not turn an unavailable reader
+  into automatic full capacity or consume reset credits.
+- The shared video template already failed a missing pacing report. The film's older vendored QA did not;
+  transfer that demonstrated guard rather than changing the correct template. Record separate vendor
+  reviews and responses, exact-export frame provenance, failures and sanitized operation data at delivery.
+
 ## 2026-10-04 - Notes reach the other agent: a PostToolUse notes hook
 
 - During alignment-now v7 Codex posted 17 `aos note`s in six hours (its window reset, review findings on Claude's

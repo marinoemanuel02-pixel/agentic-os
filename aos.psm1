@@ -2354,14 +2354,14 @@ function Get-AosCodexHome {
     return (Join-Path $HOME '.codex')
 }
 
-function Get-AosUtcStamp { return [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ') }
+function Get-AosUtcStamp { return [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ', [System.Globalization.CultureInfo]::InvariantCulture) }
 
 function ConvertTo-AosStamp($Value) {
     # PowerShell 7's ConvertFrom-Json turns ISO strings into DateTime; keep one textual UTC form.
     if ($Value -is [DateTime]) {
         $d = $Value
         if ($d.Kind -eq [System.DateTimeKind]::Unspecified) { $d = [DateTime]::SpecifyKind($d, [System.DateTimeKind]::Utc) }
-        return $d.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+        return $d.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ', [System.Globalization.CultureInfo]::InvariantCulture)
     }
     return [string]$Value
 }
@@ -3185,8 +3185,26 @@ function ConvertFrom-AosQuotaReset([string]$Message, [datetime]$Now) {
     return $at
 }
 
-function Add-AosCapacityEvent([string]$Vendor, [int]$Remaining, [string]$Resets, [string]$Source, [string]$Note) {
-    Add-AosLedgerEvent ([ordered]@{ type = 'capacity'; vendor = $Vendor; remaining = $Remaining; resets = $Resets; source = $Source; note = $Note })
+function Add-AosCapacityEvent([string]$Vendor, [int]$Remaining, [string]$Resets, [string]$Source, [string]$Note, [object[]]$Windows) {
+    $event = [ordered]@{ type = 'capacity'; vendor = $Vendor; remaining = $Remaining; resets = $Resets; source = $Source; note = $Note }
+    if ($Windows) { $event['windows'] = $Windows }
+    Add-AosLedgerEvent $event
+}
+
+function ConvertTo-AosCapacityUtc($Value) {
+    if ($null -eq $Value -or [string]$Value -eq '') { return $null }
+    if ($Value -is [datetime]) { return $Value.ToUniversalTime() }
+    if ($Value -is [DateTimeOffset]) { return $Value.UtcDateTime }
+    $at = [DateTimeOffset]::MinValue
+    $style = [System.Globalization.DateTimeStyles]::AssumeUniversal -bor [System.Globalization.DateTimeStyles]::AdjustToUniversal
+    if ([DateTimeOffset]::TryParse([string]$Value, [System.Globalization.CultureInfo]::InvariantCulture, $style, [ref]$at)) { return $at.UtcDateTime }
+    return $null
+}
+
+function Format-AosCapacityUtc($Value) {
+    $at = ConvertTo-AosCapacityUtc $Value
+    if ($null -ne $at) { return $at.ToString('yyyy-MM-ddTHH:mm:ssZ', [System.Globalization.CultureInfo]::InvariantCulture) }
+    return $null
 }
 
 function Add-AosCapacityFromError([string]$Vendor, [string]$Message) {
@@ -3222,15 +3240,23 @@ function Read-AosCodexLimits {
             try { $e = ConvertFrom-Json -InputObject $line -ErrorAction Stop } catch { continue }
             $rl = $e.payload.rate_limits
             if (-not $rl -or -not $e.timestamp) { continue }
-            $ts = [datetime]::Parse([string]$e.timestamp, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal)
+            $ts = ConvertTo-AosCapacityUtc $e.timestamp
+            if ($null -eq $ts) { continue }
             if ($best -and $best.observed -ge $ts) { continue }
             $windows = @()
             foreach ($w in @($rl.primary, $rl.secondary)) {
                 if (-not $w) { continue }
+                $used = 0.0; $minutes = 0; $seconds = [long]0
+                $number = [System.Globalization.NumberStyles]::Float
+                $culture = [System.Globalization.CultureInfo]::InvariantCulture
+                if (-not [double]::TryParse([string]$w.used_percent, $number, $culture, [ref]$used) -or
+                    [double]::IsNaN($used) -or [double]::IsInfinity($used) -or $used -lt 0 -or $used -gt 100 -or
+                    -not [int]::TryParse([string]$w.window_minutes, [ref]$minutes) -or $minutes -le 0 -or
+                    -not [long]::TryParse([string]$w.resets_at, [ref]$seconds) -or $seconds -le 0) { continue }
+                try { $reset = [DateTimeOffset]::FromUnixTimeSeconds($seconds).UtcDateTime } catch { continue }
                 $label = 'week'
-                if ([int]$w.window_minutes -lt 1440) { $label = [string]([int]([int]$w.window_minutes / 60)) + 'h' }
-                $windows += [pscustomobject]@{ label = $label; used = [double]$w.used_percent
-                    resets = [DateTimeOffset]::FromUnixTimeSeconds([long]$w.resets_at).UtcDateTime }
+                if ($minutes -lt 1440) { $label = [string]([int]($minutes / 60)) + 'h' }
+                $windows += [pscustomobject]@{ label = $label; used = $used; resets = $reset }
             }
             $best = [pscustomobject]@{ observed = $ts; windows = $windows }
         }
@@ -3239,9 +3265,7 @@ function Read-AosCodexLimits {
 }
 
 function Get-AosCapacity([datetime]$Now) {
-    # Newest capacity event per vendor -> state: limited (0 % and the reset is ahead), reset (the reset has passed),
-    # stale (a report older than a window), low (<= 30 %), ok. $Now is UTC. For Codex its own logged limits are used
-    # when newer than the last event: a window whose reset has passed counts as empty, the tightest one binds.
+    # A reset invalidates the old observation; it does not measure the new window. Keep both windows visible.
     $out = [ordered]@{}
     $events = @(Get-AosLedger -Last 0 | Where-Object { $_['type'] -eq 'capacity' -and $_['vendor'] })
     $codexLog = $null
@@ -3249,34 +3273,50 @@ function Get-AosCapacity([datetime]$Now) {
     foreach ($v in $script:CapacityVendors) {
         $last = @($events | Where-Object { $_['vendor'] -eq $v } | Select-Object -Last 1)
         $lastTs = $null
-        if ($last.Count -gt 0) { $lastTs = [datetime]::Parse([string]$last[0]['ts'], [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal) }
-        if ($v -eq 'codex' -and $codexLog -and $codexLog.windows.Count -gt 0 -and (-not $lastTs -or $codexLog.observed -gt $lastTs)) {
-            $bind = $null
-            foreach ($w in $codexLog.windows) {
-                $left = 100 - $w.used
-                if ($w.resets -le $Now) { $left = 100 }
-                if (-not $bind -or $left -lt $bind.left) { $bind = [pscustomobject]@{ left = $left; w = $w } }
+        if ($last.Count -gt 0) { $lastTs = ConvertTo-AosCapacityUtc $last[0]['ts'] }
+        $ts = $lastTs; $source = ''; $note = ''; $raw = @()
+        if ($v -eq 'codex' -and $codexLog -and (-not $lastTs -or $codexLog.observed -gt $lastTs)) {
+            $ts = $codexLog.observed; $source = 'codex-log'; $raw = @($codexLog.windows)
+        } else {
+            if ($last.Count -eq 0 -or $null -eq $lastTs) { continue }
+            $e = $last[0]; $source = [string]$e['source']; $note = [string]$e['note']
+            if ($e['windows']) { $raw = @($e['windows']) }
+            else {
+                # Legacy reports with no reset still carry an explicitly reported percent; say reset unknown.
+                $left = -1
+                if (-not [int]::TryParse([string]$e['remaining'], [ref]$left) -or $left -lt 0 -or $left -gt 100) { continue }
+                $reset = ConvertTo-AosCapacityUtc $e['resets']
+                if ($e['resets'] -and $null -eq $reset) { continue }
+                $raw = @([pscustomobject]@{ label = '5h'; used = 100 - $left; resets = $reset })
             }
-            $remaining = [int][Math]::Floor($bind.left)
-            $state = 'ok'
-            if ($remaining -le 0) { $state = 'limited' }
-            elseif ($remaining -le $script:CapacityLowPercent) { $state = 'low' }
-            $note = (@($codexLog.windows | ForEach-Object { '{0} {1} % used, resets {2}' -f $_.label, $_.used, $_.resets.ToLocalTime().ToString('MMM d HH:mm', [System.Globalization.CultureInfo]::InvariantCulture) }) -join '; ')
-            $out[$v] = [pscustomobject]@{ vendor = $v; remaining = $remaining; resets = $bind.w.resets; reported = $codexLog.observed; source = 'codex-log'; note = $note; state = $state; window = $bind.w.label }
-            continue
         }
-        if ($last.Count -eq 0) { continue }
-        $e = $last[0]
-        $ts = $lastTs
-        $resets = $null
-        if ($e['resets']) { $resets = [datetime]::Parse((ConvertTo-AosStamp $e['resets']), [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal) }
-        $remaining = [int]$e['remaining']
-        $state = 'ok'
-        if ($resets -and $resets -le $Now) { $state = 'reset' }
-        elseif ($remaining -le 0 -and $resets) { $state = 'limited' }
-        elseif (($Now - $ts).TotalHours -ge $script:CapacityStaleHours) { $state = 'stale' }
-        elseif ($remaining -le $script:CapacityLowPercent) { $state = 'low' }
-        $out[$v] = [pscustomobject]@{ vendor = $v; remaining = $remaining; resets = $resets; reported = $ts; source = [string]$e['source']; note = [string]$e['note']; state = $state; window = '' }
+        $windows = @(); $bind = $null
+        foreach ($w in $raw) {
+            $used = 0.0
+            if (-not [double]::TryParse([string]$w.used, [System.Globalization.NumberStyles]::Float,
+                [System.Globalization.CultureInfo]::InvariantCulture, [ref]$used) -or [double]::IsNaN($used) -or
+                [double]::IsInfinity($used) -or $used -lt 0 -or $used -gt 100) { continue }
+            $reset = ConvertTo-AosCapacityUtc $w.resets
+            if ($w.resets -and $null -eq $reset) { continue }
+            $left = [int][Math]::Floor(100 - $used); $state = 'ok'
+            if (($ts - $Now).TotalSeconds -gt 60) { $state = 'unknown' }
+            elseif ($reset -and $reset -le $Now) { $state = 'reset' }
+            elseif (($Now - $ts).TotalHours -ge $script:CapacityStaleHours) { $state = 'stale' }
+            elseif ($left -le 0 -and $reset) { $state = 'limited' }
+            elseif ($left -le $script:CapacityLowPercent) { $state = 'low' }
+            if ($state -in @('reset', 'stale', 'unknown')) { $left = $null }
+            $window = [pscustomobject]@{ label = [string]$w.label; used = $used; remaining = $left; resets = $reset; state = $state }
+            $windows += $window
+            if ($null -ne $left -and (-not $bind -or $left -lt $bind.remaining)) { $bind = $window }
+        }
+        $remaining = $null; $reset = $null; $label = ''; $state = 'unknown'
+        if ($bind) { $remaining = $bind.remaining; $reset = $bind.resets; $label = $bind.label; $state = $bind.state }
+        elseif ($windows.Count -gt 0) {
+            if (@($windows | Where-Object { $_.state -ne 'reset' }).Count -eq 0) { $state = 'reset' }
+            elseif (@($windows | Where-Object { $_.state -eq 'stale' }).Count -gt 0) { $state = 'stale' }
+        }
+        $out[$v] = [pscustomobject]@{ vendor = $v; remaining = $remaining; resets = $reset; reported = $ts
+            source = $source; note = $note; state = $state; window = $label; windows = $windows }
     }
     return $out
 }
@@ -3286,35 +3326,62 @@ function Get-AosCapacityWarning([string]$Vendor) {
     if (-not $cap.Contains($Vendor)) { return $null }
     $c = $cap[$Vendor]
     if ($c.state -eq 'limited') { return "$Vendor is limited until $($c.resets.ToLocalTime().ToString('HH:mm')) (quota): give this task to the other vendor, or schedule it after the reset" }
-    if ($c.state -eq 'low') { return "$Vendor has about $($c.remaining) % of its window left: keep this task small (a bounded review), and give builds to the other vendor" }
+    if ($c.state -in @('reset', 'stale', 'unknown')) { return "$Vendor capacity is $($c.state): refresh its real usage before planning work" }
+    if ($c.state -eq 'low') {
+        $reset = 'unknown'
+        if ($c.resets) { $reset = Format-AosCapacityUtc $c.resets }
+        return "$Vendor has about $($c.remaining) % of its $($c.window) window left (reset $reset): keep this task small (a bounded review), and give builds to the other vendor"
+    }
     return $null
 }
 
 function Invoke-AosCapacity([string[]]$Arguments) {
-    $usage = 'usage: aos capacity [set <claude|codex> <percent left 0-100> [--resets <HH:MM|ISO>] [--note <text>]]'
+    $usage = 'usage: aos capacity [--json | set <claude|codex> <percent left 0-100> [--resets <HH:MM|ISO>] [--weekly <percent left> --weekly-resets <ISO>] [--note <text>]]'
     $a = @($Arguments | Where-Object { $_ })
     if ($a.Count -ge 1 -and $a[0] -eq 'set') {
-        $p = ConvertFrom-AosCliArgs @($a | Select-Object -Skip 1) @() @('resets', 'note') @()
+        try { $p = ConvertFrom-AosCliArgs @($a | Select-Object -Skip 1) @() @('resets', 'note', 'weekly', 'weekly-resets') @() }
+        catch { Write-AosWarn $usage; return }
         $vendor = [string]@($p.Pos)[0]
         $pct = -1
         if (@($p.Pos).Count -ge 2) { [void][int]::TryParse([string]@($p.Pos)[1], [ref]$pct) }
-        if ($script:CapacityVendors -notcontains $vendor -or $pct -lt 0 -or $pct -gt 100) { Write-AosWarn $usage; return }
-        $resets = ''
-        if ($p.Opts['resets']) {
-            $r = [string]$p.Opts['resets']
-            if ($r -match '^\d{1,2}:\d{2}$') {
-                $at = [datetime]::Today.Add([timespan]::Parse($r))
+        if (@($p.Pos).Count -ne 2 -or $script:CapacityVendors -notcontains $vendor -or $pct -lt 0 -or $pct -gt 100) { Write-AosWarn $usage; return }
+        $weekly = -1
+        $hasWeekly = $p.Opts.ContainsKey('weekly'); $hasWeeklyReset = $p.Opts.ContainsKey('weekly-resets')
+        if ($hasWeekly -ne $hasWeeklyReset -or ($hasWeekly -and (-not [int]::TryParse([string]$p.Opts['weekly'], [ref]$weekly) -or $weekly -lt 0 -or $weekly -gt 100))) { Write-AosWarn $usage; return }
+        $dates = @{}
+        foreach ($key in @('resets', 'weekly-resets')) {
+            $dates[$key] = ''
+            if (-not $p.Opts[$key]) { continue }
+            $r = [string]$p.Opts[$key]; $at = $null
+            if ($key -eq 'resets' -and $r -match '^(\d{1,2}):(\d{2})$') {
+                $hours = [int]$Matches[1]; $minutes = [int]$Matches[2]
+                if ($hours -gt 23 -or $minutes -gt 59) { Write-AosWarn $usage; return }
+                $at = [datetime]::Today.AddHours($hours).AddMinutes($minutes)
                 if ($at -lt [datetime]::Now) { $at = $at.AddDays(1) }
-                $resets = $at.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-            }
-            else { $resets = ([datetime]::Parse($r)).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') }
+            } elseif ($r -match '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}') { $at = ConvertTo-AosCapacityUtc $r }
+            if ($null -eq $at) { Write-AosWarn $usage; return }
+            $dates[$key] = Format-AosCapacityUtc $at
         }
-        Add-AosCapacityEvent -Vendor $vendor -Remaining $pct -Resets $resets -Source 'reported' -Note ([string]$p.Opts['note'])
+        $windows = @([pscustomobject]@{ label = '5h'; used = 100 - $pct; resets = $dates['resets'] })
+        if ($hasWeekly) { $windows += [pscustomobject]@{ label = 'week'; used = 100 - $weekly; resets = $dates['weekly-resets'] } }
+        Add-AosCapacityEvent -Vendor $vendor -Remaining $pct -Resets $dates['resets'] -Source 'reported' -Note ([string]$p.Opts['note']) -Windows $windows
         Write-AosOk "capacity: $vendor $pct % left recorded"
         return
     }
-    if ($a.Count -ge 1) { Write-AosWarn $usage; return }
+    $json = $a.Count -eq 1 -and $a[0] -eq '--json'
+    if ($a.Count -ge 1 -and -not $json) { Write-AosWarn $usage; return }
     $cap = Get-AosCapacity -Now ([datetime]::UtcNow)
+    if ($json) {
+        $export = [ordered]@{}
+        foreach ($v in $cap.Keys) {
+            $c = $cap[$v]; $windows = @()
+            foreach ($w in $c.windows) { $windows += [ordered]@{ label = $w.label; used = $w.used; remaining = $w.remaining; resets = (Format-AosCapacityUtc $w.resets); state = $w.state } }
+            $export[$v] = [ordered]@{ vendor = $v; remaining = $c.remaining; resets = (Format-AosCapacityUtc $c.resets)
+                reported = (Format-AosCapacityUtc $c.reported); source = $c.source; note = $c.note; state = $c.state; window = $c.window; windows = $windows }
+        }
+        ConvertTo-Json -InputObject $export -Depth 8
+        return
+    }
     if ($cap.Count -eq 0) { Write-AosInfo 'capacity: nothing recorded yet (aos capacity set <vendor> <percent left>)'; return }
     foreach ($v in $cap.Keys) {
         $c = $cap[$v]
@@ -3323,9 +3390,17 @@ function Invoke-AosCapacity([string[]]$Arguments) {
         elseif ($c.state -eq 'limited') { $hint = 'limited until ' + $c.resets.ToLocalTime().ToString('HH:mm') + ': hand work to the other vendor' }
         elseif ($c.state -eq 'reset') { $hint = 'its reset has passed: check its real usage before a big task' }
         elseif ($c.state -eq 'stale') { $hint = 'report is old: ask for a fresh number before planning' }
+        elseif ($c.state -eq 'unknown') { $hint = 'refresh its real usage before planning' }
         $age = [int]([datetime]::UtcNow - $c.reported).TotalMinutes
-        Write-AosInfo ("{0,-6} {1,3} % left, {2} ({3}, {4} min ago) -> {5}" -f $v, $c.remaining, $c.state, $c.source, $age, $hint)
-        if ($c.source -eq 'codex-log') { Write-AosInfo ("       {0} binds; {1}" -f $c.window, $c.note) }
+        $left = 'unknown'; $reset = 'unknown'
+        if ($null -ne $c.remaining) { $left = [string]$c.remaining + ' %' }
+        if ($c.resets) { $reset = $c.resets.ToLocalTime().ToString('yyyy-MM-dd HH:mm', [System.Globalization.CultureInfo]::InvariantCulture) }
+        Write-AosInfo ("{0,-6} {1} left, {2}; {3} reset {4} ({5}, observed {6}, {7} min ago) -> {8}" -f $v, $left, $c.state, $c.window, $reset, $c.source, (Format-AosCapacityUtc $c.reported), $age, $hint)
+        foreach ($w in $c.windows) {
+            $reset = 'unknown'
+            if ($w.resets) { $reset = Format-AosCapacityUtc $w.resets }
+            Write-AosInfo ("       {0}: {1} % used, reset {2}, {3}" -f $w.label, $w.used, $reset, $w.state)
+        }
     }
 }
 

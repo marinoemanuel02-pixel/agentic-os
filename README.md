@@ -142,6 +142,13 @@ Claude Code and Codex share one coordination layer in `~\.aos\coord` (outside On
   `aos delegate ls | show <id> | clean <id>`.
 - **Notes between agents.** `aos note "<text>" --as <claude|codex>` writes to the shared ledger; a PostToolUse hook
   (`config/hooks/aos-notes.mjs`) shows each agent the other's unread notes after its next shell or edit call.
+- **Capacity.** `aos capacity` reads Codex's newest logged limits and reported vendor observations. Record a
+  Claude usage card with `aos capacity set claude <percent-left> --resets <ISO>`; add the paired
+  `--weekly <percent-left> --weekly-resets <ISO>` to retain both limits. `aos capacity --json` exports dates,
+  source, observation, windows and state for receipts. A passed reset is unknown until refreshed, never a
+  measured fresh100%; an unexpired weekly window still binds. Missing/invalid Codex resets are excluded,
+  old readings are stale, and future observations are unknown. Reset/unknown/stale advice asks for a refresh.
+  Native usage readers can be cached; keep their actual observation/reset times and source in the note.
 - After `aos sync` changes Codex hooks (also after a cc plugin update, which aos repairs), trust them
   once in Codex with `/hooks`.
 
