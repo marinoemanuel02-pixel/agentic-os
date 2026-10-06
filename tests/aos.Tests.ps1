@@ -894,6 +894,14 @@ Describe 'aos video preflight' {
         Test-Path -LiteralPath (Join-Path $env:AOS_PROJECTS 'videos\align-1') | Should -BeFalse
     }
 
+    It 'keeps the rules grouped by stage and asks for the capacity split (R34, R40)' {
+        Write-TestFile $env:AOS_VIDEO_RULES "# Video rules`n`n## Brief`n`n- R01 [manual] Approve the brief.`n`n## QA`n`n- R02 [check: frozen-frames] Check the timeline.`n"
+        $report = aos video preflight align-1 | Out-String
+        $report | Should -Match '(?s)## Rules.*### Brief.*R01.*### QA.*R02.*## Capacity and split'
+        $report | Should -Match 'aos capacity'
+        $report | Should -Match 'aos note'
+    }
+
     It 'reports family verdicts, five other verdicts, medians and delegation outcomes' {
         $lines = @(
             '{"ts":"2026-09-01T10:00:00Z","type":"video-verdict","video":"alignment-3","text":"first"}',
@@ -1043,6 +1051,11 @@ Describe 'Video input provenance' {
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
 
+    It 'keeps the stage documents asking for imported material and the reference-pack skill present (node --test)' {
+        $result = & node --no-warnings --test (Join-Path $PSScriptRoot '..\templates\video\tools\checks\template-text.test.mjs') 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $result
+    }
+
     It 'refuses imported material without rights, credits, evidence or within fair-use limits (asset gate, node --test)' {
         $result = & node --no-warnings --test (Join-Path $PSScriptRoot '..\templates\video\tools\checks\assets.test.mjs') 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $result
@@ -1112,7 +1125,9 @@ Describe 'Video rules format' {
         $rules = [System.IO.File]::ReadAllLines((Join-Path $root 'agents-home\video\video-rules.md'))
         $qa = [System.IO.File]::ReadAllText((Join-Path $root 'templates\video\tools\qa.sh'))
         $ids = @()
-        foreach ($line in @($rules | Select-Object -Skip 1 | Where-Object { $_.Trim() })) {
+        $stages = @($rules | Where-Object { $_ -match '^## ' } | ForEach-Object { $_.Substring(3) })
+        ($stages -join '|') | Should -Be 'Brief|Look|Structure|Production|QA|Delivery|Orchestration'
+        foreach ($line in @($rules | Select-Object -Skip 1 | Where-Object { $_.Trim() -and $_ -notmatch '^## ' })) {
             $line | Should -Match '^- R\d{2} \[(manual|check: [a-z-]+)\] \S'
             if ($line -match '^- (R\d{2}) \[(?:manual|check: [a-z-]+)\]') { $ids += $Matches[1] }
             if ($line -match '\[check: ([a-z-]+)\]') {
@@ -1125,6 +1140,10 @@ Describe 'Video rules format' {
         }
         $ids.Count | Should -BeGreaterThan 0
         @($ids | Select-Object -Unique).Count | Should -Be $ids.Count
+        # ids never change and none is skipped: R01..Rnn each once, whatever stage they sit under
+        $expected = @(1..$ids.Count | ForEach-Object { 'R' + $_.ToString('00') })
+        (@($ids | Sort-Object) -join ',') | Should -Be ($expected -join ',')
+        $ids.Count | Should -BeGreaterOrEqual 40
     }
 }
 

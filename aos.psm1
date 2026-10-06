@@ -1930,6 +1930,8 @@ function Write-AosVideoPreflight([string]$Name) {
     $rulesPath = Get-AosVideoRulesPath
     if (Test-Path -LiteralPath $rulesPath) {
         foreach ($line in [System.IO.File]::ReadAllLines($rulesPath)) {
+            # Stage headings in the rules file become sub-headings here, so the report reads stage by stage.
+            if ($line -match '^## (.+)$') { [void]$sb.Append("$nl### $($Matches[1])$nl$nl"); continue }
             if ($line -notmatch '^- R\d{2} ') { continue }
             $out = $line
             if ($line -match '\[check: ([a-z-]+)\]') { $out += " (runs tools/checks/$($Matches[1]).mjs from tools/qa.sh)" }
@@ -1937,6 +1939,10 @@ function Write-AosVideoPreflight([string]$Name) {
         }
     }
     else { [void]$sb.Append("- rules file not found: $rulesPath$nl") }
+    [void]$sb.Append("$nl## Capacity and split$nl$nl")
+    [void]$sb.Append("- At the start and at every gate: ``aos capacity`` (both vendors' windows and resets) and ``aos who`` (claims, notes).$nl")
+    [void]$sb.Append("- Write the split (who builds what until when) in an ``aos note`` and HANDOFF.md; a limited vendor's next task goes to the other one at once (R34).$nl")
+    [void]$sb.Append("- Codex delegations: ``--max-input`` and a task file with Read only: and Done = lines (R40).$nl")
     $fmt = { param($e) '- ' + ([string]$e['ts']).Substring(0, 10) + ' ' + $e['video'] + ': "' + $e['text'] + '"' }
     $verdicts = @($events | Where-Object { $_['type'] -eq 'video-verdict' -and $_['video'] })
     $mine = @($verdicts | Where-Object { (Get-AosVideoFamily ([string]$_['video'])) -eq $family })
