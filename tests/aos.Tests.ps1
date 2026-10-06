@@ -3843,9 +3843,123 @@ Describe 'aos delegate' {
         & git -C $repo init -q
         & git -C $repo -c user.name=Fixture -c user.email=fixture@example.invalid commit --allow-empty -qm initial
         $task = Join-Path $caseRoot 'task file.md'
-        Write-TestFile $task 'Write a fixture file'
+        Write-TestFile $task "Write a fixture file`nRead only: none`nDone = the file exists"
         if (InModuleScope aos { Get-Command Test-AosDelegatePreflight -ErrorAction SilentlyContinue }) {
             if (InModuleScope aos { Get-Command Test-AosDelegatePreflight -ErrorAction SilentlyContinue }) { Mock Test-AosDelegatePreflight -ModuleName aos { @{ Ok=$true; Model='fixture-model'; Reasons=@() } } }
+        }
+    }
+    Context 'max-input' {
+        BeforeEach {
+            Mock Get-AosCodexHome -ModuleName aos { Join-Path $caseRoot 'codex' }
+            Mock Get-AosCapacityWarning -ModuleName aos { $null }
+        }
+        It 'refuses missing task boundaries before starting any process' -TestCases @(
+            @{ Text = "Task`nDone = done" }, @{ Text = "Task`nRead only: none" }
+        ) {
+            param($Text)
+            Write-TestFile $task $Text
+            Mock Invoke-AosProcess -ModuleName aos { throw 'unexpected process' }
+            $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R }
+            $r.outcome | Should -Be 'refused'
+            $r.error.category | Should -Be 'task-file'
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
+        }
+        It 'does not install a watch when max-input is zero' {
+            Mock Invoke-AosProcess -ModuleName aos {
+                $Watch | Should -BeNullOrEmpty
+                Write-TestFile $StdoutFile '{"type":"thread.started","thread_id":"thread-1"}'
+                @{ Code=0; TimedOut=$false; KillFailed=$false }
+            }
+            $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R -MaxInput 0 }
+            $r.budget.max_input | Should -Be 0
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly -ParameterFilter { -not $Watch }
+        }
+        It 'reads the last usage event and resumes at complete UTF-8 line boundaries' {
+            $folder = New-TestFolder (Join-Path $caseRoot 'codex/sessions/2026/10/07')
+            $file = Join-Path $folder 'rollout-date-thread-1.jsonl'
+            $line = '{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":22014,"cached_input_tokens":13184,"output_tokens":97}}}}'
+            Write-TestFile $file ($line + "`n" + '{"type":')
+            $r = InModuleScope aos { Read-AosRolloutUsage -ThreadId 'thread-1' -FromOffset 0 }
+            $r.Found | Should -BeTrue
+            $r.Input | Should -Be 22014
+            $r.Cached | Should -Be 13184
+            $r.Output | Should -Be 97
+            $r.Offset | Should -Be ([Text.Encoding]::UTF8.GetByteCount($line + "`n"))
+            [IO.File]::AppendAllText($file, ('"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":90000,"cached_input_tokens":10000,"output_tokens":100}}}}' + "`n"))
+            $next = InModuleScope aos -Parameters @{ Offset=$r.Offset } { param($Offset) Read-AosRolloutUsage -ThreadId 'thread-1' -FromOffset $Offset }
+            $next.Input | Should -Be 90000
+            $next.Offset | Should -Be (Get-Item $file).Length
+        }
+        It 'reads a complete final event before its newline is appended' {
+            $folder = New-TestFolder (Join-Path $caseRoot 'codex/sessions')
+            $file = Join-Path $folder 'rollout-date-thread-1.jsonl'
+            Write-TestFile $file '{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":80000,"cached_input_tokens":0,"output_tokens":1}}}}'
+            $r = InModuleScope aos { Read-AosRolloutUsage -ThreadId 'thread-1' -FromOffset 0 }
+            $r.Found | Should -BeTrue
+            $r.Input | Should -Be 80000
+            $r.Offset | Should -Be (Get-Item $file).Length
+        }
+        It 'bounds only its own rollout: <Scenario>' -TestCases @(
+            @{ Scenario='over'; Expected='over-budget'; Observed=$true; Overshoot=20000 },
+            @{ Scenario='under'; Expected='accepted'; Observed=$true; Overshoot=0 },
+            @{ Scenario='missing'; Expected='accepted'; Observed=$false; Overshoot=0 },
+            @{ Scenario='delayed'; Expected='over-budget'; Observed=$true; Overshoot=20000 },
+            @{ Scenario='other'; Expected='accepted'; Observed=$true; Overshoot=0 }
+        ) {
+            param($Scenario,$Expected,$Observed,$Overshoot)
+            $folder = New-TestFolder (Join-Path $caseRoot 'codex/sessions/2026/10/07')
+            $env:AOS_TEST_ROLLOUT = Join-Path $folder 'rollout-2026-10-07T10-00-00-thread-1.jsonl'
+            $env:AOS_TEST_SCENARIO = $Scenario
+            $env:AOS_TEST_CHILD = Join-Path $caseRoot 'child.pid'
+            Mock Invoke-AosProcess -ModuleName aos {
+                $Watch | Should -Not -BeNullOrEmpty
+                $childScript = {
+                    $ErrorActionPreference = 'Stop'
+                    function Usage($path, $inputCount) {
+                        $event = @{type='event_msg'; payload=@{type='token_count'; info=@{total_token_usage=@{input_tokens=$inputCount; cached_input_tokens=10000; output_tokens=97}}}}
+                        [IO.File]::AppendAllText($path, (($event | ConvertTo-Json -Compress -Depth 6) + "`n"))
+                    }
+                    [Console]::WriteLine('{"type":"thread.started","thread_id":"thread-1"}')
+                    if ($env:AOS_TEST_SCENARIO -eq 'delayed') { Start-Sleep -Seconds 6 }
+                    if ($env:AOS_TEST_SCENARIO -ne 'missing') { Usage $env:AOS_TEST_ROLLOUT 60000 }
+                    if ($env:AOS_TEST_SCENARIO -eq 'other') { Usage ($env:AOS_TEST_ROLLOUT -replace 'thread-1', 'thread-2') 9999999 }
+                    if ($env:AOS_TEST_SCENARIO -in @('over','delayed')) {
+                        $child = Start-Process pwsh -ArgumentList '-NoProfile -Command Start-Sleep -Seconds 60' -WindowStyle Hidden -PassThru
+                        [IO.File]::WriteAllText($env:AOS_TEST_CHILD, [string]$child.Id)
+                        Start-Sleep -Seconds 1
+                        Usage $env:AOS_TEST_ROLLOUT 130000
+                        Start-Sleep -Seconds 60
+                    }
+                    elseif ($env:AOS_TEST_SCENARIO -ne 'missing') { Usage $env:AOS_TEST_ROLLOUT 90000 }
+                    Start-Sleep -Seconds 7
+                    [Console]::WriteLine('{"type":"turn.completed"}')
+                }.ToString()
+                $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childScript))
+                $r = & (Get-Module aos) { param($Encoded, $Callback)
+                    Start-AosProcessCore -Exe pwsh -Arguments @('-NoProfile','-EncodedCommand',$Encoded) -TimeoutSeconds 25 -IdleSeconds 0 -Watch $Callback
+                } $encoded $Watch
+                Write-TestFile $StdoutFile $r.Out
+                Write-TestFile (Join-Path (Split-Path $StdoutFile -Parent) 'result.json') '{"status":"done","summary":"done","files_changed":[],"tests_run":[],"unverified":[]}'
+                $r
+            }
+            try {
+                $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R -MaxInput 100000 }
+                $r.outcome | Should -Be $Expected
+                $r.budget.observed | Should -Be $Observed
+                $r.budget.overshoot | Should -Be $Overshoot
+                if ($Expected -eq 'over-budget') {
+                    $r.error.category | Should -Be 'over-budget'
+                    $r.kill_failed | Should -BeFalse
+                    $r.budget.last_input | Should -Be 130000
+                    $r.budget.last_cached | Should -Be 10000
+                    Get-Process -Id ([int](Get-Content $env:AOS_TEST_CHILD)) -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+                }
+                else { $r.timed_out | Should -BeFalse }
+            }
+            finally {
+                if (Test-Path $env:AOS_TEST_CHILD) { Stop-Process -Id ([int](Get-Content $env:AOS_TEST_CHILD)) -Force -ErrorAction SilentlyContinue }
+                Remove-Item Env:AOS_TEST_ROLLOUT, Env:AOS_TEST_SCENARIO, Env:AOS_TEST_CHILD -ErrorAction SilentlyContinue
+            }
         }
     }
     It 'publishes the exact result schema contract' {
@@ -4119,7 +4233,7 @@ Describe 'Pass A review fixes' {
         & git -C $repo add tracked.txt
         & git -C $repo -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm initial
         $task = Join-Path $caseRoot 'task file.md'
-        Write-TestFile $task 'Write a fixture file'
+        Write-TestFile $task "Write a fixture file`nRead only: none`nDone = the file exists"
     }
     It 'fails a delegate whose process exits nonzero despite a done result (finding 2)' {
         Mock Test-AosDelegatePreflight -ModuleName aos { @{ Ok=$true; Model='fixture-model'; Reasons=@() } }
