@@ -178,8 +178,7 @@ async function main(argv) {
       writeFileSync(join(f, 'src', 'data', 'asset-uses.ts'), usesText(rows));
       const claimsFile = join(f, 'claims.json');
       const claims = existsSync(claimsFile) ? JSON.parse(readFileSync(claimsFile, 'utf8')) : {sources: {}, lines: [], screen: []};
-      writeFileSync(claimsFile, JSON.stringify(mergeScreen(claims, screenEntries(rows)), null, 2) + '
-');
+      writeFileSync(claimsFile, JSON.stringify(mergeScreen(claims, screenEntries(rows)), null, 2) + '\n');
       console.log('src/data/assets.ts, src/data/asset-uses.ts and the generated source-tag claims written; review them in claims.json');
       return;
     }

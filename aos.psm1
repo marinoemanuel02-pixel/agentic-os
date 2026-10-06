@@ -2105,6 +2105,50 @@ function Start-AosRemote([string]$Dir, [switch]$DryRun) {
 }
 
 #endregion
+#region video assets ----------------------------------------------------------------------
+# aos asset: the shared Node tool in agents-home/video/assets (rule R35). API keys reach the child only as
+# environment variables (never arguments, files or logs); a missing key just makes its search source skip.
+
+$script:AssetKeys = @('pexels', 'pixabay', 'freesound')
+
+function Get-AosAssetEnv {
+    $vars = @{}
+    $have = @(Get-AosSecretNames)
+    foreach ($k in $script:AssetKeys) {
+        if ($have -contains $k) {
+            $v = Get-AosSecret $k
+            if ($v) { $vars['AOS_KEY_' + $k.ToUpperInvariant()] = $v }
+        }
+    }
+    return $vars
+}
+
+function Invoke-AosAsset([string[]]$Arguments) {
+    if (-not $Arguments -or $Arguments.Count -eq 0) { throw 'usage: aos asset <search|fetch|capture|proxy|registry|credits|budget> ...' }
+    if ($Arguments[0] -eq 'budget' -and ($Arguments -contains '--approve') -and -not ($Arguments -contains '--by-user')) {
+        throw 'aos asset budget --approve records the user''s approval: add --by-user only after the user approved the amount'
+    }
+    $tool = Join-Path $script:Root 'agents-home\video\assets\asset.mjs'
+    # Invoke-AosProcess hands output back through files only; show both, then drop them.
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-asset-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    try {
+        $outFile = Join-Path $tmp 'out.txt'
+        $errFile = Join-Path $tmp 'err.txt'
+        $r = Invoke-AosProcess -Exe 'node' -Arguments (@('--no-warnings', $tool) + $Arguments) -WorkingDirectory (Get-Location).ProviderPath `
+            -TimeoutSeconds 3600 -Environment (Get-AosAssetEnv) -StdoutFile $outFile -StderrFile $errFile
+        foreach ($f in @($outFile, $errFile)) {
+            if (Test-Path -LiteralPath $f) {
+                $text = [System.IO.File]::ReadAllText($f)
+                if ($text.Trim()) { Write-Host $text.TrimEnd() }
+            }
+        }
+        $global:LASTEXITCODE = $r.Code
+    }
+    finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+#endregion
 #region the aos command ------------------------------------------------------------------
 
 function Show-AosHelp {
@@ -2122,6 +2166,7 @@ aos - agentic-os control
   aos video verdict <name> <words>         record the user's verdict on a video, verbatim (coordination ledger)
   aos video log <name> <stage> <min> [note] record how long a stage took (brief|look|structure|production|qa|...)
   aos video preflight <name> rules + past verdicts + stage times -> the project's PREFLIGHT.md
+  aos asset <search|fetch|capture|proxy|registry|credits|budget>   import real material into a film (rights ledger, budget)
   aos place ls [--json]      list shared places, including missing folders
   aos place add <folder> [--name <n>] [--kind repo|vault|folder]   add a place, then sync
   aos refs                   clone/pull the reference repos in refs/repos.json (into ~\.aos\refs)
@@ -2157,6 +2202,7 @@ function aos {
         'test'    { Invoke-AosTest }
         'new'     { New-AosProject -Path $a1 }
         'video'   { Invoke-AosVideo -Arguments @($Rest) }
+        'asset'   { Invoke-AosAsset -Arguments @($Rest) }
         'place'   { Invoke-AosPlace -Arguments @($Rest) -DryRun:$DryRun }
         'refs'    { Sync-AosRefs -DryRun:$DryRun }
         'secret'  { Invoke-AosSecret -Action $a1 -Name $a2 }

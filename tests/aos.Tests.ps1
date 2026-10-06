@@ -1061,6 +1061,51 @@ Describe 'Video input provenance' {
     }
 }
 
+Describe 'aos asset' {
+    It 'passes arguments to the shared tool and API keys only through the child environment' {
+        Mock Get-AosSecretNames -ModuleName aos { @('pexels') }
+        Mock Get-AosSecret -ModuleName aos { 'KEY-123' }
+        Mock Invoke-AosProcess -ModuleName aos {
+            $global:AosAssetSeen = @{ Exe = $Exe; Args = ($Arguments -join ' '); Env = $Environment }
+            [pscustomobject]@{ Code = 0; TimedOut = $false; KillFailed = $false; Out = ''; Err = '' }
+        }
+        try {
+            InModuleScope aos { Invoke-AosAsset @('search', 'robot arm', '--kind', 'clip') }
+            $global:AosAssetSeen.Exe | Should -Be 'node'
+            $global:AosAssetSeen.Args | Should -Match 'video[\\/]assets[\\/]asset\.mjs search robot arm --kind clip'
+            $global:AosAssetSeen.Args | Should -Not -Match 'KEY-123'
+            $global:AosAssetSeen.Env['AOS_KEY_PEXELS'] | Should -Be 'KEY-123'
+            $global:AosAssetSeen.Env.ContainsKey('AOS_KEY_PIXABAY') | Should -BeFalse
+            $global:LASTEXITCODE | Should -Be 0
+        }
+        finally { Remove-Variable -Name AosAssetSeen -Scope Global -ErrorAction SilentlyContinue }
+    }
+    It 'refuses budget --approve without --by-user before starting anything' {
+        Mock Invoke-AosProcess -ModuleName aos { throw 'must not start' }
+        { InModuleScope aos { Invoke-AosAsset @('budget', '--film', 'x', '--approve', '500') } } | Should -Throw '*--by-user*'
+    }
+    It 'prints usage without a subcommand' {
+        { InModuleScope aos { Invoke-AosAsset @() } } | Should -Throw '*usage: aos asset*'
+    }
+    It 'shows what the tool printed and passes its exit code on' {
+        Mock Get-AosSecretNames -ModuleName aos { @() }
+        Mock Invoke-AosProcess -ModuleName aos {
+            [IO.File]::WriteAllText($StdoutFile, "## Credits`n`n- Video by Ana on Pexels`n")
+            [IO.File]::WriteAllText($StderrFile, 'a warning')
+            [pscustomobject]@{ Code = 3; TimedOut = $false; KillFailed = $false; Stalled = $false }
+        }
+        $shown = InModuleScope aos { Invoke-AosAsset @('credits', '--film', 'x') } 6>&1 | Out-String
+        $shown | Should -Match 'Video by Ana on Pexels'
+        $shown | Should -Match 'a warning'
+        $global:LASTEXITCODE | Should -Be 3
+    }
+    It 'runs the shared asset tool tests (node --test: core, capture, adapters, registry)' {
+        $tests = Join-Path $PSScriptRoot '..\agents-home\video\assets\test\*.test.mjs'
+        $result = & node --no-warnings --test $tests 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $result
+    }
+}
+
 Describe 'Video rules format' {
     It 'has numbered unique rules and wires every check into the video QA script' {
         $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
