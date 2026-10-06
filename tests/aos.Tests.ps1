@@ -3910,10 +3910,10 @@ Describe 'aos delegate' {
             $r.Offset | Should -Be (Get-Item $file).Length
         }
         It 'bounds only its own rollout: <Scenario>' -TestCases @(
-            @{ Scenario='over'; Expected='over-budget'; Observed=$true; Overshoot=20000 },
+            @{ Scenario='over'; Expected='over-budget'; Observed=$true; Overshoot=30000 },
             @{ Scenario='under'; Expected='accepted'; Observed=$true; Overshoot=0 },
             @{ Scenario='missing'; Expected='accepted'; Observed=$false; Overshoot=0 },
-            @{ Scenario='delayed'; Expected='over-budget'; Observed=$true; Overshoot=20000 },
+            @{ Scenario='delayed'; Expected='over-budget'; Observed=$true; Overshoot=30000 },
             @{ Scenario='other'; Expected='accepted'; Observed=$true; Overshoot=0 }
         ) {
             param($Scenario,$Expected,$Observed,$Overshoot)

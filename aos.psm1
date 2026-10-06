@@ -3496,7 +3496,9 @@ function Invoke-AosDelegate {
                     $receipt.budget.observed = $true
                     $receipt.budget.last_input = $usage.Input
                     $receipt.budget.last_cached = $usage.Cached
-                    $receipt.budget.overshoot = [Math]::Max([long]0, $usage.Input - $usage.Cached - $MaxInput)
+                    # All input counts, cached included: on 2026-10-06 a Codex run used 3.5 M input tokens (3.4 M cached,
+                    # about 0.12 M not) and moved its 5 h window from 15 to 50 %, so a non-cached budget would never stop it.
+                    $receipt.budget.overshoot = [Math]::Max([long]0, $usage.Input - $MaxInput)
                     if ($receipt.budget.overshoot -gt 0) { return 'over-budget' }
                 }
             }
@@ -3551,7 +3553,7 @@ function Invoke-AosDelegate {
     }
     $receipt.exit_code = $run.Code
     if ($run.Watched -eq 'over-budget') {
-        $receipt.error = [ordered]@{ category = 'over-budget'; message = "non-cached input exceeded $MaxInput tokens" }
+        $receipt.error = [ordered]@{ category = 'over-budget'; message = "input tokens (cached included) exceeded $MaxInput" }
     }
     if ($null -eq $receipt.error -and -not $run.TimedOut -and $run.Code -ne 0) {
         $receipt.error = [ordered]@{ category = 'other'; message = "delegate process exited with code $($run.Code)" }
