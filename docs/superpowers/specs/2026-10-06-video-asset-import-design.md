@@ -1,6 +1,6 @@
 # Video asset import, reference packs and the consolidated pipeline (design)
 
-Date: 2026-10-06. Status: approved in conversation, awaiting review of this file.
+Date: 2026-10-06. Status: approved in conversation; revised after Codex critique (REVISE, 8 findings, all taken); awaiting the user's review of this file.
 Author: Claude (session 12e91af7). Independent critique: Codex (bounded, before implementation).
 
 ## Why
@@ -59,14 +59,22 @@ One copy for both vendors: Node code in `agents-home/video/assets/` (synced to `
 | Command | Does |
 |---|---|
 | `aos asset search <query> --kind clip\|photo\|model\|hdri\|texture\|sfx [--source s] [--json]` | Candidates from the adapters (id, preview URL, page URL, license, author, duration/size). No download. |
-| `aos asset fetch <url\|candidate> --film <name> --basis <basis> --why "<need>" [--in s --out s] [--shot SNN]` | Downloads (yt-dlp for video sites with `--download-sections` for the excerpt, HTTP for files), hashes, stores in the cache, writes the ledger row, counts the budget. |
+| `aos asset fetch <url\|candidate> --film <name> --basis <basis> --acquisition <a> --why "<need>" [--source-in s --source-out s]` | Downloads (yt-dlp for video sites with `--download-sections` for the excerpt, HTTP for files), measures the real file with ffprobe, hashes it, stores it in the cache, writes the ledger row, charges the budget. |
 | `aos asset capture <url> --film <name> --mode shot\|scroll\|record [--seconds n] --why "<need>"` | Playwright capture of a public page or product UI (basis `capture`). |
-| `aos asset proxy --film <name>` | Transcodes every used clip once into the film's media root (`public/assets/<id>.mp4`, 1080p30 H.264 CRF 18, GOP 30, audio stripped unless the row keeps it). |
+| `aos asset proxy --film <name>` | Derives, under `$AOS_VIDEO_MEDIA_ROOT/app/public/assets/`, one silent video proxy per asset (`<id>.mp4`, 1080p30 H.264 CRF 18, GOP 30) and, only for uses that keep sound, a separate audio derivative (`<id>.<use>.wav`) that `audio.mts` mixes. Records each derivative's hash and the exact ffmpeg settings in the ledger. |
+| `aos asset registry --film <name>` | Writes `src/data/assets.ts` (asset id -> derivative path) from the ledger; components take an asset id, never a path. |
 | `aos asset credits --film <name>` | Writes the credits block for `description.md` from the ledger. |
 | `aos asset budget --film <name> [--approve <MB>]` | Shows used vs approved; `--approve` records the user's budget (only after the user said so). |
 
 Cache: `~/.aos/assets/objects/<sha256>.<ext>` plus `index.json` (URL, retrieval time, license as read, sha256),
-outside OneDrive, deduplicated across films. A fetch that would exceed the film's approved budget stops and asks.
+outside OneDrive, deduplicated across films.
+
+Budget (Codex finding 5): the budget counts **network bytes received** for the film, including failed and partial
+transfers and retries; a cache hit costs nothing. Fetches for one film are serialized by a lock file in its media
+root. Before a transfer the remaining budget is reserved; the transfer streams with a hard byte cap (HTTP: abort at
+the cap; yt-dlp: `--max-filesize` plus a watchdog on the partial file), and an unknown size is allowed only under
+that cap. Retained disk (cache, captures, proxies) is reported separately by `aos asset budget`, not charged to the
+download budget. Over budget: the command stops and prints what it needs; only the user can raise it.
 
 Adapters (search helpers, each tested against recorded responses, one real call when added per R08):
 
@@ -93,35 +101,69 @@ One row per asset used in the film:
 ```json
 { "id": "a07", "kind": "clip", "need": "the demo the lab showed on launch day", "searchStep": 1,
   "url": "https://...", "page": "https://...", "author": "...", "retrieved": "2026-10-07T10:12:00+02:00",
-  "basis": "fair-use", "license": null, "licenseUrl": null, "sha256": "...", "cache": "objects/<sha>.mp4",
-  "uses": [{ "shot": "S07", "in": 12.0, "out": 17.5, "audio": "muted", "commentaryLine": "L14" }],
-  "credit": "Source: <name>, <date>", "clearance": null, "platformTerms": "youtube-download" }
+  "basis": "fair-use", "license": null, "licenseUrl": null,
+  "acquisition": "download-tool", "platform": "youtube",
+  "rightsEvidence": "research/rights/a07.json",
+  "source": { "in": 12.0, "out": 20.0 },
+  "media": { "sha256": "...", "cache": "objects/<sha>.mp4", "start": 12.0, "duration": 8.03 },
+  "derivatives": [{ "path": "assets/a07.mp4", "sha256": "...", "ffmpeg": "-c:v libx264 -crf 18 -g 30 -an ..." }],
+  "uses": [{ "use": "u1", "shot": "S07", "shotFrom": 30, "mediaFrom": 0.5, "mediaTo": 6.0, "audio": "muted",
+             "rationale": "we show the moment the agent edits its own test; the narration explains why it matters" }],
+  "credit": "Source: <name>, <date>", "clearance": null }
 ```
 
+Three time coordinates, never mixed (Codex finding 4): `source.in/out` are seconds in the original work;
+`media.start/duration` describe the downloaded file as measured by ffprobe (local 0 = `media.start` in source time);
+`uses[].mediaFrom/mediaTo` are seconds inside the downloaded file, and `shot` + `shotFrom` (frames) place the use in
+the film. `Clip` trims in media coordinates only, so an excerpt is never trimmed twice. The film placement in seconds
+is computed by the gate from `src/data/plan.ts` (shot start + `shotFrom`).
+
 Rights basis, one of: `license` (license id from the allowlist), `public-domain`, `cc0`, `fair-use`, `capture`
-(a capture of a public page or product, treated as fair use with commentary), `own` (made by us).
+(a capture of a public page or product: it does not establish permission and follows the fair-use rules), `own`.
+**Acquisition** is a separate decision (Codex finding 1): `api`, `direct-file`, `platform-feature` or
+`download-tool`, plus the `platform`. The brief's Sourcing section lists the acquisitions the channel accepts per
+platform (default: `download-tool` refused for YouTube, because its terms forbid it); the gate refuses any row
+outside that list. `rightsEvidence` points to a file with the license page URL, retrieval time, a hash of the page
+text and the license excerpt (the reverify proof format of R27).
+
+Coverage (Codex finding 2): components accept only an asset id from `src/data/assets.ts`; the gate refuses any
+`staticFile(`, `http(s)://` media URL, `useGLTF(` path or Lottie `src` literal outside that registry, any dynamic
+path expression in those calls, a `.gltf` with external resources (models must be self-contained `.glb`) and a
+Lottie file with external image assets.
 
 The gate refuses the build and QA when:
 
-- a file under `public/assets/` or a `staticFile("assets/...")` reference in `src/` has no ledger row, or a row's
-  file hash does not match;
+- a file under `public/assets/` has no ledger row, or the cached media or a derivative does not match its hash;
 - a `license` row has a license outside the allowlist: CC0, PD, CC-BY 3.0/4.0, Pexels, Pixabay, MIT, BSD-3,
   Lottie Simple License, Poly Haven/ambientCG/Kenney/Quaternius CC0. Denied: any NC or ND, CC-BY-SA (share-alike
   may reach the whole film), unknown or missing;
 - a CC-BY row has no credit text, or the credits block in `description.md` is missing a required credit;
 - a `fair-use` or `capture` use is longer than 8 s, the sum of all fair-use/capture time exceeds 10 % of the film,
-  original audio is not muted (exception: the audio itself is the subject, at most 5 s, flagged `audioSubject`),
-  no narration line (`commentaryLine`) overlaps it, or the shot shows no on-screen source credit;
+  sound is kept (exception: the audio itself is the subject, at most 5 s, `audio: "subject"`, listed for the user),
+  no narration word interval (from `words.json`) overlaps at least half of its film placement, the `rationale` is
+  empty, or the use has no generated source tag;
 - a NASA row shows a logo or an identifiable person without `clearance` filled;
-- a row's `platformTerms` names a platform the film's brief excludes (e.g. a channel that bans YouTube downloads).
+- a row's acquisition/platform pair is not accepted by the brief, or `rightsEvidence` is missing.
+
+The gate checks policy, not law: its report says "asset policy checks passed", never "fair use". What stays a human
+check, listed in the review sheet for both vendors and the user: whether the narration actually comments on the
+excerpt, whether the credit is legible, whether the excerpt takes more than it needs.
 
 The gate also writes `qa/assets.md` (counts per basis, fair-use seconds and share, sources per search step) and a
-**Content ID note** for the delivery: stock and SFX are sometimes wrongly claimed; the ledger is the dispute proof.
+**Content ID note** for the delivery: stock and SFX are sometimes wrongly claimed; the ledger and rights evidence are
+supporting evidence for a dispute, not proof.
+
+Sealing (Codex finding 3, R22/R26): `assets.json`, every `rightsEvidence` file, `src/data/assets.ts` and every
+derivative hash enter the input manifest; build and QA refuse a change after sealing. All writable paths resolve
+through `AOS_VIDEO_MEDIA_ROOT` (R10, R25); the cache is read-only to builds.
 
 ## 4. Components and transitions (template `src/lib/media/`, `src/lib/transitions/`)
 
-- `Clip.tsx`: `OffthreadVideo` of a proxy with trim (`uses[].in/out`), the film's grade, optional slow push/pan
-  through `motion.ts` (R17 calm curves), and an automatic source tag for fair-use/capture rows.
+- `Clip.tsx`: `<Clip asset="a07" use="u1">`, an `OffthreadVideo` of the silent proxy trimmed in media coordinates,
+  the film's grade, optional slow push/pan through `motion.ts` (R17 calm curves), and an automatic source tag for
+  fair-use/capture rows. The tag text comes from the ledger `credit`; `aos asset registry` also writes those strings
+  as generated `screen` entries in `claims.json` (kind `label`, source the ledger row), so R24 coverage stays
+  mechanical while legibility stays a frame review.
 - `Photo.tsx`: stills with calm pan/zoom and the same grade; `Capture.tsx`: framed browser/UI captures.
 - `Model.tsx` / `Environment.tsx`: GLB models and HDRI lighting in react-three-fiber (scanned CC0 props to answer the
   v9 verdict "miniatures", "not recognizable object").
@@ -131,6 +173,12 @@ The gate also writes `qa/assets.md` (counts per basis, fair-use seconds and shar
   by the repo MIT) rendered with three.js on the two shot frames. `@remotion/transitions` is not used until its npm
   `UNLICENSED` field is clarified. Remotion is pinned at 4.x: its license changes in 5.0.
 - The grade (one LUT-like look per film) applies to every imported pixel so stock matches the design system.
+
+Reconciling the rules (Codex finding 6): R17 still governs motion inside a shot and the calm curves of every move.
+Dissolves and match cuts stay the default join; push, wipe, zoom-through and whip blur are allowed only as the film's
+declared transition language in `style.md` (part of the R28 design system) and must appear in the hero. Imported
+real material counts as one visualization practice under R28: a film that uses it shows it in the hero next to a
+built practice, and R18's "one medium" applies unless the brief argues for that mix.
 
 ## 5. Reference packs (skill `video-references`)
 
@@ -166,31 +214,46 @@ in `~/.aos/refs-cache/`, never in a repo. No niche is built in; the brief picks.
 
 ## 8. Coordination and quota
 
-- `aos delegate --max-input <tokens>`: reads Codex's own `token_count` events from its rollout log while it runs and
-  stops a run over budget (today a delegate burned 3.9 M input tokens in 29 min and failed). Default budget per task
-  kind, written in the receipt.
+- `aos delegate --max-input <tokens>`, a **best-effort** limit, not a hard ceiling (Codex finding 7). The delegate
+  binds to the one Codex rollout file created after its start whose `cwd` is its worktree, reads the cumulative
+  `input_tokens` of its `token_count` events (cached input recorded separately and not counted), and when the count
+  passes the budget kills the whole process tree (`taskkill /T /F`) and writes a receipt with the last count, the
+  overshoot and outcome `over-budget`. Missing or delayed events: after `--idle` minutes without an event the
+  existing no-progress kill applies; the receipt says the budget was unobserved. Descendant runs started by the
+  delegate are not visible in that file and are named as a limit in the receipt. Today's failed delegate (3.9 M
+  input tokens in 29 min) is the calibration case; default budgets per task kind come from Codex's own estimates.
 - Every delegate task file must list the exact files to read and the one command that proves done; the delegate
   refuses a task file without them.
 - At every gate (brief, look, hero, production batch, final): both vendors' windows (`aos capacity`), the split
   (who builds what until when) and the next reset written in an `aos note` and the film's `HANDOFF.md`;
   `aos video preflight` prints this as a checklist step.
 
-## Work split for building this (both windows read 2026-10-06 19:05)
+## Work split for building this (windows read 2026-10-06 19:05; Codex critique done 19:50 with 20 K tokens)
 
-| Phase | Claude | Codex |
+| Phase | Claude (5 h 94 % left, week 51 % left) | Codex (5 h ~19 % until ~20:31, week 72 % left) |
 |---|---|---|
-| Now (Codex 19 % until about 20:31) | spec, consolidation, template bug tests | one bounded critique of this spec |
-| After Codex's reset | Remotion components, transitions, reference-pack skill, rules text | ledger gate and adapters test-first (Claude writes the failing fair-use/license tests, Codex the code, per split authorship), `--max-input` |
-| Each merge | review Codex's diff and tests | review Claude's diff (bounded) |
+| Now | spec revision, implementation plan, failing gate fixtures, template bug tests | idle (window kept for one bounded plan check) |
+| After Codex's reset | Remotion components, transitions, reference-pack skill, rules consolidation | ledger gate against Claude's failing fixtures (est. 40-70 K), adapters behind one interface (60-100 K), `--max-input` (20-35 K) |
+| Each merge | reads Codex's diff and runs the tests on the host | bounded review of Claude's diff |
+
+Codex's estimates sum to 120-205 K tokens, inside one 5-hour window by its own estimate; each task goes through
+`aos delegate` in its own worktree with `--idle` and (once built) `--max-input`, and the split is re-read at each merge.
 
 ## Testing
 
 - Adapters: recorded HTTP fixtures, never the network in tests (`tests/` and `node --test`); one real call per source
   when added, recorded in the plan.
-- Gate: every refusal above has a test seen failing first; fixtures under `templates/video/tools/checks/fixtures/`.
+- Gate (Codex finding 8): fixtures on a 60 s film timeline (`plan.ts`, `words.json`, `assets.json`). One valid
+  fixture holds every basis: `license` (Pexels row), `cc0`, `public-domain`, `own`, a 5 s `fair-use` excerpt under a
+  narration interval and a 1 s `capture` (6 s = 10 % of 60 s, at the cap). Refusal fixtures each mutate one protected
+  field of the valid one (license id, hash, credit, excerpt 8.1 s, total 6.1 s, sound kept, no overlapping words,
+  empty rationale, missing evidence, refused acquisition, dynamic `staticFile` path, external `.gltf` resource) and
+  must fail against the production gate code; each is seen failing before the gate code that catches it exists.
 - `aos asset` wrappers: Pester tests in `tests/aos.Tests.ps1` with `$TestDrive`, both shells; `aos test` green.
-- End to end: one scaffolded film fetches one clip per basis (license, cc0, fair-use excerpt, capture), proxies,
-  renders a 10 s test composition with two transitions, and passes the gate; QA writes `qa/assets.md`.
+- `--max-input`: tests with a fake rollout file for over budget, delayed events, missing events, a rollout from
+  another worktree (ignored) and cancellation (process tree gone, receipt written).
+- End to end: one scaffolded 60 s test film fetches one real asset per basis within the caps above, proxies, renders
+  with two transitions and passes the gate; QA writes `qa/assets.md`.
 
 ## Open items
 
