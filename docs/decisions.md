@@ -3,6 +3,30 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-06 - Films import real material; rights are a ledger and a gate; delegates get a token budget
+
+- The user, after six films built entirely as code: "the real limitation ... they built everything from scratch";
+  films "must be able to import assets and images, short clips MOST IMPORTANTLY", sourced in context "not locked and
+  binded to the specific platform". R03/R04 change: generic *generated* imagery stays rejected (the 2026-09-29
+  decision stands), real imported material is allowed when it shows its line's own idea and is graded into the look.
+- Rights are recorded, not assumed: `assets.json` per film, a gate (R35) in build and QA, rights evidence sealed by
+  the input manifest. The user accepted short fair-use excerpts of coverage; the gate enforces limits (8 s per use,
+  10 % of the film, sound muted, narration over the excerpt, a rationale and a source tag) and says "policy checks
+  passed", never "fair use". How material was obtained is a separate decision from its rights basis: YouTube's terms
+  forbid downloads even for fair use, so the brief refuses `download-tool` for YouTube unless the channel decides
+  otherwise. Rejected: an asset MCP server (schemas on every request), platform-locked sourcing, CC BY-SA (share-alike
+  could reach the whole film), `@remotion/transitions` (npm says UNLICENSED), vendoring gl-transitions (own shaders).
+- One shared Node tool (`agents-home/video/assets`, `aos asset`) for both vendors: byte budget the user approves per
+  film, content-addressed cache outside OneDrive, nine search adapters behind one interface, captures with the
+  installed Playwright. Keys only as child environment variables.
+- `aos delegate --max-input` counts all input tokens. The spec said non-cached only; a measured Codex run used 3.5 M
+  input (3.4 M cached) and took 35 % of its 5-hour window, which a non-cached budget would never have stopped.
+- Video rules are grouped by stage with ids unchanged; R35-R40 added (asset gate, adjacent-frame check where boxes
+  meet, first-time-viewer reviewer questions, git archive on OneDrive, sourcing by need, delegate budgets).
+- Process: Codex critiqued the spec (REVISE, 8 findings, all taken) before code. The plan gave Codex the gate,
+  adapters and `--max-input`; its window went to 45 % on the last alone, so Claude took the gate and adapters at once
+  (R34) and Codex reviewed them instead of writing them.
+
 ## 2026-10-04 - Notes reach the other agent: a PostToolUse notes hook
 
 - During alignment-now v7 Codex posted 17 `aos note`s in six hours (its window reset, review findings on Claude's

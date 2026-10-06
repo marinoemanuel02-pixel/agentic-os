@@ -19,6 +19,7 @@ subscriptions (Claude and ChatGPT).
 | `media-tools` | ffmpeg, ImageMagick, pandoc, yt-dlp, Whisper, DuckDB, Playwright, Blender, Inkscape, Kdenlive, GIMP, OBS from the command line |
 | `penpot-local` | Penpot design work through its local MCP server, started only when needed |
 | `research` | cited web research with the agents' own free web search and fetch |
+| `video-references` | a reference pack for a film's niche: strong channels watched in the browser without downloading, notes per beat |
 | `caveman` | opt-in terse replies, only on an explicit `/caveman` (about a quarter fewer visible tokens in a 3-prompt Haiku test; total tokens did not fall); not for reports or prose |
 | `tool-catalog` | this list |
 
@@ -39,7 +40,9 @@ Servers cost context on every request: add one only when a command line cannot d
 `gh` (GitHub), `rg`/`fd`/`jq` (search), `git`, `uv`/`python`, `node`/`npm`, `pwsh`; the media tools above;
 `python ~/.video-intel/video_intel.py <reel-url>... [--limit N]` (public reels to local Whisper transcripts in `~/.video-intel/out/`; no cookies needed, profile pages are listed through the browser; Instagram media only, the `video-intel` skill drives it);
 `aos` itself: `status`, `sync`, `test`, `new`, `video new` (a video project from the template), `who` (claims), `note`, `delegate codex|claude` (hand a task to the other
-vendor), `secret` (keys; never print them), `place` (known folders), `install <layer>`.
+vendor, `--max-input` caps its tokens), `secret` (keys; never print them), `place` (known folders), `install <layer>`,
+`asset search|fetch|capture|proxy|registry|credits|budget` (real clips, photos, captures and models for a film, with a
+rights ledger; rule R35).
 
 ## Other agents
 
