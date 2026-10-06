@@ -23,10 +23,17 @@ export function sanitizeUrl(url) {
   }
 }
 
+// Error text from fetch or a browser can quote the URL it was given: strip user info and credential parameters.
+export function scrub(text, url = '') {
+  let out = String(text);
+  if (url) out = out.split(url).join(sanitizeUrl(url));
+  return out.replace(/\/\/[^/@\s'"]+:[^/@\s'"]*@/g, '//').replace(/([?&])([^=&\s'"]+)=[^&\s'"#]*/g, (m, sep, k) => (SECRET_PARAM.test(k) ? `${sep}${k}=REDACTED` : m));
+}
+
 export async function fetchHttp(url, {capBytes, dest, headers = {}}) {
   const ctl = new AbortController();
   let received = 0;
-  const fail = (message, cause) => Object.assign(new Error(message), {bytes: received, cause});
+  const fail = (message, cause) => Object.assign(new Error(scrub(message, url)), {bytes: received});
   let res;
   try {
     res = await fetch(url, {headers: {'user-agent': USER_AGENT, ...headers}, signal: ctl.signal});

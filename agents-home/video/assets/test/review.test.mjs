@@ -157,3 +157,33 @@ test('proxyFilm refuses cached media whose hash differs from the ledger', async 
   addRow(d, {id: 'p01', kind: 'photo', media: {sha256: '0'.repeat(64), cache: `objects/${obj.sha256}.png`}, derivatives: [], uses: []});
   assert.throws(() => proxyFilm(d), /p01: cached media changed/);
 });
+
+// Codex final review 2026-10-06 (findings 1 and 4).
+test('a credential inside the URL never survives in an error message', async () => {
+  const dest = join(mkdtempSync(join(tmpdir(), 'e-')), 'x');
+  await assert.rejects(fetchHttp('http://user:PASS-42@127.0.0.1:9/x?api_key=KEY-42', {capBytes: 10, dest}), e => !/PASS-42|KEY-42/.test(e.message));
+});
+
+test('the rights page is capped by the remaining budget and charged when it breaks', async () => {
+  const {fetchAsset} = await import('../asset.mjs');
+  const s = await serve((q, r) => {
+    if (!q.url.startsWith('/license')) return r.end(Buffer.alloc(500, 1));
+    r.writeHead(200, {'content-length': '100000'});
+    r.write('L'.repeat(70));
+    setTimeout(() => r.socket.destroy(), 50);
+  });
+  try {
+    const d = film(0.001); // 1048 bytes approved
+    await assert.rejects(fetchAsset(d, opts(`${s.base}/v.mp4`, {licenseUrl: `${s.base}/license`})));
+    assert.ok(budgetFor(d).usedBytes >= 570, `charged ${budgetFor(d).usedBytes}`);
+    assert.equal(readLedger(d).rows.length, 0);
+  } finally { s.close(); }
+});
+
+test('a capture is refused once the budget is spent', async () => {
+  const {captureAsset} = await import('../lib/capture.mjs');
+  const {charge} = await import('../lib/budget.mjs');
+  const d = film(0.001);
+  charge(d, 2000, 'https://x.example/', 'complete');
+  await assert.rejects(captureAsset(d, {id: 'c01', url: 'https://x.example/', mode: 'shot', why: 'x'}), /over the film's download budget/);
+});

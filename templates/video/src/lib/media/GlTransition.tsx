@@ -1,11 +1,13 @@
 // Shader transitions between two imported stills (photo assets or held frames), drawn on a full-frame quad with
 // @remotion/three. The shaders are our own, in the style of the gl-transitions catalogue (no vendored files).
 import React, { useMemo } from "react";
-import { staticFile, useVideoConfig } from "remotion";
+import { AbsoluteFill, staticFile, useVideoConfig } from "remotion";
 import { ThreeCanvas } from "@remotion/three";
 import { useLoader } from "@react-three/fiber";
 import * as THREE from "three";
 import { ASSETS } from "../../data/assets";
+import { USES } from "../../data/asset-uses";
+import { SourceTag } from "./SourceTag";
 
 const VERTEX = `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 
@@ -62,11 +64,16 @@ type Props = {
   shader: keyof typeof SHADERS;
 };
 
-export const GlTransition: React.FC<Props> = ({ fromAsset, toAsset, progress, shader }) => {
+export const GlTransition: React.FC<Props> = ({ fromAsset, fromUse, toAsset, toUse, progress, shader }) => {
   const { width, height } = useVideoConfig();
+  // The source tag of whichever still dominates the frame (fair-use and capture rows carry one, R35).
+  const credit = progress < 0.5 ? USES[fromAsset][fromUse].credit : USES[toAsset][toUse].credit;
   return (
-    <ThreeCanvas width={width} height={height} gl={{ antialias: true }}>
-      <Quad fromSrc={staticFile(ASSETS[fromAsset].src)} toSrc={staticFile(ASSETS[toAsset].src)} progress={progress} shader={shader} />
-    </ThreeCanvas>
+    <AbsoluteFill>
+      <ThreeCanvas width={width} height={height} gl={{ antialias: true }}>
+        <Quad fromSrc={staticFile(ASSETS[fromAsset].src)} toSrc={staticFile(ASSETS[toAsset].src)} progress={progress} shader={shader} />
+      </ThreeCanvas>
+      {credit ? <SourceTag text={credit} /> : null}
+    </AbsoluteFill>
   );
 };

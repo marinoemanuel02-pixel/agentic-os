@@ -13,7 +13,7 @@ import {fileURLToPath} from 'node:url';
 import {parseArgs} from 'node:util';
 import {createHash} from 'node:crypto';
 import {budgetFor, reserve, charge} from './lib/budget.mjs';
-import {fetchHttp, fetchExcerpt, sanitizeUrl, USER_AGENT} from './lib/fetch.mjs';
+import {fetchHttp, fetchExcerpt, sanitizeUrl, scrub, USER_AGENT} from './lib/fetch.mjs';
 import {measureMedia} from './lib/measure.mjs';
 import {makeProxy, makeAudio, sha256File} from './lib/proxy.mjs';
 import {storeObject, lookupKey, cacheKey} from './lib/cache.mjs';
@@ -26,11 +26,12 @@ import {cacheRoot, filmMediaRoot} from './lib/paths.mjs';
 const EVIDENCE_EXCERPT = 300;
 const PAGE_CAP = 2 * 1048576;
 
-async function defaultFetchPage(url) {
+async function defaultFetchPage(url, capBytes = PAGE_CAP) {
   const dest = join(mkdtempSync(join(tmpdir(), 'asset-page-')), 'page.html');
-  const r = await fetchHttp(url, {capBytes: PAGE_CAP, dest});
+  const r = await fetchHttp(url, {capBytes, dest});
   const text = readFileSync(dest, 'utf8');
   rmSync(dest, {force: true});
+  if (!r.complete) throw Object.assign(new Error(`rights page ${sanitizeUrl(url)} is over the film's download budget`), {bytes: r.bytes});
   return {text, bytes: r.bytes};
 }
 
@@ -79,7 +80,16 @@ export async function fetchAsset(filmDir, opts, io = {}) {
     let rightsEvidence = null;
     if (opts.basis !== 'own') {
       const evidenceUrl = opts.licenseUrl || opts.page || opts.url;
-      const page = await fetchPage(evidenceUrl);
+      // The rights page is network traffic for the film too: capped by what is left, charged even when it breaks.
+      const left = reserve(filmDir, 0).remaining;
+      if (left <= 0) throw new Error(`${opts.id}: rights page not fetched: over the film's download budget (0 bytes left)`);
+      let page;
+      try {
+        page = await fetchPage(evidenceUrl, Math.min(PAGE_CAP, left));
+      } catch (e) {
+        charge(filmDir, e.bytes || 0, sanitizeUrl(evidenceUrl), 'rights-page-failed');
+        throw new Error(`${opts.id}: ${scrub(e.message, evidenceUrl)}`);
+      }
       const text = typeof page === 'string' ? page : page.text;
       charge(filmDir, typeof page === 'string' ? Buffer.byteLength(page) : page.bytes, sanitizeUrl(evidenceUrl), 'rights-page');
       rightsEvidence = `research/rights/${opts.id}.json`;

@@ -19,13 +19,7 @@ const speed = Number(process.argv[3] ?? 1.0);
 const outDir = process.env.VO_OUT;
 const only = process.argv[4];
 const root = path.join(__dirname, "..");
-// Same rule as tools/media-root.mjs (CJS cannot import it synchronously): env, else ~/.aos/video/<project folder>.
-function mediaRoot(project) {
-  if (process.env.AOS_VIDEO_MEDIA_ROOT) return path.resolve(process.env.AOS_VIDEO_MEDIA_ROOT);
-  const name = path.basename(path.resolve(project));
-  if (name.includes("{{") || fs.existsSync(path.join(project, "_gitignore"))) throw new Error("media root: refusing the template or an unsubstituted name; set AOS_VIDEO_MEDIA_ROOT");
-  return path.join(home, ".aos", "video", name);
-}
+const { mediaRoot } = require("./media-root.cjs"); // same rule as tools/media-root.mjs, worktrees included
 const media = mediaRoot(root);
 const out = outDir || path.join(media, "app/public/vo");
 fs.mkdirSync(out, { recursive: true });

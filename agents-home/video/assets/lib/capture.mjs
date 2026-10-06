@@ -11,7 +11,7 @@ import {measureMedia} from './measure.mjs';
 import {addRow, readLedger} from './ledger.mjs';
 import {cacheRoot} from './paths.mjs';
 import {withFilmLock} from './lock.mjs';
-import {budgetFor, charge} from './budget.mjs';
+import {budgetFor, charge, reserve} from './budget.mjs';
 import {sanitizeUrl} from './fetch.mjs';
 
 const VIEWPORT = {width: 1920, height: 1080};
@@ -69,6 +69,7 @@ export async function captureAsset(filmDir, {id, url, mode, seconds, why, platfo
   return withFilmLock(filmDir, async () => {
     if (readLedger(filmDir).rows.some(r => r.id === id)) throw new Error(`${id} already in assets.json`);
     if (budgetFor(filmDir).approvedBytes === null) throw new Error(`${id}: no download budget approved for this film (a capture loads the page too)`);
+    if (reserve(filmDir, 0).remaining <= 0) throw new Error(`${id}: not captured: over the film's download budget (0 bytes left)`);
     const retrieved = new Date().toISOString();
     const clean = sanitizeUrl(url);
     const dest = join(mkdtempSync(join(tmpdir(), 'asset-')), mode === 'shot' ? 'capture.png' : 'capture.webm');

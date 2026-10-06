@@ -86,3 +86,18 @@ test('no tool keeps a hard-coded film fallback', () => {
   walk(TOOLS);
   assert.deepEqual(offenders, []);
 });
+
+// Codex final review 2026-10-06 (finding 5): the Python and CommonJS tools resolve worktrees like the JS resolver.
+test('the Python and CommonJS twins agree with the JS resolver for a worktree', () => {
+  const env = {...process.env}; delete env.AOS_VIDEO_MEDIA_ROOT;
+  const wt = project('review');
+  const main = join(tmpdir(), 'videos', 'My Film');
+  writeFileSync(join(wt, '.git'), `gitdir: ${main.replaceAll('\\', '/')}/.git/worktrees/review\n`);
+  const want = join(homedir(), '.aos', 'video', 'My Film');
+  const py = spawnSync('python', ['-c', 'import sys; from pathlib import Path; sys.path.insert(0, sys.argv[1]); from media_root import media_root; print(media_root(Path(sys.argv[2])))', TOOLS, wt], {encoding: 'utf8', env});
+  assert.equal(py.status, 0, py.stderr);
+  assert.equal(py.stdout.trim(), want);
+  const cjs = spawnSync(process.execPath, ['-e', 'console.log(require(process.argv[1]).mediaRoot(process.argv[2]))', join(TOOLS, 'media-root.cjs'), wt], {encoding: 'utf8', env});
+  assert.equal(cjs.status, 0, cjs.stderr);
+  assert.equal(cjs.stdout.trim(), want);
+});

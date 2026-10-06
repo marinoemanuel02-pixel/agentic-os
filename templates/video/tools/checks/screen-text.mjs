@@ -129,7 +129,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   // The media components (R35) show only the ledger's source credit, which aos asset registry writes into claims.json
   // as generated label entries, so their forwarded text is covered there.
   const plumbing = new Set(['src/lib/Tag.tsx', 'src/lib/Type.tsx', 'src/lib/Stage.tsx', 'src/shots/kit.tsx',
-    'src/lib/media/SourceTag.tsx', 'src/lib/media/Clip.tsx', 'src/lib/media/Photo.tsx', 'src/lib/media/Capture.tsx']);
+    'src/lib/media/SourceTag.tsx', 'src/lib/media/Clip.tsx', 'src/lib/media/Photo.tsx', 'src/lib/media/Capture.tsx', 'src/lib/media/GlTransition.tsx']);
   const files = [];
   const walk = dir => {
     if (!fs.existsSync(dir)) return;

@@ -1,5 +1,6 @@
 {
-  "url": "https://example.org/a05",
+  "url": "https://lab.example/launch",
+  "asset": "https://lab.example/demo.mp4",
   "retrieved": "2026-10-07T10:00:00+02:00",
   "pageSha256": "6258b2d776bdfdaafad79e1e780f6d18364899aee2e5f1ad5868fabdd02a6c1e",
   "excerpt": "license text excerpt"
