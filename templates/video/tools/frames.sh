@@ -3,7 +3,7 @@
 #   tools/frames.sh <sheet-name> S01:20 S01:140 S02:60 ...   -> ~/.aos/video/{{name}}/frames/<sheet-name>.jpg
 set -euo pipefail
 P="$(cd "$(dirname "$0")/.." && pwd)"
-H="${AOS_VIDEO_MEDIA_ROOT:-$HOME/.aos/video/{{name}}}"
+. "$P/tools/media-root.sh"
 name="$1"; shift
 bash "$P/tools/sync-app.sh"
 cd "$H/app"

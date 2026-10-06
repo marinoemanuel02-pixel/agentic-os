@@ -4,7 +4,7 @@
 set -uo pipefail
 P="$(cd "$(dirname "$0")/.." && pwd)"
 video="$1"; srt="$2"
-H="${AOS_VIDEO_MEDIA_ROOT:-$HOME/.aos/video/{{name}}}"
+. "$P/tools/media-root.sh"
 mkdir -p "$P/qa" "$H/qa/shots"
 R="$P/qa/report.md"; fail=0
 ok() { echo "- PASS $*" >> "$R"; }; bad() { echo "- FAIL $*" >> "$R"; fail=1; }

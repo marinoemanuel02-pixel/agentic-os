@@ -31,7 +31,17 @@ if not model_dir:
 model_path = Path(model_dir)
 if not (model_path / "model.bin").is_file():
     raise RuntimeError("Existing Whisper model cache incomplete; no download attempted")
-media = Path(os.environ.get("AOS_VIDEO_MEDIA_ROOT", Path.home() / ".aos/video/{{name}}"))
+def media_root(project: Path) -> Path:
+    # Same rule as tools/media-root.mjs: env, else ~/.aos/video/<project folder>; the template is refused.
+    env = os.environ.get("AOS_VIDEO_MEDIA_ROOT")
+    if env:
+        return Path(env)
+    if "{{" in project.name or (project / "_gitignore").exists():
+        sys.exit("media root: refusing the template or an unsubstituted name; set AOS_VIDEO_MEDIA_ROOT")
+    return Path.home() / ".aos" / "video" / project.name
+
+
+media = media_root(root)
 public = media / "app/public"
 vo_dir = Path(os.environ["VO_DIR"]) if os.environ.get("VO_DIR") else None
 model = WhisperModel(str(model_path), device="cpu", compute_type="int8", cpu_threads=4, local_files_only=True)

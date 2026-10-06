@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
+import {mediaRoot} from '../media-root.mjs';
 import {fileURLToPath} from 'node:url';
 
 const hash = data => crypto.createHash('sha256').update(data).digest('hex');
@@ -86,8 +87,7 @@ export function projectEvidenceFiles(root) {
 export function projectInputs(root) {
   const home = process.env.USERPROFILE;
   if (!home || !process.env.WINDIR) throw new Error('Windows USERPROFILE/WINDIR required');
-  const name = JSON.parse(fs.readFileSync(path.join(root, 'tools/package.json'), 'utf8')).name;
-  const media = process.env.AOS_VIDEO_MEDIA_ROOT ? path.resolve(process.env.AOS_VIDEO_MEDIA_ROOT) : path.join(home, '.aos/video', name);
+  const media = mediaRoot(root);
   const modules = process.env.AOS_REMOTION_MODULES ? path.resolve(process.env.AOS_REMOTION_MODULES) : path.join(home, '.aos/scratch/video-agi-race/node_modules');
   const shared = path.dirname(modules);
   assertRendererSource(path.join(root, 'src'), path.join(media, 'app/src'));

@@ -3,7 +3,7 @@
 #   tools/build.sh [version-label]
 set -euo pipefail
 P="$(cd "$(dirname "$0")/.." && pwd)"
-H="${AOS_VIDEO_MEDIA_ROOT:-$HOME/.aos/video/{{name}}}"
+. "$P/tools/media-root.sh"
 label="${1:-v1}"
 cd "$P"
 currency_mode=""
