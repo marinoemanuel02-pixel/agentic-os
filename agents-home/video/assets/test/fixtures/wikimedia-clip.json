@@ -1,0 +1,58 @@
+{
+ "query": {
+  "pages": {
+   "1": {
+    "pageid": 11,
+    "ns": 6,
+    "title": "File:Launch.webm",
+    "imageinfo": [
+     {
+      "url": "https://upload.wikimedia.org/d/Launch.webm",
+      "descriptionurl": "https://commons.wikimedia.org/wiki/File:Launch.webm",
+      "size": 1000000,
+      "width": 1920,
+      "height": 1080,
+      "mime": "video/webm",
+      "extmetadata": {
+       "LicenseShortName": {
+        "value": "CC0"
+       },
+       "Artist": {
+        "value": "<a href=\"//commons.wikimedia.org/wiki/User:Ned\">Ned</a>"
+       },
+       "LicenseUrl": {
+        "value": "https://creativecommons.org/licenses/by/4.0"
+       }
+      }
+     }
+    ]
+   },
+   "2": {
+    "pageid": 9,
+    "ns": 6,
+    "title": "File:Talk.webm",
+    "imageinfo": [
+     {
+      "url": "https://upload.wikimedia.org/e/Talk.webm",
+      "descriptionurl": "https://commons.wikimedia.org/wiki/File:Talk.webm",
+      "size": 1000000,
+      "width": 1920,
+      "height": 1080,
+      "mime": "video/webm",
+      "extmetadata": {
+       "LicenseShortName": {
+        "value": "CC BY-SA 3.0"
+       },
+       "Artist": {
+        "value": "<a href=\"//commons.wikimedia.org/wiki/User:Oz\">Oz</a>"
+       },
+       "LicenseUrl": {
+        "value": "https://creativecommons.org/licenses/by/4.0"
+       }
+      }
+     }
+    ]
+   }
+  }
+ }
+}

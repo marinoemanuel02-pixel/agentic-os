@@ -1,0 +1,38 @@
+{
+ "count": 3,
+ "results": [
+  {
+   "id": 501,
+   "name": "servo whirr",
+   "username": "pat",
+   "license": "http://creativecommons.org/publicdomain/zero/1.0/",
+   "url": "https://freesound.org/people/pat/sounds/501/",
+   "duration": 1.8,
+   "previews": {
+    "preview-hq-mp3": "https://cdn.freesound.org/previews/501-hq.mp3"
+   }
+  },
+  {
+   "id": 502,
+   "name": "keyboard typing",
+   "username": "quinn",
+   "license": "https://creativecommons.org/licenses/by/4.0/",
+   "url": "https://freesound.org/people/quinn/sounds/502/",
+   "duration": 4.2,
+   "previews": {
+    "preview-hq-mp3": "https://cdn.freesound.org/previews/502-hq.mp3"
+   }
+  },
+  {
+   "id": 503,
+   "name": "alarm",
+   "username": "ray",
+   "license": "http://creativecommons.org/licenses/by-nc/3.0/",
+   "url": "https://freesound.org/people/ray/sounds/503/",
+   "duration": 2,
+   "previews": {
+    "preview-hq-mp3": "https://cdn.freesound.org/previews/503-hq.mp3"
+   }
+  }
+ ]
+}

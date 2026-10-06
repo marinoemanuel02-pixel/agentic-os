@@ -1,0 +1,31 @@
+{
+ "numberOfResults": 1,
+ "foundAssets": [
+  {
+   "assetId": "Metal032",
+   "displayName": "Metal 032",
+   "dataType": "Material",
+   "shortLink": "https://ambientcg.com/a/Metal032",
+   "downloadFolders": {
+    "default": {
+     "downloadFiletypeCategories": {
+      "zip": {
+       "downloads": [
+        {
+         "attribute": "1K-JPG",
+         "downloadLink": "https://ambientcg.com/get?file=Metal032_1K-JPG.zip",
+         "size": 4000000
+        },
+        {
+         "attribute": "2K-JPG",
+         "downloadLink": "https://ambientcg.com/get?file=Metal032_2K-JPG.zip",
+         "size": 12000000
+        }
+       ]
+      }
+     }
+    }
+   }
+  }
+ ]
+}
