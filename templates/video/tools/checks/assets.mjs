@@ -60,15 +60,45 @@ function wordIntervals(timeline, words) {
   return out;
 }
 
+// glTF (text, or the JSON chunk of a binary .glb) and Lottie files must carry every resource inside them.
 function externalResources(file) {
+  const lower = file.toLowerCase();
   let j;
-  try { j = JSON.parse(readFileSync(file, 'utf8')); } catch { return false; }
+  try {
+    if (lower.endsWith('.glb')) {
+      const b = readFileSync(file);
+      if (b.length < 20 || b.toString('latin1', 0, 4) !== 'glTF' || b.readUInt32LE(16) !== 0x4E4F534A) return false;
+      j = JSON.parse(b.toString('utf8', 20, 20 + b.readUInt32LE(12)));
+    } else j = JSON.parse(readFileSync(file, 'utf8'));
+  } catch { return false; }
   const external = uri => typeof uri === 'string' && uri !== '' && !uri.startsWith('data:');
-  if (file.endsWith('.gltf')) return [...(j.buffers || []), ...(j.images || [])].some(x => external(x.uri));
+  if (/\.(gltf|glb)$/.test(lower)) return [...(j.buffers || []), ...(j.images || [])].some(x => external(x.uri));
   return (j.assets || []).some(a => a.p !== undefined && a.e !== 1 && external(a.p));
 }
 
-function scanSource(dir, errors) {
+// Every placement of an imported asset names its ledger use with literals (asset/use, fromAsset/fromUse,
+// toAsset/toUse), so the gate counts what is actually on screen; one use is one placement.
+const PAIRS = [['asset', 'use'], ['fromAsset', 'fromUse'], ['toAsset', 'toUse']];
+const SRC_LITERAL = new RegExp(`\\b(src|poster|href)\\s*=\\s*\\{?\\s*["'\`][^"'\`]*\\.(${MEDIA_EXT})\\b`, 'i');
+const CSS_URL = new RegExp(`url\\(\\s*["']?[^)"']*\\.(${MEDIA_EXT})\\b`, 'i');
+const REMOTE = new RegExp(`https?://[^\\s"'\`)]+\\.(${MEDIA_EXT})\\b`, 'i');
+
+function placementsIn(rel, code, errors, placements) {
+  for (const tag of code.matchAll(/<([A-Z][\w.]*)\b([^<>]*?)\/?>/gs)) {
+    const attrs = tag[2];
+    for (const [a, u] of PAIRS) {
+      const am = new RegExp(`\\b${a}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|(\\{))`).exec(attrs);
+      if (!am) continue;
+      if (am[3]) { errors.push(`${rel}: asset ids must be literal (${a}={...}); write the id`); continue; }
+      const id = am[1] ?? am[2];
+      const um = new RegExp(`\\b${u}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`).exec(attrs);
+      if (!um) { errors.push(`${rel}: asset ${id} placed without a use (${u}="uN")`); continue; }
+      placements.push({id, use: um[1] ?? um[2], rel});
+    }
+  }
+}
+
+function scanSource(dir, errors, placements) {
   const src = join(dir, 'src');
   for (const file of walk(src)) {
     if (!/\.(ts|tsx|mts|js|jsx|mjs)$/.test(file)) continue;
@@ -82,8 +112,11 @@ function scanSource(dir, errors) {
       if (!(inMedia && /^ASSETS\[[A-Za-z_$][\w$]*\]\.src$/.test(arg))) bad = true;
     }
     for (const m of code.matchAll(/useGLTF\s*\(\s*(["'`])/g)) if (m) bad = true;
+    // A plain src/poster/href or a CSS url() naming a media file reaches the picture around the registry too.
+    if (SRC_LITERAL.test(code) || CSS_URL.test(code)) bad = true;
     if (bad) errors.push(`${rel}: dynamic or literal media path (use a media component with an asset id from src/data/assets.ts)`);
-    if (new RegExp(`https?://[^\\s"'\`)]+\\.(${MEDIA_EXT})\\b`, 'i').test(code)) errors.push(`${rel}: remote media URL (fetch it with aos asset and use its id)`);
+    if (REMOTE.test(code)) errors.push(`${rel}: remote media URL (fetch it with aos asset and use its id)`);
+    if (!inMedia) placementsIn(rel, code, errors, placements);
   }
 }
 
@@ -129,9 +162,18 @@ export function checkAssets(dir, opts = {}) {
         const accepted = acq[r.platform] ?? acq['*'] ?? [];
         if (!accepted.includes(r.acquisition)) errors.push(`${id}: acquisition ${r.acquisition} from ${r.platform} not accepted by sourcing.json`);
       }
+      const evidence = `research/rights/${id}.json`;
       if (!r.rightsEvidence || !existsSync(join(dir, r.rightsEvidence))) errors.push(`${id}: rights evidence missing (${r.rightsEvidence || 'no path'})`);
+      else if (String(r.rightsEvidence).replaceAll('\\', '/') !== evidence) errors.push(`${id}: rights evidence must be ${evidence}`);
+      else {
+        const e = readJson(join(dir, evidence), {});
+        const complete = typeof e.url === 'string' && e.url && typeof e.retrieved === 'string' && /^[0-9a-f]{64}$/.test(e.pageSha256 || '')
+          && typeof e.excerpt === 'string' && e.excerpt.trim();
+        if (!complete) errors.push(`${id}: rights evidence incomplete (url, retrieved, pageSha256, excerpt)`);
+      }
     }
     if (limited(r.basis) && sourcing.fairUse !== true) errors.push(`${id}: fair use disabled in sourcing.json`);
+    if (limited(r.basis) && !credit) errors.push(`${id}: fair-use and capture rows need a credit for their source tag`);
     if (/(^|\.)nasa\.gov$/.test(hostOf(r.url))) {
       for (const s of r.subjects || []) if ((s === 'person' || s === 'logo') && !r.clearance) errors.push(`${id}: needs clearance for ${s}`);
     }
@@ -142,7 +184,7 @@ export function checkAssets(dir, opts = {}) {
       const file = join(publicDir, rel);
       if (!existsSync(file)) { errors.push(`${id}: derivative ${rel} missing`); continue; }
       if (sha256(file) !== d.sha256) errors.push(`${id}: derivative hash mismatch (${rel})`);
-      if (/\.(gltf|json|lottie)$/.test(rel) && externalResources(file)) errors.push(`${id}: ${rel} references external resources`);
+      if (/\.(gltf|glb|json|lottie)$/i.test(rel) && externalResources(file)) errors.push(`${id}: ${rel} references external resources`);
     }
 
     let tagged = false;
@@ -173,11 +215,31 @@ export function checkAssets(dir, opts = {}) {
   if (filmSeconds > 0 && limitedSeconds > MAX_SHARE * filmSeconds + EPS) {
     errors.push(`fair-use and capture total ${fmt(limitedSeconds)} s exceeds ${MAX_SHARE * 100} % of ${fmt(filmSeconds)} s`);
   }
-  for (const file of walk(join(publicDir, 'assets'))) {
+  for (const file of walk(publicDir)) {
     const rel = relative(publicDir, file).replaceAll('\\', '/');
-    if (!derivativePaths.has(rel)) errors.push(`public/${rel}: no ledger row`);
+    if (rel.startsWith('assets/')) { if (!derivativePaths.has(rel)) errors.push(`public/${rel}: no ledger row`); continue; }
+    if (rel.startsWith('vo/')) continue;
+    if (new RegExp(`\\.(${MEDIA_EXT})$`, 'i').test(rel)) errors.push(`public/${rel}: media outside public/assets and public/vo (import it with aos asset)`);
   }
-  scanSource(dir, errors);
+  const placements = [];
+  scanSource(dir, errors, placements);
+  const placed = new Set();
+  for (const p of placements) {
+    const key = `${p.id}/${p.use}`;
+    if (placed.has(key)) { errors.push(`${p.id}: use ${p.use} is placed more than once (give each placement its own use)`); continue; }
+    placed.add(key);
+    const r = rows.find(x => x.id === p.id);
+    if (!r || !(r.uses || []).some(u => u.use === p.use)) errors.push(`${p.id}: use ${p.use} is placed in ${p.rel} but not in assets.json`);
+  }
+  const registry = join(dir, 'src', 'data', 'assets.ts');
+  if (existsSync(registry)) {
+    for (const m of readFileSync(registry, 'utf8').matchAll(/"([^"]+)":\s*\{\s*"src":\s*"([^"]*)"/g)) {
+      const r = rows.find(x => x.id === m[1]);
+      if (!r) { errors.push(`src/data/assets.ts: ${m[1]} is not in assets.json`); continue; }
+      const expected = String(((r.derivatives || [])[0] || {}).path || '').replaceAll('\\', '/');
+      if (m[2] !== expected) errors.push(`src/data/assets.ts: ${m[1]} points at ${m[2]}, the ledger at ${expected}`);
+    }
+  }
 
   const fairUseSeconds = Number(limitedSeconds.toFixed(3));
   return {ok: errors.length === 0, errors,

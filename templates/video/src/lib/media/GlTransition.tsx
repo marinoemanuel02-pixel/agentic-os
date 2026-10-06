@@ -52,13 +52,21 @@ const Quad: React.FC<{ fromSrc: string; toSrc: string; progress: number; shader:
   );
 };
 
-type Props = { from: keyof typeof ASSETS & string; to: keyof typeof ASSETS & string; progress: number; shader: keyof typeof SHADERS };
+// Each still is placed through its ledger use (fromUse/toUse), so the asset gate counts it (R35).
+type Props = {
+  fromAsset: keyof typeof ASSETS & string;
+  fromUse: string;
+  toAsset: keyof typeof ASSETS & string;
+  toUse: string;
+  progress: number;
+  shader: keyof typeof SHADERS;
+};
 
-export const GlTransition: React.FC<Props> = ({ from, to, progress, shader }) => {
+export const GlTransition: React.FC<Props> = ({ fromAsset, toAsset, progress, shader }) => {
   const { width, height } = useVideoConfig();
   return (
     <ThreeCanvas width={width} height={height} gl={{ antialias: true }}>
-      <Quad fromSrc={staticFile(ASSETS[from].src)} toSrc={staticFile(ASSETS[to].src)} progress={progress} shader={shader} />
+      <Quad fromSrc={staticFile(ASSETS[fromAsset].src)} toSrc={staticFile(ASSETS[toAsset].src)} progress={progress} shader={shader} />
     </ThreeCanvas>
   );
 };
