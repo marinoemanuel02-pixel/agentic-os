@@ -1043,6 +1043,11 @@ Describe 'Video input provenance' {
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
 
+    It 'refuses imported material without rights, credits, evidence or within fair-use limits (asset gate, node --test)' {
+        $result = & node --no-warnings --test (Join-Path $PSScriptRoot '..\templates\video\tools\checks\assets.test.mjs') 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $result
+    }
+
     It 'rejects changed render inputs and mismatched exports in an isolated fixture' {
         $testFile = Join-Path $PSScriptRoot '..\templates\video\tools\checks\input-manifest.test.mjs'
         $savedScratch = $env:AOS_MANIFEST_TEST_ROOT

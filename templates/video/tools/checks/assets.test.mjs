@@ -102,3 +102,23 @@ test('report file is written', () => {
   assert.match(text, /supporting evidence/);
   assert.match(text, /Human checks/);
 });
+
+test('timeline-json.mts exports the plan in frames for the gate', () => {
+  const out = spawnSync(process.execPath, ['--no-warnings', join(HERE, '..', 'timeline-json.mts')], {encoding: 'utf8'});
+  assert.equal(out.status, 0, out.stderr);
+  const t = JSON.parse(out.stdout);
+  assert.equal(t.fps, 30);
+  assert.deepEqual(t.shots.map(s => s.id), ['S01', 'S02']);
+  assert.equal(t.shots[1].from, t.shots[0].frames);
+  assert.deepEqual(t.lines.map(l => [l.id, l.from]), [['L1', 2 * 18]]);
+  assert.ok(t.frames >= t.shots[1].from + t.shots[1].frames);
+});
+
+test('build and QA run the gate before rendering or decoding, and the manifest seals the ledger', () => {
+  const build = readFileSync(join(HERE, '..', 'build.sh'), 'utf8');
+  const qa = readFileSync(join(HERE, '..', 'qa.sh'), 'utf8');
+  assert.ok(build.indexOf('checks/assets.mjs') > 0 && build.indexOf('checks/assets.mjs') < build.indexOf('tools/audio.mts'));
+  assert.ok(qa.indexOf('checks/assets.mjs') > 0 && qa.indexOf('checks/assets.mjs') < qa.indexOf('input-manifest.mjs" verify'));
+  const manifest = readFileSync(join(HERE, 'input-manifest.mjs'), 'utf8');
+  for (const name of ['assets.json', 'sourcing.json', 'research/rights']) assert.match(manifest, new RegExp(name.replace('/', '\/')));
+});

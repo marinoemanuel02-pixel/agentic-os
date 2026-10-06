@@ -78,9 +78,12 @@ export function assertRendererSource(expected, rendered, label = 'source') {
 export function projectEvidenceFiles(root) {
   const files = {};
   for (const name of ['script.md', 'sources.md', 'qa.env']) files[name] = path.join(root, name);
-  for (const name of ['claims.json', 'currency.json']) {
+  for (const name of ['claims.json', 'currency.json', 'assets.json', 'sourcing.json']) {
     if (fs.existsSync(path.join(root, name))) files[name] = path.join(root, name);
   }
+  // Rights evidence for imported material (R35) is sealed with the build like the ledger itself.
+  const rights = path.join(root, 'research/rights');
+  if (fs.existsSync(rights)) for (const name of fs.readdirSync(rights).sort()) if (name.endsWith('.json')) files[`research/rights/${name}`] = path.join(rights, name);
   return files;
 }
 
