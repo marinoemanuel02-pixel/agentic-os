@@ -11,6 +11,8 @@ import {measureMedia} from './measure.mjs';
 import {addRow, readLedger} from './ledger.mjs';
 import {cacheRoot} from './paths.mjs';
 import {withFilmLock} from './lock.mjs';
+import {budgetFor, charge} from './budget.mjs';
+import {sanitizeUrl} from './fetch.mjs';
 
 const VIEWPORT = {width: 1920, height: 1080};
 const PLAYWRIGHT = join(process.env.AOS_NPM_GLOBAL || join(homedir(), '.npm-global', 'node_modules'), 'playwright');
@@ -23,19 +25,28 @@ function chromium() {
   return createRequire(join(PLAYWRIGHT, 'package.json'))('playwright').chromium;
 }
 
+// Page traffic is summed from every finished request (headers and bodies), so a capture is charged like a download.
+function meter(page, sizes) {
+  page.on('requestfinished', req => sizes.push(req.sizes().then(s => s.responseBodySize + s.responseHeadersSize).catch(() => 0)));
+}
+const total = async sizes => (await Promise.all(sizes)).reduce((a, b) => a + Math.max(0, b), 0);
+
 export async function capture(url, {mode = 'shot', seconds = 6, dest}) {
   mkdirSync(join(dest, '..'), {recursive: true});
   const browser = await chromium().launch();
+  const sizes = [];
   try {
     if (mode === 'shot') {
       const page = await browser.newPage({viewport: VIEWPORT});
+      meter(page, sizes);
       await page.goto(url, {waitUntil: 'networkidle'});
       await page.screenshot({path: dest});
-      return {file: dest, bytes: statSync(dest).size, html: await page.content()};
+      return {file: dest, bytes: statSync(dest).size, html: await page.content(), transferred: await total(sizes)};
     }
     const videoDir = mkdtempSync(join(tmpdir(), 'asset-capture-'));
     const context = await browser.newContext({viewport: VIEWPORT, recordVideo: {dir: videoDir, size: VIEWPORT}});
     const page = await context.newPage();
+    meter(page, sizes);
     await page.goto(url, {waitUntil: 'networkidle'});
     const html = await page.content();
     const steps = Math.max(1, Math.round(seconds * 2));
@@ -48,7 +59,7 @@ export async function capture(url, {mode = 'shot', seconds = 6, dest}) {
     if (!recorded) throw new Error(`capture ${url}: no video was recorded`);
     renameSync(join(videoDir, recorded), dest);
     rmSync(videoDir, {recursive: true, force: true});
-    return {file: dest, bytes: statSync(dest).size, html};
+    return {file: dest, bytes: statSync(dest).size, html, transferred: await total(sizes)};
   } finally {
     await browser.close();
   }
@@ -57,19 +68,22 @@ export async function capture(url, {mode = 'shot', seconds = 6, dest}) {
 export async function captureAsset(filmDir, {id, url, mode, seconds, why, platform = 'web'}) {
   return withFilmLock(filmDir, async () => {
     if (readLedger(filmDir).rows.some(r => r.id === id)) throw new Error(`${id} already in assets.json`);
+    if (budgetFor(filmDir).approvedBytes === null) throw new Error(`${id}: no download budget approved for this film (a capture loads the page too)`);
     const retrieved = new Date().toISOString();
+    const clean = sanitizeUrl(url);
     const dest = join(mkdtempSync(join(tmpdir(), 'asset-')), mode === 'shot' ? 'capture.png' : 'capture.webm');
     const shot = await capture(url, {mode, seconds, dest});
-    const hit = storeObject(shot.file, {url: `${url}#capture=${mode}@${retrieved}`, retrieved});
+    charge(filmDir, shot.transferred, clean, 'capture');
+    const hit = storeObject(shot.file, {key: `capture:${clean}:${mode}:${retrieved}`, url: clean, retrieved});
     rmSync(dest, {force: true});
     const rightsEvidence = `research/rights/${id}.json`;
     mkdirSync(join(filmDir, 'research', 'rights'), {recursive: true});
-    writeFileSync(join(filmDir, rightsEvidence), JSON.stringify({url, retrieved, mode,
+    writeFileSync(join(filmDir, rightsEvidence), JSON.stringify({url: clean, retrieved, mode,
       pageSha256: createHash('sha256').update(shot.html).digest('hex'),
       excerpt: shot.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300)}, null, 2) + '\n');
     const host = new URL(url).hostname;
     return addRow(filmDir, {
-      id, kind: mode === 'shot' ? 'photo' : 'capture', need: why, searchStep: 1, url, page: url, author: host, retrieved,
+      id, kind: mode === 'shot' ? 'photo' : 'capture', need: why, searchStep: 1, url: clean, page: clean, author: host, retrieved,
       basis: 'capture', license: null, licenseUrl: null, acquisition: 'platform-feature', platform, rightsEvidence,
       source: null, media: {sha256: hit.sha256, cache: relative(cacheRoot(), hit.path).replaceAll('\\', '/'), start: 0, duration: mode === 'shot' ? null : measureMedia(hit.path).duration},
       derivatives: [], uses: [], credit: `Source: ${host}, captured ${retrieved.slice(0, 10)}`, clearance: null, subjects: [],

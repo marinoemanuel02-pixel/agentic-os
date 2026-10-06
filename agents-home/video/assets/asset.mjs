@@ -13,10 +13,10 @@ import {fileURLToPath} from 'node:url';
 import {parseArgs} from 'node:util';
 import {createHash} from 'node:crypto';
 import {budgetFor, reserve, charge} from './lib/budget.mjs';
-import {fetchHttp, fetchExcerpt, USER_AGENT} from './lib/fetch.mjs';
+import {fetchHttp, fetchExcerpt, sanitizeUrl, USER_AGENT} from './lib/fetch.mjs';
 import {measureMedia} from './lib/measure.mjs';
 import {makeProxy, makeAudio, sha256File} from './lib/proxy.mjs';
-import {storeObject, lookupUrl} from './lib/cache.mjs';
+import {storeObject, lookupKey, cacheKey} from './lib/cache.mjs';
 import {addRow, readLedger, writeLedger} from './lib/ledger.mjs';
 import {withFilmLock} from './lib/lock.mjs';
 import {registryText, usesText, screenEntries, mergeScreen} from './lib/registry.mjs';
@@ -31,54 +31,69 @@ async function defaultFetchPage(url) {
   const r = await fetchHttp(url, {capBytes: PAGE_CAP, dest});
   const text = readFileSync(dest, 'utf8');
   rmSync(dest, {force: true});
-  return r.complete ? text : text.slice(0, PAGE_CAP);
+  return {text, bytes: r.bytes};
 }
 
 const extOf = url => {
   try { return extname(new URL(url).pathname).toLowerCase() || '.bin'; } catch { return '.bin'; }
 };
 
-// Fetch one asset for a film: cache hit (free) or a capped download charged to the film's budget, then the rights
-// evidence and the ledger row. Uses are added by the director afterwards (they need the shot plan).
+// Fetch one asset for a film: cache hit (free) or a capped download charged to the film's budget (failed and
+// partial transfers too), then the rights evidence (its page is charged as well) and the ledger row. Every URL that
+// is stored or printed is sanitized; the cache key is an opaque hash of the full request. Uses are added by the
+// director afterwards (they need the shot plan).
 export async function fetchAsset(filmDir, opts, io = {}) {
   const fetchPage = io.fetchPage || defaultFetchPage;
   const excerpt = opts.sourceIn !== undefined && opts.sourceIn !== null;
-  const cacheKey = excerpt ? `${opts.url}#t=${opts.sourceIn},${opts.sourceOut}` : opts.url;
+  const key = cacheKey(excerpt ? `${opts.url}#t=${opts.sourceIn},${opts.sourceOut}` : opts.url);
+  const clean = sanitizeUrl(opts.url);
   return withFilmLock(filmDir, async () => {
     if (readLedger(filmDir).rows.some(r => r.id === opts.id)) throw new Error(`${opts.id} already in assets.json`);
     const retrieved = new Date().toISOString();
-    let hit = lookupUrl(cacheKey);
+    let hit = lookupKey(key);
     if (!hit) {
       const {approvedBytes} = budgetFor(filmDir);
       if (approvedBytes === null) throw new Error(`${opts.id}: no download budget approved for this film (aos asset budget --approve <MB> --by-user, after the user approves)`);
       const {remaining} = reserve(filmDir, 0);
       if (remaining <= 0) throw new Error(`${opts.id}: not fetched: over the film's download budget (0 bytes left)`);
       const dest = join(mkdtempSync(join(tmpdir(), 'asset-')), `download${excerpt ? '.mp4' : extOf(opts.url)}`);
-      const got = excerpt
-        ? fetchExcerpt(opts.url, {sourceIn: opts.sourceIn, sourceOut: opts.sourceOut, capBytes: remaining, dest})
-        : await fetchHttp(opts.url, {capBytes: remaining, dest});
-      charge(filmDir, got.bytes, opts.url, got.complete ? 'complete' : 'incomplete');
-      if (!got.complete) throw new Error(`${opts.id}: not fetched: over the film's download budget (${remaining} bytes left) or the transfer failed${got.log ? `: ${got.log}` : ''}`);
-      hit = storeObject(dest, {url: cacheKey, retrieved, license: opts.license || null});
+      let got;
+      try {
+        got = excerpt
+          ? await fetchExcerpt(opts.url, {sourceIn: opts.sourceIn, sourceOut: opts.sourceOut, capBytes: remaining, dest})
+          : await fetchHttp(opts.url, {capBytes: remaining, dest});
+      } catch (e) {
+        charge(filmDir, e.bytes || 0, clean, 'failed');
+        rmSync(dest, {force: true});
+        throw new Error(`${opts.id}: ${e.message}`);
+      }
+      charge(filmDir, got.bytes, clean, got.complete ? 'complete' : 'incomplete');
+      if (!got.complete) {
+        rmSync(dest, {force: true});
+        throw new Error(`${opts.id}: not fetched: over the film's download budget (${remaining} bytes left) or the transfer failed${got.log ? `: ${got.log}` : ''}`);
+      }
+      hit = storeObject(dest, {key, url: clean, retrieved, license: opts.license || null});
       rmSync(dest, {force: true});
     }
     const measured = opts.measure === false ? {duration: null} : measureMedia(hit.path);
     let rightsEvidence = null;
     if (opts.basis !== 'own') {
       const evidenceUrl = opts.licenseUrl || opts.page || opts.url;
-      const text = await fetchPage(evidenceUrl);
+      const page = await fetchPage(evidenceUrl);
+      const text = typeof page === 'string' ? page : page.text;
+      charge(filmDir, typeof page === 'string' ? Buffer.byteLength(page) : page.bytes, sanitizeUrl(evidenceUrl), 'rights-page');
       rightsEvidence = `research/rights/${opts.id}.json`;
       mkdirSync(join(filmDir, 'research', 'rights'), {recursive: true});
       writeFileSync(join(filmDir, rightsEvidence), JSON.stringify({
-        url: evidenceUrl, asset: opts.url, retrieved,
+        url: sanitizeUrl(evidenceUrl), asset: clean, retrieved,
         pageSha256: createHash('sha256').update(text).digest('hex'),
         excerpt: text.replace(/\s+/g, ' ').slice(0, EVIDENCE_EXCERPT),
       }, null, 2) + '\n');
     }
     return addRow(filmDir, {
       id: opts.id, kind: opts.kind, need: opts.why, searchStep: opts.searchStep ?? null,
-      url: opts.url, page: opts.page || null, author: opts.author || null, retrieved,
-      basis: opts.basis, license: opts.license || null, licenseUrl: opts.licenseUrl || null,
+      url: clean, page: opts.page ? sanitizeUrl(opts.page) : null, author: opts.author || null, retrieved,
+      basis: opts.basis, license: opts.license || null, licenseUrl: opts.licenseUrl ? sanitizeUrl(opts.licenseUrl) : null,
       acquisition: opts.acquisition || null, platform: opts.platform || null, rightsEvidence,
       source: excerpt ? {in: opts.sourceIn, out: opts.sourceOut} : null,
       media: {sha256: hit.sha256, cache: relative(cacheRoot(), hit.path).replaceAll('\\', '/'), start: excerpt ? opts.sourceIn : 0, duration: measured.duration},
@@ -96,6 +111,7 @@ export function proxyFilm(filmDir, {force = false} = {}) {
     if (r.derivatives.length && !force) continue;
     const source = join(cacheRoot(), r.media.cache);
     if (!existsSync(source)) throw new Error(`${r.id}: cached media missing (${source})`);
+    if (sha256File(source) !== r.media.sha256) throw new Error(`${r.id}: cached media changed since it was fetched (hash differs from assets.json); fetch it again`);
     const derivatives = [];
     if (r.kind === 'clip' || r.kind === 'capture') {
       const path = `assets/${r.id}.mp4`;

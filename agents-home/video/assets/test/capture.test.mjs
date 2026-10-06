@@ -33,3 +33,24 @@ test('scroll records a video of about the requested length', {skip: !playwrightA
     assert.ok(m.duration > 1.5 && m.duration < 4, `duration ${m.duration}`);
   } finally { s.close(); }
 });
+
+test('captureAsset charges the page traffic and stores no credential parameter', {skip: !playwrightAvailable() && 'Playwright not installed'}, async () => {
+  const {captureAsset} = await import('../lib/capture.mjs');
+  const {budgetFor} = await import('../lib/budget.mjs');
+  const {readLedger} = await import('../lib/ledger.mjs');
+  const {mkdirSync, writeFileSync, readFileSync} = await import('node:fs');
+  const s = await serve();
+  try {
+    const d = join(mkdtempSync(join(tmpdir(), 'capfilm-')), 'film');
+    mkdirSync(d, {recursive: true});
+    process.env.AOS_VIDEO_MEDIA_ROOT = join(d, '..', 'media');
+    process.env.AOS_ASSET_CACHE = join(d, '..', 'cache');
+    writeFileSync(join(d, 'sourcing.json'), JSON.stringify({schema: 1, fairUse: true, acquisition: {}, budget: {approvedMB: 5, approvedAt: 'x', approvedBy: 'user'}}));
+    await captureAsset(d, {id: 'c01', url: `${s.url}?session=SECRET-7`, mode: 'shot', why: 'the page as it is'});
+    assert.ok(budgetFor(d).usedBytes >= PAGE.length, `charged ${budgetFor(d).usedBytes}`);
+    for (const f of [join(d, 'assets.json'), join(d, 'research', 'rights', 'c01.json'), join(process.env.AOS_ASSET_CACHE, 'index.json')]) {
+      assert.doesNotMatch(readFileSync(f, 'utf8'), /SECRET-7/, f);
+    }
+    assert.equal(readLedger(d).rows[0].basis, 'capture');
+  } finally { s.close(); }
+});

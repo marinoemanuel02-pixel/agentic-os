@@ -60,7 +60,7 @@ test('fetchHttp aborts at the cap and reports an incomplete transfer', async () 
     const dest = join(mkdtempSync(join(tmpdir(), 'f-')), 'x.mp4');
     const r = await fetchHttp(s.url, {capBytes: 100000, dest});
     assert.equal(r.complete, false);
-    assert.ok(r.bytes <= 100000, `kept ${r.bytes}`);
+    assert.ok(r.bytes > 100000, `every received byte is reported (${r.bytes})`);
     const ok = await fetchHttp(s.url, {capBytes: 400000, dest});
     assert.equal(ok.complete, true);
     assert.equal(ok.bytes, 300000);
@@ -78,7 +78,7 @@ test('a cache hit is found by URL and keeps one object', () => {
   assert.equal(lookupUrl('http://x/other'), null);
 });
 
-test('fetchAsset: a cache hit charges nothing but still writes this film\'s row and evidence', async () => {
+test('fetchAsset: a cache hit charges no media bytes but still writes this film\'s row and evidence', async () => {
   const {fetchAsset} = await import('../asset.mjs');
   const s = await server(1000);
   try {
@@ -87,9 +87,9 @@ test('fetchAsset: a cache hit charges nothing but still writes this film\'s row 
     const use = d => { process.env.AOS_VIDEO_MEDIA_ROOT = join(d, '..', 'media'); process.env.AOS_ASSET_CACHE = shared; };
     const opts = {url: s.url, id: 'a01', basis: 'cc0', license: 'cc0-1.0', licenseUrl: 'https://example.org/license', acquisition: 'direct-file', platform: 'test', why: 'test need', kind: 'clip', credit: '', measure: false};
     use(a); await fetchAsset(a, opts, {fetchPage: async () => 'license page'});
-    assert.equal(budgetFor(a).usedBytes, 1000);
+    assert.equal(budgetFor(a).usedBytes, 1000 + 12, 'the media and its rights page');
     use(b); await fetchAsset(b, opts, {fetchPage: async () => 'license page'});
-    assert.equal(budgetFor(b).usedBytes, 0);
+    assert.equal(budgetFor(b).usedBytes, 12, 'only the rights page: the media came from the cache');
     assert.ok(existsSync(join(b, 'research', 'rights', 'a01.json')));
     assert.equal(readLedger(b).rows[0].id, 'a01');
   } finally { s.close(); }
@@ -176,7 +176,7 @@ test('proxyFilm writes a silent proxy and one WAV per audio-subject use, with ha
   const d = film();
   const src = clip(mkdtempSync(join(tmpdir(), 'pf-')), ['-f', 'lavfi', '-i', 'testsrc=d=3:s=320x180:r=30', '-f', 'lavfi', '-i', 'sine=d=3', '-shortest']);
   const obj = storeObject(src, {url: 'http://x/clip', retrieved: 'now'});
-  addRow(d, {id: 'a01', kind: 'clip', media: {cache: `objects/${obj.sha256}.mp4`}, derivatives: [],
+  addRow(d, {id: 'a01', kind: 'clip', media: {sha256: obj.sha256, cache: `objects/${obj.sha256}.mp4`}, derivatives: [],
     uses: [{use: 'u1', audio: 'muted', mediaFrom: 0, mediaTo: 1}, {use: 'u2', audio: 'subject', mediaFrom: 1, mediaTo: 2}]});
   const row = proxyFilm(d).rows[0];
   assert.deepEqual(row.derivatives.map(x => x.path), ['assets/a01.mp4', 'assets/a01.u2.wav']);
