@@ -19,7 +19,7 @@ import {makeProxy, makeAudio, sha256File} from './lib/proxy.mjs';
 import {storeObject, lookupUrl} from './lib/cache.mjs';
 import {addRow, readLedger, writeLedger} from './lib/ledger.mjs';
 import {withFilmLock} from './lib/lock.mjs';
-import {registryText} from './lib/registry.mjs';
+import {registryText, usesText, screenEntries, mergeScreen} from './lib/registry.mjs';
 import {creditsBlock} from './lib/credits.mjs';
 import {cacheRoot, filmMediaRoot} from './lib/paths.mjs';
 
@@ -173,8 +173,14 @@ async function main(argv) {
     case 'proxy': proxyFilm(needFilm(), {force: !!v.force}); console.log('derivatives written; run aos asset registry'); return;
     case 'registry': {
       const f = needFilm();
-      writeFileSync(join(f, 'src', 'data', 'assets.ts'), registryText(readLedger(f).rows));
-      console.log('src/data/assets.ts written');
+      const rows = readLedger(f).rows;
+      writeFileSync(join(f, 'src', 'data', 'assets.ts'), registryText(rows));
+      writeFileSync(join(f, 'src', 'data', 'asset-uses.ts'), usesText(rows));
+      const claimsFile = join(f, 'claims.json');
+      const claims = existsSync(claimsFile) ? JSON.parse(readFileSync(claimsFile, 'utf8')) : {sources: {}, lines: [], screen: []};
+      writeFileSync(claimsFile, JSON.stringify(mergeScreen(claims, screenEntries(rows)), null, 2) + '
+');
+      console.log('src/data/assets.ts, src/data/asset-uses.ts and the generated source-tag claims written; review them in claims.json');
       return;
     }
     case 'credits': process.stdout.write(creditsBlock(readLedger(needFilm()).rows)); return;
