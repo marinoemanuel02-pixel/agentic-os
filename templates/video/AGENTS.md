@@ -41,7 +41,9 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
 
 Films use real material found for each shot's need, from any source: first the subject's own (its paper, launch or
 demo video, live page capture), then coverage excerpts, then open libraries, then built. `shots.md` records each
-shot's need and source; `sourcing.json` holds the channel's policy and the download budget the user approved.
+shot's need and source; the brief's Sourcing section establishes the channel's policy and the download budget the user
+approved, and `sourcing.json` records them for the tools. Permission to import is not permission to mix media: R18 and
+R28 still decide how many practices the film uses, and imported material appears in the hero next to a built practice.
 
 - Search: `aos asset search "<words>" --kind clip|photo|model|hdri|texture|sfx [--source <id>]` (Pexels, Pixabay,
   Openverse, Wikimedia, NASA, Internet Archive, Poly Haven, ambientCG, Freesound; keys via `aos secret set`).

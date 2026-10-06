@@ -7,8 +7,10 @@ don't rewrite the old one: the record of what was rejected is the part that ages
 
 - The user, after six films built entirely as code: "the real limitation ... they built everything from scratch";
   films "must be able to import assets and images, short clips MOST IMPORTANTLY", sourced in context "not locked and
-  binded to the specific platform". R03/R04 change: generic *generated* imagery stays rejected (the 2026-09-29
-  decision stands), real imported material is allowed when it shows its line's own idea and is graded into the look.
+  binded to the specific platform". R03/R04 change: generic *generated* imagery stays opt-in behind the anti-slop
+  gate, never the default (the 2026-09-29 decision stands); real imported material is allowed when it shows its line's
+  own idea and is graded into the look, and R18/R28 still decide how many media a film mixes. R04 keeps its criteria
+  independent (a generic look fails even when relevant; a bespoke visual that does not carry its line fails too).
 - Rights are recorded, not assumed: `assets.json` per film, a gate (R35) in build and QA, rights evidence sealed by
   the input manifest. The user accepted short fair-use excerpts of coverage; the gate enforces limits (8 s per use,
   10 % of the film, sound muted, narration over the excerpt, a rationale and a source tag) and says "policy checks
