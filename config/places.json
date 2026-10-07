@@ -40,6 +40,11 @@
       "name": "alignment-now",
       "kind": "repo",
       "path": "{{projects}}\\videos\\alignment-now"
+    },
+    {
+      "name": "cant-escape-ai",
+      "kind": "repo",
+      "path": "{{projects}}\\videos\\cant-escape-ai"
     }
   ]
 }
