@@ -269,3 +269,28 @@ def frames(start: int, end: int):
     sc = bpy.context.scene
     sc.frame_start, sc.frame_end = start, end
     sc.frame_set(start)
+
+
+def lookdev_sheet(script, shots, frame=60, scale=30, name="sheet", preroll=0):
+    """One MCP call -> one contact sheet: runs `script` once per SHOT variant (each in its own namespace, like a
+    fresh MCP call), renders `frame` at `scale` %, and tiles the stills with ImageMagick. Returns the sheet path.
+    Cuts look-dev round trips (and the tokens of reading many single stills) to one per change."""
+    import subprocess
+    lib = globals().get("BLENDER_LIB") or str(Path(script).with_name("lib.py"))
+    out_dir = MEDIA / "lookdev"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stills = []
+    for shot in shots:
+        ns = {"SHOT": shot, "BLENDER_LIB": lib, "__name__": "__main__"}
+        exec(open(script, encoding="utf-8").read(), ns)
+        sc = bpy.context.scene
+        sc.render.resolution_percentage = scale
+        for f in range(frame - preroll, frame + 1):
+            sc.frame_set(f)
+        p = out_dir / f"{name}_{shot}.png"
+        sc.render.filepath = str(p)
+        bpy.ops.render.render(write_still=True)
+        stills.append(str(p))
+    sheet = out_dir / f"{name}.png"
+    subprocess.run(["magick", *stills, "+append", str(sheet)], check=True)
+    return str(sheet)

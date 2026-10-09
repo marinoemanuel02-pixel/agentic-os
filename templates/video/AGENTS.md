@@ -33,6 +33,8 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
 - CC0 assets: `python tools/polyhaven.py model|hdri|tex <id> [1k|2k]` (budget `BUDGET_MB` in qa.env, ledger `research/assets.md`); `python tools/polyhaven.py budget`
 - Shorts edit (R44): `python tools/edit.py` cuts on the words named in `src/data/cuts.json` -> `src/data/edit.json`
 - Page captures (R45): `node tools/capture.mjs [name...]` from `research/capture-pages.json` -> `app/public/captures/`, ledger `research/captures.json`
+- Real material (R42, R52): `python tools/commons.py search|info|fetch|ia-search|ia-fetch ...` (Wikimedia Commons / Internet Archive, licence and author into `research/assets.md`, counted against `BUDGET_MB`); real face detection on footage: `~/.aos/venvs/cv/Scripts/python.exe tools/detect.py <video> <start> <dur> <crop x> <shot id> [--pan x2]`
+- Review sheet of the assembled composition: `bash tools/stills.sh <name> S05:0.9 S11:0.5 ...` (one bundle, one still per shot)
 - Pacing report (R29): `node tools/checks/pacing.mjs <film.mp4> --shots src/data/shots.json --claims claims.json --lines src/data/lines.json --out qa/pacing`
 - Render cache (R32, default in build.sh): `bash tools/render-cached.sh`; `AOS_RENDER_CACHE=0` renders Main whole; tests `node --test tools/cache/cache.test.mjs`
 - Motion check alone: `node --no-warnings tools/checks/motion.mjs <proxy.mp4>`; its tests: `node --test tools/checks/`

@@ -740,10 +740,12 @@ Describe 'New-AosVideo' {
         $lib = [System.IO.File]::ReadAllText((Join-Path $project 'blender\lib.py'))
         $lib | Should -Match '"video" / "align-1"'
         $lib | Should -Match 'BLENDER_LIB'
-        foreach ($t in @('tools\render-shot.py', 'tools\polyhaven.py', 'tools\edit.py', 'tools\capture.mjs', 'blender\shots.json', 'src\data\cuts.json', 'research\capture-pages.json')) {
+        foreach ($t in @('tools\render-shot.py', 'tools\polyhaven.py', 'tools\edit.py', 'tools\capture.mjs', 'tools\commons.py', 'tools\detect.py', 'tools\stills.sh', 'blender\shots.json', 'src\data\cuts.json', 'research\capture-pages.json')) {
             Test-Path -LiteralPath (Join-Path $project $t) | Should -BeTrue -Because "$t is part of the Blender/shorts stage"
         }
         [System.IO.File]::ReadAllText((Join-Path $project 'tools\render-shot.py')) | Should -Match 'BLENDER_LIB = \{lib!r\}'
+        [System.IO.File]::ReadAllText((Join-Path $project 'tools\render-shot.py')) | Should -Match 'LUMA_MIN, LUMA_MAX'
+        $lib | Should -Match 'def lookdev_sheet\('
     }
 
     It 'makes the render app outside the project, linked to the shared install and to src' {
