@@ -78,15 +78,20 @@ def main() -> None:
     bad = []
     for sid in ids:
         spec = table[sid]
+        if sid not in edit:
+            print(f"{sid}: not in the current edit, skipped")
+            continue
         n = force_frames or edit[sid]["frames"] + HANDLE
         start = 1 + spec.get("offset", 0)
         out = clips / f"{sid}.mp4"
         partial = clips / f"{sid}.partial.mp4"  # an interrupted render never overwrites a good clip
-        # incremental: a shot re-renders only when its scene script, lib.py, table entry, frames or scale changed
-        key = hashlib.sha256(json.dumps([spec, n, scale, (ROOT / "blender" / spec["script"]).read_text(encoding="utf-8"),
+        # incremental: a shot re-renders only when its scene script, lib.py, table entry or scale changed, or when the
+        # edit now needs more frames than the clip has (a longer clip is fine: the composition plays only what it needs)
+        key = hashlib.sha256(json.dumps([spec, scale, (ROOT / "blender" / spec["script"]).read_text(encoding="utf-8"),
                                          (ROOT / "blender" / "lib.py").read_text(encoding="utf-8")]).encode()).hexdigest()
-        if "--force" not in sys.argv and state.get(sid) == key and out.exists():
-            print(f"{sid}: unchanged, skipped")
+        have = state.get(sid) if isinstance(state.get(sid), dict) else {}
+        if "--force" not in sys.argv and have.get("key") == key and have.get("frames", 0) >= n and out.exists():
+            print(f"{sid}: unchanged ({have['frames']} frames, need {n}), skipped")
             continue
         expr = EXPR.format(lib=str(ROOT / "blender" / "lib.py"), shot=spec["shot"], script=str(ROOT / "blender" / spec["script"]), scale=scale, preroll=spec.get("preroll", 0),
                            start=start, end=start + n - 1, out=str(partial))
@@ -105,7 +110,7 @@ def main() -> None:
         # keep hand-set fields (tag, gain) and replace only what the render owns
         media[sid] = {**media.get(sid, {}), "clip": f"clips/{sid}.mp4", "startFrom": 0, "push": spec.get("push", False)}
         media_path.write_text(json.dumps(media, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-        state[sid] = key
+        state[sid] = {"key": key, "frames": n}
         state_path.write_text(json.dumps(state, indent=1) + "\n", encoding="utf-8")
         luma = gate(sid, out, n, bad)
         print(f"{sid}: {n} frames in {secs:.0f} s ({secs / n:.2f} s/frame), mid luma {luma:.0f} -> {out}")

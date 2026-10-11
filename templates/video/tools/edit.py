@@ -23,6 +23,8 @@ OUTRO = 75  # frames held after the last line (title)
 # shot, line, anchor word (case-insensitive prefix; "word#n" picks the n-th match), null = the line's start.
 TABLES = json.loads((ROOT / "src/data/cuts.json").read_text(encoding="utf-8"))
 PAUSE = TABLES.get("pause", {})
+# film-level overrides: a looping film wants a short head and almost no tail
+HEAD, GAP, OUTRO = TABLES.get("head", HEAD), TABLES.get("gap", GAP), TABLES.get("outro_frames", OUTRO)
 CUTS = [tuple(c) for c in TABLES["cuts"]]
 
 
