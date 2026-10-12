@@ -1745,6 +1745,32 @@ Describe 'Local model layer' {
         }
     }
 
+    It 'carries embed_model into the local state file but never pulls it' {
+        Mock Get-AosLocalConfig -ModuleName aos {
+            [ordered]@{ default = 'qwen3.5:4b'; optional = @(); embed_model = 'bge-m3'; ollama_url = 'http://127.0.0.1:11434'; min_tokens_per_s = 15 }
+        }
+        InModuleScope aos { Sync-AosLocalState }
+        $state = Get-Content -Raw (Join-Path $stateDir 'local.json') | ConvertFrom-Json
+        $state.embed_model | Should -BeExactly 'bge-m3'
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'ollama pull*' }
+    }
+
+    It 'leaves embed_model out of the local state file when none is configured' {
+        InModuleScope aos { Sync-AosLocalState }
+        $state = Get-Content -Raw (Join-Path $stateDir 'local.json') | ConvertFrom-Json
+        $state.PSObject.Properties.Name | Should -Not -Contain 'embed_model'
+    }
+
+    It 'rewrites the state file when embed_model is added later' {
+        InModuleScope aos { Sync-AosLocalState }
+        Mock Get-AosLocalConfig -ModuleName aos {
+            [ordered]@{ default = 'openbmb/minicpm5-2b:q8_0'; optional = @(); embed_model = 'bge-m3'; ollama_url = 'http://127.0.0.1:11434'; min_tokens_per_s = 15 }
+        }
+        InModuleScope aos { Sync-AosLocalState }
+        $state = Get-Content -Raw (Join-Path $stateDir 'local.json') | ConvertFrom-Json
+        $state.embed_model | Should -BeExactly 'bge-m3'
+    }
+
     It 'pulls only the configured models that are missing, checks the GPU and writes the local state file' {
         InModuleScope aos { Install-AosLocal }
         Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -eq 'ollama pull qwen3.5:4b' }

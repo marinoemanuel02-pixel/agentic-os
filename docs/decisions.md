@@ -3,6 +3,25 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-12 - A second `nar` backend: embedding similarity, so agents can triage before spending tokens
+
+- The recursive-cognition research run (2026-10-09..12) used the local model for nothing, although much of its
+  extraction was sorting: document type, authorship, relevance, prior-art category. It also searched the corpus by a
+  keyword lexicon where the brief asked for semantic search. Cloud tokens went to work a small model can screen.
+- `nar_classify` and a new `nar classify` command take `backend=embed`: zero-shot labels by cosine similarity between
+  each item and each label's text, from one Ollama `/api/embed` request per batch, with no generated text. It
+  lives inside nar rather than as a new server so the calibration, feedback and refit loop applies unchanged (scores
+  are 20 x cosine, logged under `embed:<tag>`) and no extra tool schema loads on every request.
+- `embed_model` in `config/local.json` (bge-m3: multilingual, MIT) reaches `~/.aos/local.json` through `aos sync`.
+  Nothing pulls it: the 1.2 GB download stays a decision. A missing model is an error that names the pull command.
+- Rejected: Jev (TypeSafe AI), the hosted zero-shot classifier that prompted this. It is proprietary and API-only, so
+  the corpus would leave the machine, and it is a paid dependency without an owner-approved cap. GLiClass (Apache-2.0,
+  encoder) stays a candidate if embedding similarity proves too weak: it needs torch (large) and its model cards list
+  English only, so it waits for a bake-off on this user's Italian and English text. JEPA models were considered and
+  dropped: they learn representations (images, video); none generates or classifies text zero-shot.
+- Not measured yet: whether embedding labels agree with the cloud models' labels on this user's material. Until a
+  sample is checked, its output is a hint (the global rule for local-model output).
+
 ## 2026-10-04 - Notes reach the other agent: a PostToolUse notes hook
 
 - During alignment-now v7 Codex posted 17 `aos note`s in six hours (its window reset, review findings on Claude's

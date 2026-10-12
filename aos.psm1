@@ -1032,6 +1032,8 @@ function Sync-AosLocalState([switch]$DryRun) {
     if (-not $cfg) { return }
     $target = Join-Path (Get-AosStateDir) 'local.json'
     $want = [ordered]@{ default = $cfg['default']; ollama_url = $cfg['ollama_url']; min_tokens_per_s = $cfg['min_tokens_per_s'] }
+    # embed_model is optional and never pulled here: nar uses it for classify --backend embed once the user pulled it.
+    if ($cfg['embed_model']) { $want['embed_model'] = [string]$cfg['embed_model'] }
     $have = Read-AosJson $target
     $same = [bool]$have
     if ($have) { foreach ($k in @($want.Keys)) { if ([string]$have[$k] -ne [string]$want[$k]) { $same = $false } } }

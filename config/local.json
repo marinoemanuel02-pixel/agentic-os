@@ -4,6 +4,7 @@
     "default: the local brain; change it only with `aos local adopt <tag>` after `aos nar eval` passes.",
     "optional: other models aos install local keeps pulled (none now; the default qwen3.5:4b also reads images).",
     "candidates: tags for the next bake-off; pulled by hand (`ollama pull <tag>`), not by aos.",
+    "embed_model: the embedding model behind `nar classify --backend embed` (zero-shot labelling by similarity, multilingual). aos sync carries it to ~/.aos/local.json but never pulls it: `ollama pull bge-m3` is a by-hand download of about 1.2 GB.",
     "agent_model: an Ollama variant of the default with agent_num_ctx context, for agent harnesses (OpenAI-compatible clients cannot set the context size). 16K holds 100% on the 6 GB GPU with qwen3.5:4b; 32K does not."
   ],
   "default": "qwen3.5:4b",
@@ -13,6 +14,7 @@
     "qwen3.5:4b",
     "granite4.2:3b"
   ],
+  "embed_model": "bge-m3",
   "agent_model": "aos-agent",
   "agent_num_ctx": 16384,
   "ollama_url": "http://127.0.0.1:11434",

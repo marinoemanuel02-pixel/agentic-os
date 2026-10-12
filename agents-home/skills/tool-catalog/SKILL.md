@@ -30,7 +30,7 @@ the `codex` plugin; Codex has the same superpowers set and the `$cc:*` commands.
 | Server | Agents | Use it for |
 |---|---|---|
 | `context7` | Claude, Codex | current, version-specific library documentation |
-| `nar` | Claude, Codex | scoring options among known alternatives in one local pass; report the outcome with `nar_feedback` |
+| `nar` | Claude, Codex | scoring options among known alternatives in one local pass; `nar_classify` (or `nar classify` on the command line, which scripts should prefer) labels up to 50 short texts per call, with `backend=embed` for fast multilingual zero-shot sorting by topic or type (needs `ollama pull bge-m3` once). Use it to triage before spending cloud tokens, check a sample against the truth, report outcomes with `nar_feedback` |
 
 Servers cost context on every request: add one only when a command line cannot do the job.
 
