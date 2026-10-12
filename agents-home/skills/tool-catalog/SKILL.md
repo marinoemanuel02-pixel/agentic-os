@@ -17,6 +17,12 @@ subscriptions (Claude and ChatGPT).
 | `second-opinion` | independent review by the other vendor before risky changes |
 | `inbox` | saving a note or link to the global Inbox, filing Inbox items into vaults (with confirmation) |
 | `media-tools` | ffmpeg, ImageMagick, pandoc, yt-dlp, Whisper, DuckDB, Playwright, Blender, Inkscape, Kdenlive, GIMP, OBS from the command line |
+| `paseo` | operating Paseo projects, workspaces, workspace scripts, agents, schedules and heartbeats |
+| `paseo-advisor` | one extra agent as an advisor on the current task (it may be the same vendor: not the cross-vendor `second-opinion`) |
+| `paseo-committee` | two high-reasoning agents to find the root cause and plan when stuck or looping |
+| `paseo-handoff` | handing the current task to another agent with full context |
+| `paseo-help` | answering questions about the Paseo app: setup, connectivity, providers, logs, troubleshooting |
+| `paseo-plugin` | building and managing trusted local Paseo plugins |
 | `penpot-local` | Penpot design work through its local MCP server, started only when needed |
 | `research` | cited web research with the agents' own free web search and fetch |
 | `caveman` | opt-in terse replies, only on an explicit `/caveman` (about a quarter fewer visible tokens in a 3-prompt Haiku test; total tokens did not fall); not for reports or prose |

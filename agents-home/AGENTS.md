@@ -24,6 +24,9 @@ request, on both subscriptions.
 - Local model: Ollama on this laptop (`aos install local`; the tag is in agentic-os `config/local.json`).
   Private and offline, much weaker than the cloud models. The `nar` MCP tools score options in one pass
   of it: use them for choices among known alternatives, then report the real outcome with `nar_feedback`.
+  To sort many short texts by topic or type before spending cloud tokens, `nar classify --backend embed` (or
+  `nar_classify`) labels up to 50 per call; its labels are hints, so check a sample first. It keeps item text in
+  `~/.aos/nar`: never pass secrets.
 
 ## How to work
 
