@@ -45,6 +45,16 @@
       "name": "cant-escape-ai",
       "kind": "repo",
       "path": "{{projects}}\\videos\\cant-escape-ai"
+    },
+    {
+      "name": "recursive-cognition-research",
+      "kind": "repo",
+      "path": "{{projects}}\\recursive-cognition-research"
+    },
+    {
+      "name": "where-you-end",
+      "kind": "repo",
+      "path": "{{projects}}\\videos\\where-you-end"
     }
   ]
 }
