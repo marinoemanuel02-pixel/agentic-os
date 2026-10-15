@@ -2702,55 +2702,27 @@ Describe 'Winget skip-dependencies' {
     }
 }
 
-Describe 'Places registration' {
+Describe 'Places sync' {
     BeforeEach {
         Mock Get-AosStateDir -ModuleName aos { $caseRoot }
         Mock Get-AosPlaces -ModuleName aos { @([ordered]@{ name='repo'; kind='repo'; path=$caseRoot; exists=$true }) }
-        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'paseo' }
-        Mock Invoke-AosCapture -ModuleName aos { @{ Code=0; Text='[]' } } -ParameterFilter { $CommandLine -eq 'paseo project ls --json' }
-        Mock Register-AosPaseoPlace -ModuleName aos { $true }
+        # Even when every command looks installed, Places sync must not consult or call anything external.
+        Mock Test-AosCommand -ModuleName aos { $true }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code=1; Text='offline' } }
         Mock Write-AosWarn -ModuleName aos { }
     }
-    It 'registers existing places and skips normalized known paths' {
-        InModuleScope aos { Sync-AosPlaces }
-        Should -Invoke Register-AosPaseoPlace -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Path -eq $caseRoot }
-        $knownJson = ConvertTo-Json -InputObject @(@{ path=($caseRoot.ToUpperInvariant()+'\') }) -Compress
-        Mock Invoke-AosCapture -ModuleName aos { @{ Code=0; Text=$knownJson } } -ParameterFilter { $CommandLine -eq 'paseo project ls --json' }
-        InModuleScope aos { Sync-AosPlaces }
-        Should -Invoke Register-AosPaseoPlace -ModuleName aos -Times 1 -Exactly
-    }
-    It 'never registers missing folders or preview changes' {
-        Mock Get-AosPlaces -ModuleName aos { @([ordered]@{ name='gone'; kind='repo'; path=(Join-Path $caseRoot 'gone'); exists=$false }) }
-        InModuleScope aos { Sync-AosPlaces }
-        InModuleScope aos { Sync-AosPlaces -DryRun }
-        Should -Invoke Register-AosPaseoPlace -ModuleName aos -Times 0 -Exactly
-    }
-    It 'persists local discovery when the daemon cannot list projects' {
-        Mock Invoke-AosCapture -ModuleName aos { @{ Code=1; Text='offline' } } -ParameterFilter { $CommandLine -eq 'paseo project ls --json' }
-        InModuleScope aos { Sync-AosPlaces }
-        Should -Invoke Register-AosPaseoPlace -ModuleName aos -Times 0 -Exactly
-        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'paseo project ls' }
-        Test-Path (Join-Path $caseRoot 'places.json') | Should -BeTrue
-    }
-    It 'refuses malformed listings and reports failed registration' {
-        Mock Invoke-AosCapture -ModuleName aos { @{ Code=0; Text='invalid json' } } -ParameterFilter { $CommandLine -eq 'paseo project ls --json' }
-        InModuleScope aos { Sync-AosPlaces }
-        Should -Invoke Register-AosPaseoPlace -ModuleName aos -Times 0 -Exactly
-        Mock Invoke-AosCapture -ModuleName aos { @{ Code=0; Text='[]' } } -ParameterFilter { $CommandLine -eq 'paseo project ls --json' }
-        Mock Register-AosPaseoPlace -ModuleName aos { $false }
-        InModuleScope aos { Sync-AosPlaces }
-        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'registration failed' }
-    }
-    It 'skips external calls without Paseo and skips absent configuration' {
-        Mock Test-AosCommand -ModuleName aos { $false } -ParameterFilter { $Name -eq 'paseo' }
+    It 'persists the local registry without calling any external command' {
         InModuleScope aos { Sync-AosPlaces }
         Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly
-        Mock Get-AosPlaces -ModuleName aos { $null }
-        InModuleScope aos { Sync-AosPlaces }
+        Test-Path (Join-Path $caseRoot 'places.json') | Should -BeTrue
     }
-    It 'previews an existing unregistered folder without registering or writing it' {
+    It 'skips absent configuration' {
+        Mock Get-AosPlaces -ModuleName aos { $null }
+        { InModuleScope aos { Sync-AosPlaces } } | Should -Not -Throw
+        Test-Path (Join-Path $caseRoot 'places.json') | Should -BeFalse
+    }
+    It 'previews an existing folder without writing the registry' {
         InModuleScope aos { Sync-AosPlaces -DryRun }
-        Should -Invoke Register-AosPaseoPlace -ModuleName aos -Times 0 -Exactly
         Test-Path (Join-Path $caseRoot 'places.json') | Should -BeFalse
     }
     It 'runs Places sync from brain sync and passes preview through' {
@@ -2884,10 +2856,11 @@ Describe 'Places commands' {
         Should -Invoke Add-AosPlace -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Kind -eq 'repo' -and $Path -like '*newproj' }
     }
 
-    It 'shows each place and whether Paseo knows it in aos status' {
-        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'paseo' }
-        Mock Get-AosPaseoProjectPaths -ModuleName aos { ,@() }
+    It 'shows each place in aos status without calling any external command' {
+        Mock Test-AosCommand -ModuleName aos { $true }
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code=1; Text='offline' } }
         InModuleScope aos { Show-AosPlacesStatus }
+        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly
         Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'in' -and $Text -match 'missing' }
     }
 }

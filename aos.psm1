@@ -1985,34 +1985,6 @@ function aos {
 
 Export-ModuleMember -Function aos, Install-AosLayer, Sync-AosBrain, Get-AosStatus, Update-Aos, New-AosProject, New-AosVideo
 
-function Get-AosPaseoProjectPaths {
-    try {
-        $r = Invoke-AosCapture 'paseo project ls --json'
-        if ($r.Code -ne 0) { return $null }
-        $parsed = ConvertFrom-Json -InputObject $r.Text -ErrorAction Stop
-        $paths = New-Object 'System.Collections.Generic.List[string]'
-        if ($r.Text.TrimStart() -notlike '[[]*') { return $null }
-        foreach ($p in $parsed) {
-            if (-not $p.path) { return $null }
-            $paths.Add(([IO.Path]::GetFullPath([string]$p.path)).TrimEnd('\').ToLowerInvariant())
-        }
-        return ,$paths.ToArray()
-    } catch { return $null }
-}
-
-function Register-AosPaseoPlace([string]$Path) {
-    # Invoke the npm PowerShell shim with a literal argument, never interpolate a cmd command.
-    try {
-        $command = Get-Command paseo -ErrorAction Stop
-        if ($command.CommandType -eq 'Application' -and $command.Source -match '\.(cmd|bat)$') {
-            $shim = [IO.Path]::ChangeExtension($command.Source, '.ps1')
-            if (-not (Test-Path -LiteralPath $shim)) { return $false }
-            & $shim project create --json -- $Path | Out-Null
-        } else { & $command project create --json -- $Path | Out-Null }
-        return ($LASTEXITCODE -eq 0)
-    } catch { return $false }
-}
-
 function Sync-AosPlaces([switch]$DryRun) {
     $places = @(Get-AosPlaces | Where-Object { $null -ne $_ })
     if ($places.Count -eq 0) { return }
@@ -2023,21 +1995,6 @@ function Sync-AosPlaces([switch]$DryRun) {
         }
         $place.exists = Test-Path -LiteralPath $place.path -PathType Container
         if (-not $place.exists -and $place.kind -ne 'inbox') { Write-AosWarn "Place is missing; left absent: $($place.name)" }
-    }
-    if (-not (Test-AosCommand paseo)) { Write-AosInfo 'paseo is not installed: Places registration skipped' }
-    else {
-        $known = Get-AosPaseoProjectPaths
-        if ($null -eq $known) { Write-AosWarn 'paseo project ls failed: Places registration skipped; local registry retained' }
-        else {
-            foreach ($place in $places) {
-                if (-not $place.exists) { continue }
-                $norm = ([string]$place.path).TrimEnd('\').ToLowerInvariant()
-                if ($known -contains $norm) { continue }
-                if ($DryRun) { Write-AosDry "would register Paseo project: $($place.name)"; continue }
-                if (Register-AosPaseoPlace -Path $place.path) { Write-AosOk "Paseo project registered: $($place.name)"; $known += $norm }
-                else { Write-AosWarn "Paseo registration failed for $($place.name)" }
-            }
-        }
     }
     $path = Join-Path (Get-AosStateDir) 'places.json'
     $r = Read-AosJsonOrWarn $path
@@ -2108,15 +2065,9 @@ function Show-AosPlaces([switch]$Json) {
 function Show-AosPlacesStatus {
     $places = Get-AosPlaces
     if ($null -eq $places) { Write-AosInfo 'no config/places.json'; return }
-    $known = $null
-    if (Test-AosCommand paseo) { $known = Get-AosPaseoProjectPaths }
     foreach ($p in $places) {
         if (-not $p['exists']) { Write-AosWarn "$($p['name']) missing: $($p['path'])"; continue }
-        $inPaseo = ''
-        if ($null -ne $known) {
-            if ($known -contains ([string]$p['path']).TrimEnd('\').ToLowerInvariant()) { $inPaseo = ', in Paseo' } else { $inPaseo = ', not in Paseo (aos sync)' }
-        }
-        Write-AosOk "$($p['name']) ($($p['kind'])$inPaseo)"
+        Write-AosOk "$($p['name']) ($($p['kind']))"
     }
 }
 
