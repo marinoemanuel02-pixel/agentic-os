@@ -83,8 +83,9 @@ only under `~/.aos`; the one edit that reaches `~/.codex` is the contract senten
 
 **`aos tools`** prints, per vendor, what is registered: MCP servers (name, transport, enabled, pin state), plugins
 (id, version, enabled), shared skills (from `agents-home/skills`). Sources, all read-only: `claude mcp list` (text) and
-`claude plugin list --json`; `codex mcp list --json` and `codex plugin list` (text; it lists a whole marketplace, so
-only rows with status "installed" count). `--json` emits the same redacted data for other tools. Rules:
+`claude plugin list --json`; `codex mcp list --json` and `codex plugin list --json` (its `installed` array; the text
+form lists the whole marketplace, 6,000+ not-installed rows). `--json` emits the same redacted data for other tools.
+Rules:
 
 - **Registered is not available.** A registration does not prove the tool is usable in the current session, and
   a plugin may be installed but not loaded. The output says "registered" and, where the source reports it, the
@@ -98,16 +99,17 @@ only rows with status "installed" count). `--json` emits the same redacted data 
     matches a strict package pattern (`name`, `@scope/name`, optionally `@version`); anything else prints `<redacted>`.
   - remote: scheme, host and path with userinfo, query and fragment removed (and any path segment that looks like a
     token, long and mixed, replaced).
-  - never: `env`, headers, `cwd`, other arguments, raw `unparsed` lines (printed as `unparsed: <server name or
-    ordinal>, <n> chars`), and raw stderr (failures print a fixed reason: `timeout`, `exit <n>`, `not parseable`).
+  - never: `env`, headers, `cwd`, other arguments, raw `unparsed` lines (printed as a count per source), and raw
+    stderr (failures print a fixed reason: `not installed`, `exit <n>`, `not parseable`).
   A test feeds fixtures with a fake secret in every field and in every output path above (env, header, argument, url
   query and userinfo, package spec, unparsed line, stderr) and fails if it appears in stdout, stderr or `--json`.
 - **Pin state** is `pinned` (exact version or digest), `floating` (`@latest`, no version), `local` (a path: its contents
   are not verified) or `n/a` (remote url). `floating` and `local` are warning lines, not errors (the Playwright plugin
   is the first `floating`).
-- **Failure is not "none".** A source that errors, times out or cannot be parsed prints `unavailable: <source>: <fixed
-  reason>` and the command exits non-zero. `claude mcp list` has no options besides help (checked), so its text is
-  parsed, as is `codex plugin list`; a line that does not parse is counted as `unparsed`, never dropped.
+- **Failure is not "none".** A source that is missing, errors or cannot be parsed prints `unavailable: <source>: <fixed
+  reason>` and the command exits non-zero (the local CLIs run without a timeout wrapper). `claude mcp list` has no
+  options besides help (checked), so its text is parsed; a line that does not parse is counted as `unparsed`, never
+  dropped.
 
 **`aos tools find <need words> [--since YYYY-MM-DD]`** looks for what is not installed. It is honest about its reach: it
 sees MCP servers published to the registry, and nothing else.
@@ -117,8 +119,12 @@ sees MCP servers published to the registry, and nothing else.
    ownership; a reverse-DNS domain = domain ownership; both are ownership, not safety). `--since` adds
    `updated_since`, so "what appeared since the last film" is one flag (the ledger's last search date feeds it). The
    search is a substring match on server names only: a server whose name lacks the word is not found.
-   Follows `nextCursor` up to three pages. The schema is a preview: unknown shapes print `unparsed`, never a silent
-   empty.
+   One page by default; `--pages <n>` (at most 3) follows `nextCursor`, because the registry is slow (1 s to 85 s
+   measured on 2026-10-15; the call waits up to 100 s and makes one attempt). The schema is a preview: unknown shapes
+   print `unparsed`, never a silent empty. Descriptions are third-party text printed to an agent: they are cut to one
+   line of 160 characters, stripped of control characters, and printed under a line saying they are data, not
+   instructions. The need words are limited to letters, digits, spaces and `. + # -` and are URL-encoded; they never
+   reach a shell.
 2. The local awesome-lists on the `catalogs` shelf (`rg -i` over `~/.aos/refs/catalogs`), offline. They are about
    skills, Claude Code and orchestrators: a minor source, stated as such.
 3. The part the registry cannot do, printed as a fixed block of web queries to run (the `research` skill): `<software>
@@ -142,13 +148,14 @@ Each project keeps `tools.json` (next to `currency.json`). Shape, one entry per 
                   "evidence": ["url opened", "..."], "note": "what came back"}],
     "candidates": [{"id": "C1", "name": "...", "kind": "cli|skill|mcp|plugin|library|service|model",
                     "risk": ["community", "generated", "unofficial"], "origin": "url", "publisher": "...",
-                    "licence": "...", "cost": "free", "installedBy": "aos|plugin|user|agent"}],
+                    "licence": "...", "cost": "free", "installedBy": "aos|plugin|user|agent", "local": false}],
     "chosen": "C1 | none", "why": "...",
     "vetting": {"version": "exact, or commit/sha256 for a local path", "codeReview": "read|sandboxed|vendor",
                 "secrets": "none|aos-secret:<name>", "consent": {"date": "", "size": "", "words": ""},
                 "testCall": {"date": "", "what": "", "result": "ok"},
                 "tools": {"count": 0, "schemaChars": 0},
-                "terms": "", "approval": {"date": "", "words": ""}, "fallback": ""}
+                "generatedFrom": "openapi|cli|har", "source": "", "routes": "", "fixtureTests": "", "harRedacted": true,
+                "terms": "", "approval": {"date": "", "words": ""}, "fallback": "", "accountCredentials": "none"}
   }]
 }
 ```
@@ -191,7 +198,8 @@ isolated video render roots and from Codex; `aos tools check` calls it. The vide
   not in the ledger".
 - One new rule in `video-rules.md`: the other vendor reads `tools.json` against the brief at the brief gate and says
   what need or candidate is missing (the completeness the check cannot judge). Its id is taken at merge as the next
-  free one: the unmerged branch `video-blender-shorts` already uses R41-R52, so a number chosen now would collide.
+  free one: the unmerged branch `video-blender-shorts` already uses up to R54 (checked 2026-10-15), so the plan uses
+  R55 and re-checks at merge.
 
 Other projects: `templates/project/AGENTS.md` gets a two-line pointer; the check is advisory there.
 
@@ -228,7 +236,7 @@ missing, or choosing among tools, read the `tool-catalog` skill: it lists every 
 agent here, and which one to try first." It gains: "then `aos tools find <need>` before concluding nothing exists."
 The `tool-catalog` skill (loaded on demand, not per request): rule 2 becomes "If nothing fits, run `aos tools find
 <need>`, then say what is missing; installing needs the user's yes"; a row for `aos tools`; the MCP table gains a
-note that `aos tools` shows what aos does not own (plugins, connectors, app-owned servers). Its existing test stays and
+note that `aos tools` shows what aos does not own (plugins, connectors, other registered servers; not the servers a desktop app hosts itself, such as the Blender one, which `claude mcp list` does not show: measured 2026-10-15). Its existing test stays and
 gains a check that `aos tools` is named. No server and no skill is added.
 
 `aos sync` copies the contract to `~/.codex/AGENTS.md` (`Sync-AosCodexAgents`), so this sentence is a write under
@@ -340,3 +348,26 @@ finding" areas: the repo-checkable audit claims. Nothing rejected.
 | 11 | Important | Slice 2 gate enforces structure while vetting waits for slice 3 | Taken. Vetting rules move into slice 2 |
 | 12 | Minor | `PREFLIGHT.md` is generated by `Write-AosVideoPreflight`; success criteria "useful" and "not small" have no threshold | Taken. Generator named; thresholds defined and listed as open question 4 |
 | 13 | Minor | A model name in the spec; "cost is the one command line" is inaccurate | Taken. Model name removed; the contract sentence's cost stated (about 12 words, 20 tokens per request) |
+
+## Amendments found while planning (2026-10-15)
+
+Found by running prototypes of the parsers, the registry call and the ledger module against this machine's real
+output while writing `docs/superpowers/plans/2026-10-15-tool-currency.md`; none changes a decision, each corrects a
+fact or fills a gap the plan needed.
+
+- `codex plugin list --json` exists (`--available` too) and returns `{installed, available}`; the text form was 1.1 MB
+  of mostly not-installed rows. The inventory uses `--json`; the text parser in section 1 is dropped.
+- Local CLIs run without a timeout wrapper, so the "times out" failure reason is removed; the fixed reasons are
+  `not installed`, `exit <n>`, `not parseable`.
+- The registry is slow: the same `search=blender` call took 1 s, 9.9 s, 15 s, 40 s (timed out) and 84.6 s (with
+  `updated_since`). `find` waits up to 100 s, makes one attempt, and fetches one page unless `--pages` asks for more.
+  `updated_since` works (verified: it returned a server published the day before).
+- Registry descriptions are third-party text shown to an agent, so they are bounded, stripped and labelled as data.
+  The need words never reach a shell (charset limit, URL encoding).
+- The ledger schema gains the fields its tier rules need: `candidates[].local`; `vetting.generatedFrom`, `source`,
+  `routes`, `fixtureTests`, `harRedacted`; `vetting.accountCredentials`.
+- The next free video rule id is R55 (R54 is the highest on any branch).
+- Three portability bugs the prototypes caught, now stated in the plan so they are not rediscovered: a parameter named
+  `$Args` silently shadows PowerShell's automatic variable; `@(ConvertFrom-Json ...)` wraps a whole array as one item in
+  Windows PowerShell 5.1 (assign first, then `@($x)`); PowerShell 7 turns ISO timestamps in JSON into `[datetime]`.
+- Found by running the commands for real: a token in a url path can hold `=`, `.` or `%`, so segments are redacted by length-and-mix or by those characters, not by a fixed character class; the Blender server this session uses is hosted by the desktop app and is absent from `claude mcp list`.
