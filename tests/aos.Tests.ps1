@@ -945,6 +945,55 @@ Describe 'aos video preflight' {
     }
 }
 
+Describe 'Voice tool sherpa path' {
+    BeforeAll {
+        $voiceTool = Join-Path $PSScriptRoot '..\templates\video\tools\make-voice.cjs'
+        function Get-SherpaLoader {
+            $t = [IO.File]::ReadAllText($voiceTool)
+            $a = [regex]::Match($t, '(?m)^const sherpaDir = .*$').Value.TrimEnd()
+            $b = [regex]::Match($t, '(?m)^const sherpa = require\(.*$').Value.TrimEnd()
+            if (-not $a -or -not $b) { throw 'make-voice.cjs has no sherpaDir / sherpa loader lines' }
+            return ($a + "`n" + $b)
+        }
+        function New-FakeSherpa([string]$Dir, [string]$Marker) {
+            Write-TestFile (Join-Path $Dir 'sherpa-onnx-node\index.js') ("module.exports = { marker: '" + $Marker + "' };")
+        }
+        function Invoke-SherpaLoader([string]$UserProfile, [string]$Override) {
+            $js = 'const path = require("path"); const home = process.env.USERPROFILE;' + "`n" + (Get-SherpaLoader) + "`n" + 'console.log(sherpa.marker);'
+            # A file, not 'node -e': Windows PowerShell 5.1 drops embedded double quotes from native arguments.
+            $script = Join-Path $caseRoot 'loader.js'
+            [IO.File]::WriteAllText($script, $js, (New-Object System.Text.UTF8Encoding($false)))
+            $saved = @{ P = $env:USERPROFILE; D = $env:AOS_SHERPA_DIR }
+            $ErrorActionPreference = 'Continue'
+            try {
+                $env:USERPROFILE = $UserProfile
+                if ($Override) { $env:AOS_SHERPA_DIR = $Override } else { Remove-Item Env:AOS_SHERPA_DIR -ErrorAction SilentlyContinue }
+                return ((& node $script 2>&1 | Out-String).Trim())
+            }
+            finally {
+                $env:USERPROFILE = $saved.P
+                if ($null -ne $saved.D) { $env:AOS_SHERPA_DIR = $saved.D } else { Remove-Item Env:AOS_SHERPA_DIR -ErrorAction SilentlyContinue }
+            }
+        }
+    }
+
+    It 'loads the module from AOS_SHERPA_DIR when that is set' {
+        $dir = Join-Path $caseRoot 'override'
+        New-FakeSherpa $dir 'from-env'
+        Invoke-SherpaLoader -UserProfile (Join-Path $caseRoot 'nobody') -Override $dir | Should -Be 'from-env'
+    }
+    It 'otherwise loads it from .aos/deps/sherpa-onnx/node_modules under the user profile' {
+        $profileDir = Join-Path $caseRoot 'profile'
+        New-FakeSherpa (Join-Path $profileDir '.aos\deps\sherpa-onnx\node_modules') 'from-deps'
+        Invoke-SherpaLoader -UserProfile $profileDir -Override '' | Should -Be 'from-deps'
+    }
+    It 'fails with an error that names the path it tried when nothing is installed' {
+        $profileDir = Join-Path $caseRoot 'empty'
+        New-TestFolder $profileDir | Out-Null
+        Invoke-SherpaLoader -UserProfile $profileDir -Override '' | Should -Match 'deps.sherpa-onnx.node_modules.sherpa-onnx-node'
+    }
+}
+
 Describe 'Video input provenance' {
     It 'runs reviewed export evidence guards (<Check>) in TestDrive fixtures' -ForEach @(
         @{ Check = 'fact coverage and entry-point refusal'; File = 'currency-hardening.test.mjs' },

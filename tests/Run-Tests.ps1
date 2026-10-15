@@ -50,6 +50,8 @@ $config.Run.PassThru = $true
 # Filesystem-only suite: never create Pester fixtures in the user registry.
 $config.TestRegistry.Enabled = $false
 $config.Output.Verbosity = 'Detailed'
+# Opt-in: AOS_TEST_FILTER (a wildcard on the full test name) runs only the matching tests.
+if ($env:AOS_TEST_FILTER) { $config.Filter.FullName = $env:AOS_TEST_FILTER }
 $result = Invoke-Pester -Configuration $config
 
 if ($result.TotalCount -eq 0) { Write-Host 'No tests were discovered.'; exit 3 }

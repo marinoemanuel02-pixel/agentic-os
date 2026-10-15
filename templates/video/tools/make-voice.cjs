@@ -4,7 +4,8 @@
 const fs = require("fs");
 const path = require("path");
 const home = process.env.USERPROFILE;
-const sherpa = require(path.join(home, ".npm-global/node_modules/@getpaseo/cli/node_modules/sherpa-onnx-node"));
+const sherpaDir = process.env.AOS_SHERPA_DIR || path.join(home, ".aos/deps/sherpa-onnx/node_modules");
+const sherpa = require(path.join(sherpaDir, "sherpa-onnx-node"));
 const m = path.join(home, ".aos/models/kokoro-multi-lang-v1_0");
 const tts = new sherpa.OfflineTts({
   model: {
