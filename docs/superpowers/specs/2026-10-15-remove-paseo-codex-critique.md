@@ -1,6 +1,6 @@
 # Codex critique of the Paseo removal spec (2026-10-15)
 
-Reviewer: Codex (`codex exec --profile review -m gpt-6-sol`), read-only, 74,894 tokens, exit 0, no usage-limit
+Reviewer: Codex (`codex exec --profile review`, model passed per call), read-only, 74,894 tokens, exit 0, no usage-limit
 error. Subject: `2026-10-15-remove-paseo-design.md` as committed in 8d33b38. Text below is Codex's final answer,
 verbatim; dispositions are in the spec's "Codex review" section.
 

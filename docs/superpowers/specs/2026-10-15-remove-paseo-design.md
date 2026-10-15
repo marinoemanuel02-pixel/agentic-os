@@ -215,7 +215,7 @@ Claude writes them and Codex reviews them.
 
 ## Codex review (2026-10-15)
 
-Run: `codex exec --profile review -m gpt-6-sol`, read-only, 74,894 tokens, exit 0, no usage-limit error. Full text:
+Run: `codex exec --profile review` (model passed per call), read-only, 74,894 tokens, exit 0, no usage-limit error. Full text:
 `2026-10-15-remove-paseo-codex-critique.md`. Result: 1 blocker, 5 important, 1 minor, and claim (b) wrong as worded.
 Claims (a) 2 of 27 nar commits outside the plugin, none mixed, and (c) 9 films + template + `audition.cjs` hard-code
 the Paseo path were confirmed. Hooks, MCP entries and Pi config: nothing found beyond the Pi comment.
