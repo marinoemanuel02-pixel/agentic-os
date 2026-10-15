@@ -256,3 +256,9 @@ as stated.
 5. Added to stage 2: the `'phone'` entry in `bootstrap.ps1`'s `ValidateSet`, the `Install-AosPhone` entry in the
    'Media layer' test's mock list, a tombstone check that no tracked file documents `install phone`, and an opt-in
    `AOS_TEST_FILTER` variable in `tests/Run-Tests.ps1` so one test block can be seen failing and passing.
+6. Stage 3 removes the Paseo package by moving it and its three shims into the holding folder instead of running
+   `npm uninstall -g`: the agent deletes nothing permanently, and the undo is a move back rather than a 538 MB
+   download.
+7. Of the four memory notes the spec lists, two (an install-size measurement; where the rejected v0.19 voice came
+   from) name Paseo only as dated history that stays true; they are left unchanged, and a new `paseo-removed` note
+   records the removal.

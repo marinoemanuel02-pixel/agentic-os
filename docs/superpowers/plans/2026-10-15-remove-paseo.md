@@ -13,14 +13,14 @@
 ## Global Constraints
 
 - `aos.psm1`, `bootstrap.ps1` and `tests/Run-Tests.ps1` stay ASCII-only and run under Windows PowerShell 5.1 and PowerShell 7: no `??`, no ternary, no `&&`/`||`. Test code in `tests/aos.Tests.ps1` obeys the same.
-- Run `aos test` after every edit of repo code: it checks parsing and ASCII, then runs `tests/` under both shells. CI runs the same on every push.
+- Run `aos test` after each task's repo edits and before its commit (it checks parsing and ASCII, then runs `tests/` under both shells; CI runs the same on every push). The filtered runs inside a task (`AOS_TEST_FILTER`) are only for seeing one block fail and then pass.
 - Tests use `$TestDrive` and `$env:AOS_BACKUPS`, never the real profile, registry or network.
 - Every sync step stays idempotent: a second `aos sync` changes nothing. Merge into the user's files, never replace them, and back up to `~/.aos-backups/` first.
 - `docs/decisions.md` is append-only: a changed decision gets a new dated entry on top.
 - No model names in the repo. No absolute paths in the repo (resolve at run time).
 - Anything that writes to `~/.claude`, `~/.codex` or the user PATH gets a second opinion from the other vendor first (Stage 1 and Stage 3 steps below are in the plan Codex reviews).
 - One writer per checkout: run `aos who` before editing a checkout; a blocked edit means another live session holds it - stop and tell the operator.
-- An agent never permanently deletes. Removed items move to the holding folder `$bk\removed`; the operator deletes it. A removal that needs a download or install states the source and size and waits for a yes.
+- An agent never permanently deletes. Removed folders, skill copies, the Paseo package and its shims move to the holding folder `$bk\removed` (no `npm uninstall`: a move keeps the undo free of a 538 MB download); the operator deletes it. A step that needs a download or install states the source and size and waits for a yes.
 - Stage order 0, 1, 2, 3. Stages 0 and 1 delete nothing from the repo. Do not start a stage without the operator's word.
 - Commit trailer on every commit: `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`.
 
@@ -374,11 +374,12 @@ foreach ($n in 'sherpa-onnx-node', 'sherpa-onnx-win-x64') {
     Copy-Item -Recurse -LiteralPath (Join-Path $srcPkg $n) -Destination $dst
 }
 Get-ChildItem $dst | Select-Object Name
-(Get-Content (Join-Path $dst 'sherpa-onnx-node\package.json') -Raw | ConvertFrom-Json) | Select-Object name, version
+$pkg = Get-Content (Join-Path $dst 'sherpa-onnx-node\package.json') -Raw | ConvertFrom-Json
+"$($pkg.name) $($pkg.version)" | Tee-Object (Join-Path $bk 'sherpa-version.txt')
 node -e "const s=require(process.env.USERPROFILE+'/.aos/deps/sherpa-onnx/node_modules/sherpa-onnx-node');console.log(typeof s.OfflineTts)"
 ```
 
-Expected: the two folder names, the package name and version (record the version in `$bk\sherpa-version.txt`), and `function`.
+Expected: the two folder names, the package name and version (the command writes them to `$bk\sherpa-version.txt`), and `function`.
 
 - [ ] **Step 3: Baseline render through the OLD path** (the template is still unchanged)
 
@@ -535,8 +536,21 @@ $newLines = "const sherpaDir = process.env.AOS_SHERPA_DIR || path.join(home, `".
 $plan = Get-Content (Join-Path $bk 'voice-plan.json') -Raw | ConvertFrom-Json
 foreach ($r in @($plan | Where-Object { $_.Action -eq 'repoint' })) {
     $repo = Join-Path $videos $r.Project
-    # Re-check right before editing: still clean, still unsealed.
+    # Re-check right before editing: still clean and still unsealed (a film sealed after Step 1 must not be touched).
     if (@(git -C $repo status --porcelain).Count -gt 0) { Write-Warning "$($r.Project) became dirty: skipped"; continue }
+    $manifest = Join-Path $repo 'exports\input-manifest.json'
+    if ((Test-Path $manifest) -and (Select-String -Path $manifest -Pattern '"exports"' -Quiet)) { Write-Warning "$($r.Project) is sealed now: skipped"; continue }
+    # Baseline: render the film's first line through the OLD path into a scratch folder. VO_OUT makes the tool
+    # leave the film's own src/data/vo.json alone.
+    $id = @(Get-Content (Join-Path $repo 'src\data\lines.json') -Raw | ConvertFrom-Json)[0].id
+    $oldWav = Join-Path $work "voice-$($r.Project)-old\$id.wav"
+    $newWav = Join-Path $work "voice-$($r.Project)-new\$id.wav"
+    $tool = Join-Path $repo 'tools\make-voice.cjs'
+    $env:VO_OUT = Split-Path $oldWav -Parent
+    & node $tool 3 1.0 $id | Out-Host
+    $ok = ($LASTEXITCODE -eq 0) -and (Test-Path $oldWav)
+    Remove-Item Env:VO_OUT
+    if (-not $ok) { Write-Warning "$($r.Project): the old-path render failed, film left alone"; continue }
     foreach ($name in ($r.Files -split ',')) {
         $file = Join-Path $repo "tools\$name"
         Replace-Once $file $oldLine $newLines
@@ -546,11 +560,17 @@ foreach ($r in @($plan | Where-Object { $_.Action -eq 'repoint' })) {
         "$($r.Project)\$name -> " + (& node -e $js)
         git -C $repo add "tools/$name"
     }
+    # Same line through the NEW path: the samples must match the baseline.
+    $env:VO_OUT = Split-Path $newWav -Parent
+    & node $tool 3 1.0 $id | Out-Host
+    Remove-Item Env:VO_OUT
+    node (Join-Path $work 'compare-wav.cjs') $oldWav $newWav
+    if ($LASTEXITCODE -ne 0) { throw "$($r.Project): the new render differs from the old one. Restore the clean file with: git -C `"$repo`" checkout -- tools   - then stop and report." }
     git -C $repo commit -m "tools: load sherpa-onnx from ~/.aos/deps/sherpa-onnx (the Paseo package it came from is being removed)" -m "Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"
 }
 ```
 
-Expected: for each eligible film a line `<film>\make-voice.cjs -> function` and one commit. A project that became dirty is skipped with a warning (it keeps its `skip` status for the operator).
+Expected: for each eligible film a line `<film>\make-voice.cjs -> function`, then `samples=<n> maxDiff=<0-2>`, then one commit. A film that became dirty or sealed, or whose old-path render fails, is skipped with a warning and left untouched (it keeps its skip status for the operator).
 
 - [ ] **Step 10: Scan what is left**
 
@@ -560,7 +580,7 @@ Get-ChildItem $videos -Recurse -Include make-voice.cjs, audition.cjs -ErrorActio
     Where-Object { $_.FullName -notmatch 'node_modules' } |
     Where-Object { Select-String -Path $_.FullName -Pattern '@getpaseo/cli' -Quiet } |
     Select-Object -ExpandProperty FullName
-Select-String -Path (Join-Path $root 'templates\video') -Pattern '@getpaseo/cli' -Recurse -List
+Get-ChildItem (Join-Path $root 'templates\video') -Recurse -File | Select-String -Pattern '@getpaseo/cli' -List | Select-Object -ExpandProperty Path
 ```
 
 Expected: only the files of films whose Action was `skip`, and nothing under `templates\video`. Save the list: `... | Set-Content (Join-Path $bk 'voice-leftovers.txt')`.
@@ -585,7 +605,7 @@ git -C $root commit -m "video template: load sherpa-onnx from ~/.aos/deps/sherpa
 ### Task 4: Stage 0 checkpoint (operator)
 
 - [ ] **Step 1: Report to the operator** the results: nar-tools `main` has the embed commits and live nar passed `status` and `classify`; sherpa copied (version from `sherpa-version.txt`); old and new renders identical (`samples`/`maxDiff`); which films were repointed (one commit each) and which were skipped and why (`voice-plan.json`, `voice-leftovers.txt`).
-- [ ] **Step 2: Ask the operator two things** and wait: (a) for the skipped films, **leave** them (the old path dies in Stage 3; re-voicing a sealed film needs a new seal anyway) or **keep a junction** at the old Paseo path (Task 11 creates it); (b) permission to start Stage 1. Record both answers in `$bk\decisions.txt`.
+- [ ] **Step 2: Ask the operator two things** and wait: (a) for the skipped films, **leave** them (the old path dies in Stage 3; re-voicing a sealed film needs a new seal anyway) or **keep a junction** at the old Paseo path (Task 11 creates it); (b) permission to start Stage 1. Record the answers in `$bk\decisions.txt` as two lines: `skipped-films=leave` or `skipped-films=junction`, and `stage1=go` (Task 11 reads the first).
 
 ---
 
@@ -1015,7 +1035,7 @@ Describe 'Tombstone: removed tool' {
         Get-TrackedHits ('pa' + 'seo') | Should -BeNullOrEmpty
     }
     It 'documents no install layer called phone' {
-        Get-TrackedHits 'install phone' -Fixed | Should -BeNullOrEmpty
+        Get-TrackedHits ('install ' + 'phone') -Fixed | Should -BeNullOrEmpty
     }
 }
 '@
@@ -1177,7 +1197,7 @@ $wt = Join-Path $HOME '.aos\worktrees\nar-tools-embed'
 git -C $wt switch -c remove-paseo-plugin
 git -C $wt rm -r -q paseo-plugin
 git -C $wt status --short | Select-Object -First 3
-git -C $nar diff --stat HEAD "remove-paseo-plugin" -- . ':(exclude)paseo-plugin' 
+git -C $wt diff --cached --stat -- . ':(exclude)paseo-plugin'
 Push-Location $wt; uv run --offline pytest -q 2>&1 | Select-Object -Last 3; Pop-Location
 ```
 
@@ -1282,13 +1302,13 @@ Expected: `exit=0`, no limit line, and a findings list. A usage-limit line or no
 
 ## Stage 3 - delete what is left
 
-### Task 11: Uninstall, junction (if chosen), move to the holding folder
+### Task 11: Move the package out (junction if chosen), then the state folders, to the holding folder
 
 **Files:** machine state only.
 
 **Interfaces:**
 - Consumes: `$bk\decisions.txt` (the Task 4 answer about skipped films), Stage 2 merged or accepted by the operator.
-- Produces: `$bk\removed\` holding `.paseo`, `getpaseo-ref`, `paseo-plugin-deps` for the operator to delete.
+- Produces: `$bk\removed\` holding `.paseo`, `getpaseo-ref`, `paseo-plugin-deps`, `npm-@getpaseo` and the three `shim-*` files, for the operator to delete.
 
 - [ ] **Step 1: Gate - voice scan and the operator's per-item yes**
 
@@ -1303,34 +1323,33 @@ Get-Content (Join-Path $bk 'decisions.txt')
 "ref clone   : " + ('{0:N0} MB' -f ((Get-ChildItem (Join-Path $HOME '.aos\refs\watch\getpaseo') -Recurse -File -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum / 1MB))
 ```
 
-Expected: the files listed are exactly the skipped films' (the operator already chose leave or junction). Show the sizes and get an explicit yes for Steps 2-5 together or one by one.
+Expected: the files listed are exactly the skipped films' (the operator already chose leave or junction). Show the sizes and get an explicit yes for Steps 2-4 together or one by one.
 
-- [ ] **Step 2: Uninstall the package with the install prefix**
+- [ ] **Step 2: Move the package and its shims into the holding folder; link the old path if the operator chose that** (one script, so skipped films are never without a voice path for more than a moment)
 
 ```powershell
 . $HOME\.aos\scratch\remove-paseo\env.ps1
 $prefix = Join-Path $HOME '.npm-global'
-Test-Path (Join-Path $prefix 'paseo.cmd')
-npm uninstall -g '@getpaseo/cli' --prefix $prefix
+$hold = Join-Path $bk 'removed'
+New-Item -ItemType Directory -Force $hold | Out-Null
+$scope = Join-Path $prefix 'node_modules\@getpaseo'
+if ((@(Get-ChildItem $scope -Directory).Name -join ',') -ne 'cli') { throw "unexpected content in $scope" }
+foreach ($n in 'paseo', 'paseo.cmd', 'paseo.ps1') { Move-Item -LiteralPath (Join-Path $prefix $n) -Destination (Join-Path $hold "shim-$n") }
+Move-Item -LiteralPath $scope -Destination (Join-Path $hold 'npm-@getpaseo')
+$choice = ((Get-Content (Join-Path $bk 'decisions.txt')) | Where-Object { $_ -like 'skipped-films=*' }) -replace 'skipped-films=', ''
+if ($choice -eq 'junction') {
+    $linkPath = Join-Path $scope 'cli\node_modules'
+    New-Item -ItemType Directory -Force (Split-Path $linkPath -Parent) | Out-Null
+    New-Item -ItemType Junction -Path $linkPath -Target (Join-Path $HOME '.aos\deps\sherpa-onnx\node_modules') | Out-Null
+    node -e "const s=require(process.env.USERPROFILE+'/.npm-global/node_modules/@getpaseo/cli/node_modules/sherpa-onnx-node');console.log(typeof s.OfflineTts)"
+}
 foreach ($n in 'paseo', 'paseo.cmd', 'paseo.ps1') { "$n : " + (Test-Path (Join-Path $prefix $n)) }
-Test-Path (Join-Path $prefix 'node_modules\@getpaseo\cli')
+Get-Command paseo -ErrorAction SilentlyContinue
 ```
 
-Expected: `True` before; after the uninstall `paseo : False`, `paseo.cmd : False`, `paseo.ps1 : False`, and the package folder `False`. A `True` means the shims survived: report instead of deleting by hand.
+Expected: the three shims `False`, no `paseo` command, and (junction choice only) `function`. This replaces `npm uninstall -g`: the whole package (538 MB) is intact in the holding folder, so the undo is a move back, not a download. If the junction step fails, put everything back at once with `Move-Item (Join-Path $hold 'npm-@getpaseo') $scope` and the three `shim-*` files back to `$prefix`, then report. If the operator chose "leave", the junction block does not run: say which films will fail if re-voiced.
 
-- [ ] **Step 3: Only if the operator chose the junction** for skipped films
-
-```powershell
-. $HOME\.aos\scratch\remove-paseo\env.ps1
-$linkPath = Join-Path $HOME '.npm-global\node_modules\@getpaseo\cli\node_modules'
-New-Item -ItemType Directory -Force (Split-Path $linkPath -Parent) | Out-Null
-New-Item -ItemType Junction -Path $linkPath -Target (Join-Path $HOME '.aos\deps\sherpa-onnx\node_modules') | Out-Null
-node -e "const s=require(process.env.USERPROFILE+'/.npm-global/node_modules/@getpaseo/cli/node_modules/sherpa-onnx-node');console.log(typeof s.OfflineTts)"
-```
-
-Expected: `function`. (If the operator chose "leave", skip this step and say which films will fail if re-voiced.)
-
-- [ ] **Step 4: Move the three folders into the holding folder** (a move on the same drive; nothing is deleted)
+- [ ] **Step 3: Move the three folders into the holding folder** (a move on the same drive; nothing is deleted)
 
 ```powershell
 . $HOME\.aos\scratch\remove-paseo\env.ps1
@@ -1351,7 +1370,7 @@ foreach ($p in '.paseo', '.aos\refs\watch\getpaseo', '.aos\deps\paseo-plugin-0.1
 
 Expected: three names in the holding folder and `False` for the three old locations. The daemon keypair stays inside `removed\.paseo` and is never copied.
 
-- [ ] **Step 5: Verify the machine is clean**
+- [ ] **Step 4: Verify the machine is clean**
 
 ```powershell
 . $HOME\.aos\scratch\remove-paseo\env.ps1
@@ -1363,13 +1382,13 @@ foreach ($d in '.claude\skills', '.codex\skills', '.agents\skills') { "$d : " + 
 
 Expected: nothing from the first three, and `0` for each skills folder.
 
-- [ ] **Step 6: Hand the operator their two manual steps.** (a) Delete the holding folder `$bk\removed` when satisfied (about 1.8 GB; it contains the daemon keypair - deleting it also ends the phone pairing for good) and the worktree `~/.aos/worktrees/nar-tools-embed` (it holds a `.venv`). (b) Remove the Paseo app from the phone and its saved connection. The agent does not delete either.
+- [ ] **Step 5: Hand the operator their two manual steps.** (a) Delete the holding folder `$bk\removed` when satisfied (about 1.8 GB; it contains the daemon keypair - deleting it also ends the phone pairing for good) and the worktree `~/.aos/worktrees/nar-tools-embed` (it holds a `.venv`). (b) Remove the Paseo app from the phone and its saved connection. The agent does not delete either.
 
 ---
 
 ### Task 12: Memory, the full `aos sync`, final acceptance
 
-**Files (memory folder, outside the repo):** `nar-embed-backend.md`, `MEMORY.md`, new `paseo-removed.md`. `installs-need-consent-with-size.md` and `video-voice-kokoro-v1.md` mention Paseo only as dated history (an install-size measurement; the rejected v0.19 voice source) and stay unchanged.
+**Files (memory folder, outside the repo):** `nar-embed-backend.md`, `MEMORY.md`, new `paseo-removed.md`. `installs-need-consent-with-size.md` and `video-voice-kokoro-v1.md` mention Paseo only as dated history (an install-size measurement; the rejected v0.19 voice source) and stay unchanged (spec amendment 7, which the operator confirms with this plan).
 
 - [ ] **Step 1: Update the memory notes**
 
@@ -1440,7 +1459,7 @@ Expected: both syncs `exit=0`; `afterSecond` equals `afterFirst` (the second run
 |---|---|---|
 | Tracked tree | `git -C $root grep -I -i -l paseo -- . ':(exclude)docs/decisions.md' ':(exclude)docs/superpowers'` | empty |
 | Tests | `Invoke-Aos 'test'` | exit 0, both shells |
-| Machine | Task 11 Step 5 commands | empty / `0` |
+| Machine | Task 11 Step 4 commands | empty / `0` |
 | nar | `nar.exe classify --backend embed ...` (Task 2 Step 6) | works, from `main` |
 | Voice | Task 3 Step 8 compare | `maxDiff` 0-2 |
 | Second sync | Step 3 | no change |
