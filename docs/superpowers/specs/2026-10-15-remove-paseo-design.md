@@ -232,3 +232,27 @@ the Paseo path were confirmed. Hooks, MCP entries and Pi config: nothing found b
 | b | Claim (b) wrong as worded | Accepted. Wording fixed; the helpers still go with the Paseo functions |
 
 Not yet reviewed by Codex: the revised text above, and the stage 2 code diff (reviewed when it exists).
+
+## Amendments at planning time (2026-10-15, pending the operator's confirmation)
+
+Found while writing `docs/superpowers/plans/2026-10-15-remove-paseo.md`; each changes the approved text above only
+as stated.
+
+1. **Decision 1 is refined by a seal.** `tools/checks/input-manifest.mjs` hashes `tools/make-voice.cjs` into a film's
+   `exports/input-manifest.json`, and `qa.sh` verifies the sealed manifest against the current file. Three films are
+   sealed (agi-asi-alignment, alignment-now, alignment-now-it): repointing their voice tool would break their seal.
+   Three more have no seal but uncommitted changes (alignment, alignment-3, cant-escape-ai). Stage 0b therefore
+   repoints the template and every film that is unsealed and clean (today: agi-race-2, cant-escape-ai-2,
+   where-you-end), and skips and lists the others. For the skipped films the operator chooses at the stage 0
+   checkpoint: leave them (the old path dies; re-voicing a sealed film needs a new seal anyway) or keep a junction
+   at the old Paseo path pointing at `~/.aos/deps/sherpa-onnx/node_modules`. Stage 3's gate becomes that choice
+   instead of "zero occurrences".
+2. The voice loader's error names the path in use (the override or the default), not both paths: it is a two-line
+   edit that fits nine films' files without a helper module.
+3. The `archive/paseo-plugin` tag is created in stage 0a, before the live nar checkout moves off its branch.
+4. Stage 3 moves `~/.paseo`, the reference clone and the deps cache into a holding folder under the backup
+   directory instead of the Recycle Bin (a 1.1 GB item can exceed the bin's capacity and be deleted outright); the
+   operator deletes the holding folder. An agent never permanently deletes.
+5. Added to stage 2: the `'phone'` entry in `bootstrap.ps1`'s `ValidateSet`, the `Install-AosPhone` entry in the
+   'Media layer' test's mock list, a tombstone check that no tracked file documents `install phone`, and an opt-in
+   `AOS_TEST_FILTER` variable in `tests/Run-Tests.ps1` so one test block can be seen failing and passing.
