@@ -60,16 +60,17 @@ uses still works; each stage can be checked and the first two can be undone in m
    two with links to the untracked repo copies. They add six entries to every session's skill list.
 4. **One scheduled task** `agentic-os Paseo daemon` (logon, repeats every 5 minutes). Nothing else in
    `~/.codex/automations`, `~/.claude/scheduled-tasks` or other tasks mentions Paseo. The task helpers
-   (`Get-AosLogonTaskState`, `Register-AosLogonTask`, `Start-AosLogonTask`, `ConvertTo-AosLogonTaskState`) have no
-   other caller in `aos.psm1`.
+   (`Get-AosLogonTaskState`, `Register-AosLogonTask`, `Start-AosLogonTask`, `ConvertTo-AosLogonTaskState`) are
+   called only by the Paseo autostart and start functions and by each other (checked by Codex), so they go with
+   them, together with their test block `Logon task state`.
 5. **Old worktree copies.** `agentic-os/.claude/worktrees/objective-bun-84f1c5` (branch
    `claude/objective-bun-84f1c5`) and other checked-out branches still contain Paseo code. The tombstone test
-   (below) must read tracked files (`git ls-files`), not the file system, or it would see that worktree.
+   (below) must read tracked files (`git grep`), not the file system, or it would see that worktree.
 
 ## Approach: four stages
 
-Each stage ends with checks; the next stage starts only on the operator's word. Stages 0 and 1 write no
-repo code.
+Each stage ends with checks; the next stage starts only on the operator's word. Stages 0 and 1 delete nothing
+from the repo: stage 0 only moves the nar work to `main` and changes one `require` line in each voice tool.
 
 ### Stage 0 - cut the hidden dependencies (additive, nothing removed)
 
@@ -79,22 +80,30 @@ repo code.
   (local Ollama, no cost), `nar_status` from an MCP session, and `git status` clean. Rollback: switch the
   checkout back to the branch.
 - **0b voice.** Copy `sherpa-onnx-node` and `sherpa-onnx-win-x64` (23 MB, no download) from the Paseo package
-  to `~/.aos/deps/sherpa-onnx/node_modules/`. Change `templates/video/tools/make-voice.cjs` to resolve, in order,
-  `$env:AOS_SHERPA_DIR`, `~/.aos/deps/sherpa-onnx/node_modules`, then the old Paseo path (fallback removed in
-  stage 3). Test it by generating one short line with the new path and comparing the WAV to one made through the
-  old path (same samples). Existing films: see Decisions.
+  to `~/.aos/deps/sherpa-onnx/node_modules/`. First render one short line through the old path and keep the
+  WAV. Then change the one `require` line in `templates/video/tools/make-voice.cjs` and in the 9 film
+  projects' `tools/make-voice.cjs` plus `cant-escape-ai/tools/audition.cjs` to load from
+  `$AOS_SHERPA_DIR` if set, else `~/.aos/deps/sherpa-onnx/node_modules` (no fallback to the Paseo path, so
+  nothing needs touching again in stage 3). One commit per film repo; skip and report any repo whose working tree
+  is dirty or claimed (`aos who`). Check: the same line rendered through the new path has the same samples as the
+  kept WAV, in the template and in at least `cant-escape-ai-2`; a scan finds zero `@getpaseo/cli` in
+  `1-Projects\videos` and `templates`.
 
 ### Stage 1 - stop it (machine only, reversible)
 
-- Read `aos who`; claim nothing in the repo. `paseo daemon stop`; unregister the `agentic-os Paseo daemon` task.
+- Read `aos who`; claim nothing in the repo. In this order: unregister the `agentic-os Paseo daemon` task
+  first (it repeats every 5 minutes and would restart the daemon), then `paseo daemon stop`, then verify.
 - Move the 18 `paseo*` skill directories (3 places x 6) into
-  `~/.aos-backups/remove-paseo-<stamp>/` (a move, not a delete).
+  `~/.aos-backups/remove-paseo-<stamp>/<place>/` (a move, not a delete), with a manifest of the 18 original paths.
 - Soak rules: do not run `aos install phone`, `aos install all` or `bootstrap.ps1` (the code still re-creates the
   task). Plain `aos sync` is allowed; its Places step will warn that Paseo is unreachable.
-- Soak checks: no process on port 6767; the skills are still absent after one new Claude session, one new
+- Soak checks: no `paseo` process and no listener on port 6767, checked right after the stop and again at least
+  6 minutes later (past one task repeat); the skills are still absent after one new Claude session, one new
   Codex session and the next sign-in (if they return, find the writer before stage 2); `aos test` green; the
   operator opens Claude app > Code on the phone once and sees a PC session (the premise of removal).
-- Rollback: `aos install phone` re-creates the task and daemon; skills come back from the backup.
+- Rollback, explicit: move each of the 18 directories back to its manifest path, run `aos install phone`
+  (re-creates the task and starts the daemon), then check the 18 paths exist as real directories and that no
+  `aos sync` replaced them with links.
 
 ### Stage 2 - remove from the repo (branch `remove-paseo`, cut from the current tip)
 
@@ -103,13 +112,15 @@ Order inside the stage: tests first (see Tests), then code, then docs.
 `aos.psm1`: delete `Install-AosPhone`, `Get-AosPaseoAutostartCommand`, `Sync-AosPaseoAutostart`,
 `Test-AosPaseoDaemonRunning`, `Start-AosPaseoDaemon`, the four logon-task helpers, `Get-AosPaseoPluginDir`,
 `Sync-AosPaseoPlugin`, `Repair-AosPaseoPlugin`, `Sync-AosPaseo`, `Get-AosPaseoProjectPaths`,
-`Register-AosPaseoPlace`; the registration loop in `Sync-AosPlaces` and the "in Paseo" suffix in `aos place ls`;
+`Register-AosPaseoPlace`; the registration loop in `Sync-AosPlaces` and the Paseo lookup and "in Paseo" suffix in
+`Show-AosPlacesStatus` (the Paseo part of `aos status`; `aos place ls` / `Show-AosPlaces` has none);
 `'phone'` from `$script:Layers` and the install dispatcher (so `aos install phone` is an unknown layer, the
 existing behaviour); reword the Paseo comments. About 250 lines. Places itself stays.
 Other files: `packages.json` (the `@getpaseo/cli` row; reword the Pi row), `bootstrap.ps1` usage text,
 `refs/repos.json` (the getpaseo/paseo row), `config/pi/extensions/aos-permission-gate.ts` (comment only),
-README (layer table and the three phone rows), `docs/routing.md` (2 rows), `tool-catalog` (6 skill rows,
-the Pi row and the closing sentence), `media-tools` voice note (path now `~/.aos/deps/sherpa-onnx`), the
+README (layer table, the three phone rows, and the Paseo prose at about lines 98-108 and 119-121),
+`docs/routing.md` (2 rows), `tool-catalog` (6 skill rows, the Pi row and the closing sentence), `media-tools`
+voice note (path now `~/.aos/deps/sherpa-onnx`; its `~/.paseo/models` remark at about line 72 reworded), the
 untracked `agents-home/skills/paseo*` directories, and a new dated entry on top of `docs/decisions.md`.
 Historical plans and specs stay as written; four get a one-line "Superseded by 2026-10-15-remove-paseo" status
 (phone-orchestration-design, paseo-and-app, phone-coordination-v1, and watch-and-steer, whose T6 and Paseo
@@ -120,7 +131,10 @@ Pi stays: its extensions are Pi's own, unrelated to Paseo's transport.
 
 ### Stage 3 - delete what is left (last; operator approves each item with its size)
 
-`npm uninstall -g @getpaseo/cli` (538 MB); remove the voice fallback to the Paseo path; delete
+Gate: the voice scan from stage 0b still reports zero `@getpaseo/cli` in `1-Projects\videos` and `templates`.
+`npm uninstall -g @getpaseo/cli --prefix "<Get-AosNpmPrefix>"` (538 MB; the explicit prefix mirrors how
+`aos install` installed it, so an `NPM_CONFIG_PREFIX` override cannot leave the live shims behind), then check
+that `paseo`, `paseo.cmd` and `paseo.ps1` are gone from that prefix; delete
 `~/.aos/refs/watch/getpaseo` (103 MB) and `~/.aos/deps/paseo-plugin-0.10.1`; move `~/.paseo` (1.1 GB) to the
 Recycle Bin, after copying `agents/` and `config.json` to the backup folder (config is checked for a password
 hash first and not copied if present; `daemon-keypair.json` is never copied). Removing the keypair invalidates
@@ -131,23 +145,39 @@ apply, and run it twice (the second changes nothing).
 
 ## Tests (written first, each seen failing before stage 2 code changes)
 
-1. Tombstone: no file returned by `git ls-files`, other than `docs/decisions.md`, `docs/superpowers/**` and the
-   test file itself, contains "paseo" (case-insensitive).
+1. Tombstone: `git grep -I -i -l paseo` (tracked files, working-tree contents, so a deleted-but-not-yet-staged file
+   cannot be listed) finds nothing outside `docs/decisions.md`, `docs/superpowers/**` and the test file itself.
+   It proves the tracked tree only; the machine (untracked skills, worktrees, `~/.claude`, `~/.codex`) is
+   covered by the stage 1 and 3 checks.
 2. `aos install phone` is rejected as an unknown layer; `$script:Layers` has no `phone`.
-3. `Sync-AosPlaces` and `aos place ls` never call `paseo` even when a `paseo` command exists (mock
-   `Invoke-AosCapture`, assert no call matches).
-4. Deleted with the behaviour they covered, listed so the review can check the list: Describe blocks `Phone layer`,
-   `Paseo config`, `Paseo aos plugin`, `Paseo daemon at logon`, `Paseo daemon startup`,
-   `Paseo daemon logon command`, and the Paseo cases inside `Places registration`. Every other test stays as is.
-5. Voice resolver (stage 0b): a node test with a temp tree proves the order env, `~/.aos/deps`, fallback.
+3. `Sync-AosPlaces` and `Show-AosPlacesStatus` (the `aos status` part) never call `paseo` even when a `paseo`
+   command exists (mock `Invoke-AosCapture` and `Test-AosCommand`; assert no call matches `paseo`).
+4. Test disposition, rule: a case is deleted only if its assertion is about Paseo itself (a daemon, task, plugin,
+   project listing or registration); a case about local persistence, preview-without-writes or brain-sync
+   pass-through is kept and loses only its Paseo mocks.
+   - Delete whole Describe blocks: `Phone layer`, `Paseo config`, `Paseo aos plugin`, `Paseo daemon at logon`,
+     `Paseo daemon startup`, `Paseo daemon logon command`, `Logon task state`.
+   - `Places registration`: delete 'registers existing places and skips normalized known paths', 'refuses
+     malformed listings and reports failed registration', 'skips external calls without Paseo and skips absent
+     configuration', 'previews an existing unregistered folder without registering or writing it'; keep and adjust
+     'persists local discovery when the daemon cannot list projects' (rename: no daemon) and 'runs Places sync
+     from brain sync and passes preview through'; 'never registers missing folders or preview changes' is
+     adjusted or folded into 'Places persistence' (its remaining assertion is about local writes).
+   - `Places commands`: 'shows each place and whether Paseo knows it in aos status' is rewritten, not deleted: it
+     keeps the missing-folder warning assertion and drops the Paseo mock and the "in Paseo" expectation.
+   - Every other test stays as is. Codex checks this list against the test file (done once; see the review).
+5. Voice resolver (stage 0b): a node test with a temp tree proves the order: `AOS_SHERPA_DIR`, then
+   `~/.aos/deps/sherpa-onnx/node_modules`, then a clear error naming both paths.
 Split authorship per the global contract: Codex writes tests 1-3 if its capacity allows (see Decisions), else
 Claude writes them and Codex reviews them.
 
 ## Acceptance (checkable)
 
 - Stage 0: `main` of nar-tools has the embed commits; live nar passes the checks above from `main`; the new voice
-  path renders a line identical to the old path.
-- Stage 1: no `paseo` process or task; no port 6767 listener; the skills stay absent across the three events.
+  path renders a line identical to the old path in the template and in each repointed film repo; zero
+  `@getpaseo/cli` under `1-Projects\videos` and `templates`.
+- Stage 1: no `paseo` process or task; no port 6767 listener, now and 6+ minutes later; the skills stay absent
+  across the three events; the rollback procedure is written down with the 18-path manifest before the move.
 - Stage 2: `aos test` green under Windows PowerShell 5.1 and PowerShell 7; `aos place ls` fine; `aos delegate`
   preflight, `aos remote` and `pi --version` still work; second `aos sync` changes nothing.
 - Stage 3: `paseo` command absent; `~/.paseo`, the clone and the deps cache gone; about 1.8 GB freed.
@@ -159,14 +189,17 @@ Claude writes them and Codex reviews them.
 - Concurrent sessions and other branches: `aos who` showed no live claim at 2026-10-15; the guard hook claims the
   checkout on the first edit. Branches that still carry the Paseo code will conflict with the deletion only where
   they edit the same blocks.
-- The film projects' own `make-voice.cjs` copies break after stage 3 unless repointed (Decisions).
-- Codex weekly capacity was 98% used in its last log (resets 2026-10-18); the review below may fail on a limit.
+- The film projects' own `make-voice.cjs` copies would break after stage 3; stage 0b repoints all of them and
+  stage 3 is gated on a clean scan.
+- Codex weekly capacity was 98% used in its last log (resets 2026-10-18). The spec review ran anyway and
+  completed (see the end); the code-diff review of stage 2 and any test writing depend on the window left then.
 
 ## Decisions for the operator
 
-1. **Film voice tools.** Recommended: repoint the template and `cant-escape-ai-2` (paused, likely to resume);
-   leave the other 8 delivered projects untouched and record the one-line fix in `decisions.md`. Alternative: a
-   junction at the old path (keeps a dead folder named after Paseo).
+1. **Film voice tools.** Recommended (changed after Codex's blocker): repoint all 10 files in stage 0b, one
+   commit per film repo; all nine are git repos and none has a seal marker, and the edit is a tools script, not
+   a render output. Alternative: leave the delivered films alone and keep a junction at the old Paseo path, which
+   leaves a dead folder named after Paseo and makes stage 3 incomplete.
 2. **Soak length.** Recommended: at least one sign-in cycle and one use of the phone check, then stage 2 on your
    word.
 3. **Who writes tests 1-3.** Recommended: Codex when it has window left (a small write); otherwise Claude.
@@ -179,3 +212,23 @@ Claude writes them and Codex reviews them.
 3. The deletion list for tests: is any deleted test covering behaviour that stays?
 4. Stage 1 and 3 commands that write to `~/.claude`, `~/.codex`, the npm global prefix or the PATH.
 5. Whether the tombstone test and the stage-0 checks can actually fail.
+
+## Codex review (2026-10-15)
+
+Run: `codex exec --profile review -m gpt-6-sol`, read-only, 74,894 tokens, exit 0, no usage-limit error. Full text:
+`2026-10-15-remove-paseo-codex-critique.md`. Result: 1 blocker, 5 important, 1 minor, and claim (b) wrong as worded.
+Claims (a) 2 of 27 nar commits outside the plugin, none mixed, and (c) 9 films + template + `audition.cjs` hard-code
+the Paseo path were confirmed. Hooks, MCP entries and Pi config: nothing found beyond the Pi comment.
+
+| # | Codex finding | Disposition |
+|---|---|---|
+| 1 | Blocker: eight films keep a dead voice path after stage 3 | Accepted. Stage 0b repoints all 10 files; stage 3 gated on a clean scan; Decision 1 changed |
+| 2 | Important: `Logon task state` block and a status test missing from the deletion list; keep persistence and brain-sync cases | Accepted. Test disposition rewritten (Tests 4) |
+| 3 | Important: stopping before unregistering leaves a 5-minute restart window | Accepted. Stage 1 order reversed; recheck after 6+ minutes |
+| 4 | Important: `aos install phone` does not restore the skills | Accepted. Explicit rollback with an 18-path manifest |
+| 5 | Important: uninstall without the install prefix can leave the shims | Accepted. `--prefix` mirrored from install; shim check |
+| 6 | Important: the "in Paseo" lookup is in `aos status`, not `aos place ls` | Accepted. Stage 2 and Tests 3 corrected |
+| 7 | Minor: README prose, media-tools line, tombstone limits, `git ls-files` staleness | Accepted. Edits listed; tombstone uses `git grep`; scope stated |
+| b | Claim (b) wrong as worded | Accepted. Wording fixed; the helpers still go with the Paseo functions |
+
+Not yet reviewed by Codex: the revised text above, and the stage 2 code diff (reviewed when it exists).
