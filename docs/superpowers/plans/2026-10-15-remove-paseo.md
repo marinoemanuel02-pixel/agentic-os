@@ -1127,8 +1127,8 @@ $entry = @'
 
 - **Why.** Paseo (installed 2026-09-29) was meant to give one phone conversation across Claude, Codex and the
   local model. The operator never used it from the phone and defaults to the Claude desktop app. Its agent records
-  all date from the 2026-09-29/30 setup and smoke tests, and the daemon was down for days (2026-09-30..10-03)
-  without being missed. The orchestration the operator relies on (claims, ledger, `aos delegate`, `aos capacity`,
+  are the 2026-09-29/30 setup and smoke tests plus one 13-minute Claude session on 2026-10-07 (Riema, idle since),
+  and the daemon was down for days (2026-09-30..10-03) without being missed. The orchestration the operator relies on (claims, ledger, `aos delegate`, `aos capacity`,
   the notes hook, the `handoff` and `second-opinion` skills) never ran on Paseo. This reverses the 2026-09-29
   entry "Phone access through Paseo; Pi as the local agent" and returns to the earlier position that Paseo is left
   out until a need repeats.

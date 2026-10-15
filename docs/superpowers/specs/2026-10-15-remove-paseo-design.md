@@ -19,9 +19,12 @@ uses still works; each stage can be checked and the first two can be undone in m
 
 - Paseo's own state: `~/.paseo` is 1.1 GB, 993 MB of it `models/local-speech` (kokoro-en-v0_19 353 MB, which
   the operator rejected as "terrible", and a parakeet dictation model 641 MB; no consumer of the parakeet
-  model found in the repo or skills). 14 agent records, all from 2026-09-29/30 setup and smoke tests; the
-  newest activity is a Coordinator conversation in agentic-os on 2026-10-08. The files cannot say whether that
-  was the operator or a test. The daemon was down most of 09-30..10-03 (recorded in the watch-and-steer plan).
+  model found in the repo or skills). 14 agent records on disk (11 known to the daemon): all but one are 2026-09-29/30
+  setup and smoke tests (the newest activity there is a Coordinator conversation in agentic-os on 2026-10-08, which
+  the files cannot attribute to the operator or a test). The one exception, found while executing stage 1 (my first
+  count skipped a record whose folder name contains a space): a Claude session "Riema - orchestrazione esplorazione
+  visiva" in `~\Sito Riema`, 13 minutes on 2026-10-07, idle since; who started it is not recorded, and its record
+  (1.8 KB) is copied to the backup in stage 3. The daemon was down most of 09-30..10-03 (recorded in the watch-and-steer plan).
 - The orchestration the operator relies on is Paseo-free: claims and guard hook, ledger, `aos delegate`,
   `aos capacity`, the notes hook, the `handoff` and `second-opinion` skills use plain files, `claude -p` and
   `codex exec`. `aos watch` is not built; Paseo appears in its plan only as one table row and task T6.
