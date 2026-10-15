@@ -4,7 +4,7 @@
  *
  * Pi on the local model runs its tools on this PC with no permission prompts of its own. Before any
  * tool that is not read-only (a shell command, a file write or edit, or a tool an extension adds),
- * this asks the person: Paseo shows the dialog on the phone. With no UI to ask, the tool is blocked.
+ * this asks the person. With no UI to ask, the tool is blocked.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 

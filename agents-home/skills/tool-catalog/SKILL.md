@@ -17,12 +17,6 @@ subscriptions (Claude and ChatGPT).
 | `second-opinion` | independent review by the other vendor before risky changes |
 | `inbox` | saving a note or link to the global Inbox, filing Inbox items into vaults (with confirmation) |
 | `media-tools` | ffmpeg, ImageMagick, pandoc, yt-dlp, Whisper, DuckDB, Playwright, Blender, Inkscape, Kdenlive, GIMP, OBS from the command line |
-| `paseo` | operating Paseo projects, workspaces, workspace scripts, agents, schedules and heartbeats |
-| `paseo-advisor` | one extra agent as an advisor on the current task (it may be the same vendor: not the cross-vendor `second-opinion`) |
-| `paseo-committee` | two high-reasoning agents to find the root cause and plan when stuck or looping |
-| `paseo-handoff` | handing the current task to another agent with full context |
-| `paseo-help` | answering questions about the Paseo app: setup, connectivity, providers, logs, troubleshooting |
-| `paseo-plugin` | building and managing trusted local Paseo plugins |
 | `penpot-local` | Penpot design work through its local MCP server, started only when needed |
 | `research` | cited web research with the agents' own free web search and fetch |
 | `caveman` | opt-in terse replies, only on an explicit `/caveman` (about a quarter fewer visible tokens in a 3-prompt Haiku test; total tokens did not fall); not for reports or prose |
@@ -53,12 +47,12 @@ vendor), `secret` (keys; never print them), `place` (known folders), `install <l
 |---|---|---|
 | Codex | `/codex:rescue`, `codex-rescue` subagent, `codex exec --profile review "<prompt>" </dev/null`, `aos delegate codex` | well-specified implementation, tests, mechanical refactors, reviews |
 | Claude Code | `$cc:rescue`, `$cc:review`, `aos delegate claude` | ambiguous or design work, prose, UI, cited research with many fetched pages |
-| Pi on the local model (Paseo) | phone sessions; `web_search`, `file_search`, `text_read`, `pc_status` | small, well-defined tasks; its claims need checking |
+| Pi on the local model | terminal sessions (`pi`); `web_search`, `file_search`, `text_read`, `pc_status` | small, well-defined tasks; its claims need checking |
 
 ## Browser and desktop
 
 Claude Code has its own in-app browser and, when granted, Chrome and computer-use tools; use the browser
-tools for web pages before computer use. Paseo is how the phone reaches Claude, Codex and Pi on this PC.
+tools for web pages before computer use. From the phone, Claude and Codex are reached through their own apps (README "From your phone").
 
 ## How to use this list
 

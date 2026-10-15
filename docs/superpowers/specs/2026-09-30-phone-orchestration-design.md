@@ -1,5 +1,7 @@
 # Phone orchestration: one conversation, three providers
 
+> Superseded 2026-10-15: Paseo was removed from this PC and repo (`2026-10-15-remove-paseo-design.md`). Kept as history.
+
 Date: 2026-09-30. Status: user approved the design and implementation in this session. The phone coordinator increment is installed; subsequent tool, Places and computer-use systems remain work to do.
 
 ## User intent

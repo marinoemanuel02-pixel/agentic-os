@@ -1,5 +1,7 @@
 # Plan: watch and steer agents while they work (2026-10-04)
 
+> Amended 2026-10-15: Paseo was removed (`2026-10-15-remove-paseo-design.md`). T6 and the Paseo row of the watch table are cancelled; the rest stands.
+
 Owner: Claude (plan, review, docs). Builder: Codex, through `aos delegate codex --write`, after the
 alignment-now video's batch B (the user gave the video priority on 2026-10-04). Branch: `watch-and-steer`.
 

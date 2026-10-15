@@ -18,7 +18,6 @@ vendor-maintained bridges. The reasons for each choice are in [docs/decisions.md
 | **refs** | shallow clones of the repos worth reading | `refs/repos.json` -> `~\.aos\refs` |
 | **local** | Ollama and the local model; the `nar` tools (calibrated single-pass scoring); Pi, the agent harness on the local model | `config/local.json`, `Desktop\1-Projects\nar-tools`; models in `~\.ollama` |
 | **media** | free media tools the agents drive from the command line: ffmpeg, ImageMagick, pandoc, yt-dlp, DuckDB, Inkscape, Blender, OBS, Audacity, Kdenlive, GIMP, Krita, LMMS (about 1.3 GB). Opt-in: `aos install media`, never part of `all`. Not in it: Playwright browsers, Whisper models, ComfyUI (large, your choice) | `packages.json` (winget); `agents-home/skills/media-tools` |
-| **phone** | Paseo: its daemon runs Claude Code, Codex and Pi on this PC for the Paseo Android app | `packages.json` (npm); state in `~\.paseo` |
 | **aos** | `aos status / sync / update / usage / new / secret / remote` | `aos.psm1` |
 
 How the pieces connect:
@@ -91,21 +90,15 @@ sends prompts and approvals.
 | Start Claude sessions on the PC from the phone | On the PC: `aos remote` (Desktop hub) or `aos remote <project>`, and leave that window open. Then Claude app > Code | PC awake; at most 2 sessions at once |
 | Use Codex on the PC from the phone | Once: Codex app > Settings > Connections > Control this PC > Set up, and scan the QR code with the ChatGPT app. Then ChatGPT app > Codex | PC awake, online and unlocked |
 | Work while the PC is off | Claude app > Code (cloud session) or ChatGPT app > Codex (cloud task), on a GitHub repo | Push first: they see only what was pushed |
-| Claude Code, Codex **and the local model** from one app | **Paseo** (Android, Play Store). Once: on the PC, in Windows Terminal, `paseo daemon pair --relay`, and scan the QR code in the app (Add connection > Scan QR code); keep the QR private. Then pick a provider per session: Claude, Codex, or Pi with model `aos/aos-agent` (the local model) | The Paseo daemon running on the PC: `paseo daemon start` from Windows Terminal, not from inside the Claude app |
-| See agentic-os status and nar calibration; label nar's recent choices | Paseo app > a workspace > **+** > **agentic-os** (the aos plugin). A tap on the right option records it; the call leaves the list | Paseo paired |
-| Coordinate the three providers in one project conversation | Paseo workspace > **+** > **Coordinator**, select a registered project and Open conversation. Choose Auto, Local or a discovered cloud model in the conversation. The panel shows local health, quota, native tasks, Stop linked tasks and explicit recovery | aos plugin on tested Paseo 0.10.1; Ollama running for Local |
 
-The local model in Paseo (Pi) asks before every command or file change it wants to make: the question
-shows up in the app as Allow / Deny, and nothing runs until you answer. Reading files needs no approval.
-Its project directory is only the starting location, not a repository sandbox: native tools run on the PC
-under the Paseo daemon's Windows account and can target other user-accessible paths. Windows ACLs and the
-phone approval gate remain the boundaries, so the model must verify paths outside the project before changing them.
-The synced Pi extension also provides a small permission-gated `web_search` tool that returns public
-search results with source URLs; it is a search operation, not a browser or desktop-control bridge.
-It is a 4B model with a 16K context: good for small, well-defined tasks; it can misreport what happened,
-so check its claims. Voice input in Paseo is off: turning it on downloads about 1 GB of speech models
-(`paseo daemon config set features.dictation.enabled true`; for Italian also set
-`features.dictation.stt.model parakeet-tdt-0.6b-v3-int8`), then `paseo daemon restart`.
+The local model (Pi, model `aos/aos-agent`, started with `pi` in a terminal) asks before every command or file
+change it wants to make; reading files needs no approval. Its project directory is only the starting location,
+not a repository sandbox: native tools run on the PC under your Windows account and can target other
+user-accessible paths. Windows ACLs and the approval prompt remain the boundaries, so the model must verify paths
+outside the project before changing them. The synced Pi extension also provides a small permission-gated
+`web_search` tool that returns public search results with source URLs; it is a search operation, not a browser or
+desktop-control bridge. It is a 4B model with a 16K context: good for small, well-defined tasks; it can misreport
+what happened, so check its claims.
 
 Keep the PC reachable (your Windows settings, once): keep it plugged in; Settings > System >
 Power > sleep: Never when plugged in; Control Panel > Power Options > "Choose what closing the lid
@@ -116,12 +109,10 @@ does" > Plugged in: Do nothing. The Claude app only holds the PC awake while a s
 `config/places.json` lists shared repositories, vaults and folders using runtime placeholders.
 `aos place ls --json` reports the resolved paths and whether they exist. Add an existing folder with
 `aos place add <folder> [--name <name>] [--kind repo|vault|folder]`; commit the resulting config change.
-`aos new` adds the created project too. `aos sync` registers existing Places with Paseo and writes
-`~/.aos/places.json` for agents and tools. Missing folders are left absent; only a missing Inbox is created.
-If Paseo is unavailable, the local registry is still saved and registration is reported as skipped.
+`aos new` adds the created project too. `aos sync` writes `~/.aos/places.json` for agents and tools.
+Missing folders are left absent; only a missing Inbox is created.
 
-The agentic-os phone panel has an Inbox box for notes and optional HTTP(S) links, plus recent captures.
-Save creates a new UTF-8 Markdown file in the configured Inbox and never overwrites another note.
+Notes and links go into the Inbox with the `inbox` skill.
 After a lost reply, the panel keeps your text: refresh the recent list before saving again.
 For photos or other files, use Android Share -> OneDrive -> Desktop/Inbox; OneDrive syncs them separately.
 The shared `inbox` skill can propose filing items into configured vaults and waits for confirmation before moving them.

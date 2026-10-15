@@ -67,9 +67,9 @@ tools below (its `AGENTS.md` lists the commands). The first finished video is `D
   near-black scene renders as one smeared highlight (use low opacity, clear coat, lit edges); Remotion's h264 is
   full range `yuvj420p` (JPEG frames): convert with `scale=in_range=pc:out_range=tv,format=yuv420p` on the final
   encode; the system fonts Sitka and Bahnschrift work by family name after `document.fonts.load` in a `delayRender`.
-- **Voice:** Kokoro v1.0 (`~\.aos\models\kokoro-multi-lang-v1_0`, sherpa-onnx from Paseo's install; `lexicon`,
+- **Voice:** Kokoro v1.0 (`~\.aos\models\kokoro-multi-lang-v1_0`, sherpa-onnx in `~\.aos\deps\sherpa-onnx`; `lexicon`,
   `dictDir` and `lang: "en-us"` in the config); speaker 3 is `af_heart`, the voice its authors grade highest. The
-  v0.19 model in `~\.paseo\models` (bm_george) was rejected as "terrible". It also has Italian voices (`if_sara`,
+  older v0.19 model (bm_george) was rejected as "terrible". It also has Italian voices (`if_sara`,
   `im_nicola`). Audition voices as a short MP3 for the user at the style-frame gate; an agent cannot judge a voice.
 - **Music and effects without downloads:** synthesise in Node (oscillators, a state-variable filter, a Schroeder
   reverb; the project's `tools/audio.mts`), then duck the music under the voice with `sidechaincompress` and run

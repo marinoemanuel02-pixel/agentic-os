@@ -3,6 +3,31 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-15 - Paseo removed: one phone app for three providers was never used
+
+- **Why.** Paseo (installed 2026-09-29) was meant to give one phone conversation across Claude, Codex and the
+  local model. The operator never used it from the phone and defaults to the Claude desktop app. Its agent records
+  are the 2026-09-29/30 setup and smoke tests plus one 13-minute Claude session on 2026-10-07 (Riema, idle since),
+  and the daemon was down for days (2026-09-30..10-03) without being missed. The orchestration the operator relies on (claims, ledger, `aos delegate`, `aos capacity`,
+  the notes hook, the `handoff` and `second-opinion` skills) never ran on Paseo. This reverses the 2026-09-29
+  entry "Phone access through Paseo; Pi as the local agent" and returns to the earlier position that Paseo is left
+  out until a need repeats.
+- **Lost, on purpose.** The local model (Pi + Ollama) from the phone; one thread that fails over between providers
+  when a quota runs out (on the phone, open the other app); the agentic-os phone panel (status, nar feedback, Inbox
+  box). Claude and Codex stay reachable from the phone through their own apps (README "From your phone").
+- **Kept.** Pi, Ollama, nar, `aos remote`, Places (minus the Paseo registration), `aos delegate`, claims, capacity.
+- **Hidden dependencies cut first.** The live `nar` is an editable install of the nar-tools checkout, which sat on
+  a Paseo-named branch: its two embedding-backend commits moved to nar-tools `main` and the old tip is tagged
+  `archive/paseo-plugin`. Video voice loaded sherpa-onnx from inside the Paseo CLI package; it now loads from
+  `~\.aos\deps\sherpa-onnx\node_modules` (`AOS_SHERPA_DIR` overrides).
+- **Known leftovers.** Film repos whose `tools/make-voice.cjs` still names the removed path: agi-asi-alignment (sealed), alignment (uncommitted changes), alignment-3 (uncommitted changes), alignment-now (sealed), alignment-now-it (sealed), cant-escape-ai (uncommitted changes; its tools/audition.cjs too).
+  A sealed film's seal covers that file (`tools/checks/input-manifest.mjs`), so it is not edited; re-voicing one
+  needs a new seal anyway. The fix is to replace the `const sherpa = require(...)` line with the two loader lines in
+  `templates/video/tools/make-voice.cjs`.
+- **Undo.** The skills and the removed folders are in `~\.aos-backups\remove-paseo-<stamp>`; `npm install -g
+  @getpaseo/cli`, the nar-tools tag `archive/paseo-plugin` and this repo's history before the removal commits bring
+  the rest back.
+
 ## 2026-10-12 - A second `nar` backend: embedding similarity, so agents can triage before spending tokens
 
 - The recursive-cognition research run (2026-10-09..12) used the local model for nothing, although much of its

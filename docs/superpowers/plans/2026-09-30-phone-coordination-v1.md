@@ -1,5 +1,7 @@
 # Phone coordination v1 implementation plan
 
+> Superseded 2026-10-15: Paseo was removed from this PC and repo (`2026-10-15-remove-paseo-design.md`). Kept as history.
+
 Spec: docs/superpowers/specs/2026-09-30-phone-orchestration-design.md (user approved 2026-09-30).
 
 ## Execution and constraints

@@ -1,5 +1,7 @@
 # Paseo, a local agent and the aos plugin (phone app) Implementation Plan - revision 2
 
+> Superseded 2026-10-15: Paseo was removed from this PC and repo (`2026-10-15-remove-paseo-design.md`). Kept as history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** From the Android phone, away from home, start and steer sessions on this PC with Claude Code, Codex and an agent that runs on the local model, answer their permission prompts, and use a Paseo plugin to see agentic-os status and nar calibration and to give nar feedback.

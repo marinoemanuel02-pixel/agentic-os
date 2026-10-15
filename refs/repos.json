@@ -18,7 +18,6 @@
     { "slug": "humanlayer/12-factor-agents",           "shelf": "principles", "use": "read",      "why": "Design principles for reliable agents. Highest signal per byte." },
     { "slug": "VoltAgent/awesome-agent-skills",        "shelf": "catalogs",   "use": "catalog",   "why": "Curated cross-agent skills list (Claude Code, Codex, ...)." },
     { "slug": "hesreallyhim/awesome-claude-code",      "shelf": "catalogs",   "use": "catalog",   "why": "Commands, hooks, workflows index." },
-    { "slug": "andyrewlee/awesome-agent-orchestrators", "shelf": "catalogs",  "use": "catalog",   "why": "Index of multi-agent cockpits and orchestrators." },
-    { "slug": "getpaseo/paseo",                        "shelf": "watch",      "use": "watch",     "why": "Candidate cockpit: one desktop + phone app for Claude Code and Codex, spawns the official CLIs." }
+    { "slug": "andyrewlee/awesome-agent-orchestrators", "shelf": "catalogs",  "use": "catalog",   "why": "Index of multi-agent cockpits and orchestrators." }
   ]
 }

@@ -2865,6 +2865,28 @@ Describe 'Places commands' {
     }
 }
 
+Describe 'Tombstone: removed tool' {
+    BeforeAll {
+        $repoRoot = Split-Path $PSScriptRoot -Parent
+        function Get-TrackedHits([string]$Pattern, [switch]$Fixed) {
+            $flags = @('-I', '-i', '-l')
+            if ($Fixed) { $flags += '-F' }
+            $out = & git -C $repoRoot grep @flags $Pattern -- . ':(exclude)docs/decisions.md' ':(exclude)docs/superpowers' 2>$null
+            if ($LASTEXITCODE -eq 1) { return @() }
+            if ($LASTEXITCODE -ne 0) { throw "git grep failed with exit code $LASTEXITCODE" }
+            return @($out)
+        }
+    }
+    # Tracked files only (working-tree contents). Machine state - untracked skills, other worktrees, ~/.claude -
+    # is covered by the stage 1 and stage 3 checks, not by this test.
+    It 'leaves no tracked file that names the removed tool' {
+        Get-TrackedHits ('pa' + 'seo') | Should -BeNullOrEmpty
+    }
+    It 'documents no install layer called phone' {
+        Get-TrackedHits ('install ' + 'phone') -Fixed | Should -BeNullOrEmpty
+    }
+}
+
 Describe 'Inbox skill' {
     It 'has valid frontmatter with a short description' {
         $path = Join-Path $PSScriptRoot '..\agents-home\skills\inbox\SKILL.md'
