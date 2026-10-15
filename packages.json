@@ -42,10 +42,7 @@
     { "id": "LMMS.LMMS",                  "why": "lmms: music production, projects render from the command line (about 35 MB)" }
   ],
   "local_npm": [
-    { "name": "@earendil-works/pi-coding-agent", "bin": "pi", "why": "Pi: the agent harness on the local model, run by Paseo's pi provider (config in ~\\.pi\\agent)" }
-  ],
-  "phone_npm": [
-    { "name": "@getpaseo/cli", "bin": "paseo", "why": "Paseo: the daemon the Paseo phone app connects to (state in ~\\.paseo)" }
+    { "name": "@earendil-works/pi-coding-agent", "bin": "pi", "why": "Pi: the agent harness on the local model (config in ~\\.pi\\agent)" }
   ],
   "npm": [
     { "name": "ccusage",                  "why": "local usage/limit reports and the Claude Code status line" }

@@ -1316,10 +1316,10 @@ Describe 'Round 3: Install-AosNpmTools' {
     }
 
     It 'checks the command a package installs, not the package name' {
-        # A scoped package (@getpaseo/cli) installs paseo.cmd, never "@getpaseo/cli.cmd".
-        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = '' } } -ParameterFilter { $CommandLine -like 'npm install -g @getpaseo/cli*' }
-        Write-TestFile (Join-Path $npmPrefix 'paseo.cmd') ''
-        InModuleScope aos { Install-AosNpmTools -Packages @(@{ name = '@getpaseo/cli'; bin = 'paseo'; why = 'test' }) }
+        # A scoped package (@example/tool) installs exampletool.cmd, never "@example/tool.cmd".
+        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = '' } } -ParameterFilter { $CommandLine -like 'npm install -g @example/tool*' }
+        Write-TestFile (Join-Path $npmPrefix 'exampletool.cmd') ''
+        InModuleScope aos { Install-AosNpmTools -Packages @(@{ name = '@example/tool'; bin = 'exampletool'; why = 'test' }) }
         Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly
     }
 
@@ -2104,38 +2104,24 @@ Describe 'Agent model variant' {
     }
 }
 
-Describe 'Phone layer' {
-    BeforeEach {
-        Mock Get-AosPackages -ModuleName aos { @{ phone_npm = @(@{ name = '@getpaseo/cli'; bin = 'paseo'; why = 't' }) } }
-        Mock Install-AosNpmTools -ModuleName aos { }
-        Mock Sync-AosPaseo -ModuleName aos { }
-        Mock Sync-AosPaseoPlugin -ModuleName aos { }
-        Mock Sync-AosPaseoAutostart -ModuleName aos { }
+Describe 'Removed phone layer' {
+    It 'is not an install layer any more' {
+        InModuleScope aos { $script:Layers | Should -Not -Contain 'phone' }
     }
 
-    It 'is an install layer, after local' {
-        InModuleScope aos {
-            $script:Layers | Should -Contain 'phone'
-            [array]::IndexOf($script:Layers, 'phone') | Should -BeGreaterThan ([array]::IndexOf($script:Layers, 'local'))
-        }
+    It 'is rejected as an unknown layer and installs nothing' {
+        foreach ($f in 'Install-AosBase', 'Install-AosEngines', 'Sync-AosBrain', 'Install-AosBridges', 'Sync-AosRefs',
+                       'Install-AosLocal', 'Install-AosMedia', 'Install-AosNpmTools', 'Show-AosNextSteps') { Mock $f -ModuleName aos { } }
+        Mock Write-AosWarn -ModuleName aos { }
+        InModuleScope aos { Install-AosLayer -Layer phone }
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Text -match "unknown layer 'phone'" }
+        foreach ($f in 'Install-AosBase', 'Install-AosEngines', 'Sync-AosBrain', 'Install-AosBridges', 'Sync-AosRefs',
+                       'Install-AosLocal', 'Install-AosMedia', 'Install-AosNpmTools') { Should -Invoke $f -ModuleName aos -Times 0 -Exactly }
     }
 
-    It 'installs the phone npm packages and passes DryRun through' {
-        InModuleScope aos { Install-AosPhone -DryRun }
-        Should -Invoke Install-AosNpmTools -ModuleName aos -Times 1 -Exactly -ParameterFilter { @($Packages)[0]['name'] -eq '@getpaseo/cli' -and $DryRun }
-    }
-
-    It 'enables Paseo plugins once, through Paseo''s own CLI' {
-        Mock Sync-AosPaseo -ModuleName aos { }
-        InModuleScope aos { Install-AosPhone -DryRun }
-        Should -Invoke Sync-AosPaseo -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
-    }
-
-    It 'is reachable through aos install phone' {
-        Mock Install-AosPhone -ModuleName aos { }
-        Mock Show-AosNextSteps -ModuleName aos { }
-        InModuleScope aos { Install-AosLayer -Layer phone -DryRun }
-        Should -Invoke Install-AosPhone -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
+    It 'leaves no phone package list in packages.json' {
+        $pk = Get-Content (Join-Path $PSScriptRoot '..\packages.json') -Raw | ConvertFrom-Json
+        $pk.PSObject.Properties.Name | Should -Not -Contain 'phone_npm'
     }
 }
 
@@ -2399,351 +2385,6 @@ Describe 'aos nar dispatch' {
     }
 }
 
-Describe 'Paseo config' {
-    BeforeEach {
-        $savedPaseoHome = $env:PASEO_HOME
-        $env:PASEO_HOME = Join-Path $caseRoot 'paseo'
-        $script:pluginsJson = '{ "source": "configured", "path": "pluginsEnabled", "set": false }'
-        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'paseo' }
-        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = $script:pluginsJson } } -ParameterFilter { $CommandLine -eq 'paseo daemon config get pluginsEnabled --json' }
-        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = '{ "action": "saved", "applied": false }' } } -ParameterFilter { $CommandLine -like 'paseo daemon config set *' }
-        foreach ($f in 'Write-AosOk', 'Write-AosInfo', 'Write-AosDry', 'Write-AosWarn') { Mock $f -ModuleName aos { } }
-    }
-
-    AfterEach { $env:PASEO_HOME = $savedPaseoHome }
-
-    It 'backs up the configured Paseo home before changing config' {
-        $configPath = Join-Path $env:PASEO_HOME 'config.json'
-        Write-TestFile $configPath '{ "privateSetting": "preserve" }'
-        Mock Invoke-AosCapture -ModuleName aos {
-            $saved = @(Get-ChildItem $env:AOS_BACKUPS -Recurse -Filter config.json | Where-Object {
-                [IO.File]::ReadAllText($_.FullName) -eq '{ "privateSetting": "preserve" }'
-            })
-            $saved.Count | Should -BeGreaterThan 0
-            @{ Code = 0; Text = 'saved' }
-        } -ParameterFilter { $CommandLine -like 'paseo daemon config set *' }
-        InModuleScope aos { Sync-AosPaseo }
-    }
-
-    It 'backs up the default Paseo home before changing config' {
-        $env:PASEO_HOME = $null
-        $configPath = Join-Path $caseRoot '.paseo\config.json'
-        Write-TestFile $configPath '{}'
-        Mock Backup-AosFile -ModuleName aos { }
-        InModuleScope aos -Parameters @{ HomeDir = $caseRoot } {
-            param($HomeDir)
-            # Function-local HOME shadows the automatic variable without changing the real profile.
-            function Invoke-WithTestHome { $HOME = $HomeDir; Sync-AosPaseo }
-            Invoke-WithTestHome
-        }
-        Should -Invoke Backup-AosFile -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Path -eq $configPath }
-    }
-
-    It 'does not set config or report success when its backup fails' {
-        Write-TestFile (Join-Path $env:PASEO_HOME 'config.json') '{}'
-        Mock Backup-AosFile -ModuleName aos { throw 'backup refused' }
-        { InModuleScope aos { Sync-AosPaseo } } | Should -Throw '*backup refused*'
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'paseo daemon config set *' }
-        Should -Invoke Write-AosOk -ModuleName aos -Times 0 -Exactly
-    }
-
-    It 'turns plugins on when they are not set' {
-        InModuleScope aos { Sync-AosPaseo }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -eq 'paseo daemon config set pluginsEnabled true' }
-    }
-
-    It 'turns plugins on when they are off' {
-        $script:pluginsJson = '{ "source": "configured", "path": "pluginsEnabled", "set": true, "value": false }'
-        InModuleScope aos { Sync-AosPaseo }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -eq 'paseo daemon config set pluginsEnabled true' }
-    }
-
-    It 'sets nothing when plugins are already on' {
-        $script:pluginsJson = '{ "source": "configured", "path": "pluginsEnabled", "set": true, "value": true }'
-        InModuleScope aos { Sync-AosPaseo }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'paseo daemon config set *' }
-    }
-
-    It 'sets nothing in DryRun' {
-        InModuleScope aos { Sync-AosPaseo -DryRun }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'paseo daemon config set *' }
-        Should -Invoke Write-AosDry -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'pluginsEnabled' }
-    }
-
-    It 'warns and sets nothing when the setting cannot be read' {
-        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 1; Text = 'error' } } -ParameterFilter { $CommandLine -eq 'paseo daemon config get pluginsEnabled --json' }
-        InModuleScope aos { Sync-AosPaseo }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'paseo daemon config set *' }
-        Should -Invoke Write-AosWarn -ModuleName aos -Times 1
-    }
-
-    It 'does nothing without paseo' {
-        Mock Test-AosCommand -ModuleName aos { $false } -ParameterFilter { $Name -eq 'paseo' }
-        InModuleScope aos { Sync-AosPaseo }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly
-    }
-}
-
-Describe 'Paseo aos plugin' {
-    BeforeEach {
-        $pluginDir = Join-Path $caseRoot 'projects\nar-tools\paseo-plugin'
-        Write-TestFile (Join-Path $pluginDir 'paseo-plugin.json') '{ "id": "aos" }'
-        $script:pluginList = '[]'
-        Mock Get-AosPaseoPluginDir -ModuleName aos { $pluginDir }
-        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'paseo' }
-        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = $script:pluginList } } -ParameterFilter { $CommandLine -eq 'paseo plugin ls --json' }
-        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = 'ok' } } -ParameterFilter { $CommandLine -like 'paseo plugin install *' -or $CommandLine -eq 'paseo plugin remove aos' }
-        foreach ($f in 'Write-AosOk', 'Write-AosDry', 'Write-AosWarn') { Mock $f -ModuleName aos { } }
-    }
-
-    It 'installs the plugin from nar-tools when Paseo does not have it' {
-        InModuleScope aos { Sync-AosPaseoPlugin }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -eq ('paseo plugin install "' + $pluginDir + '"') }
-    }
-
-    It 'does nothing when Paseo already runs it from that folder' {
-        $script:pluginList = '[ { "id": "aos", "path": "' + $pluginDir.Replace('\', '\\') + '\\", "enabled": true, "status": "running" } ]'
-        InModuleScope aos { Sync-AosPaseoPlugin }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'paseo plugin install *' -or $CommandLine -eq 'paseo plugin remove aos' }
-    }
-
-    It 'moves it when Paseo runs it from another folder, and leaves other plugins alone' {
-        $script:pluginList = '[ { "id": "other", "path": "C:\\x" }, { "id": "aos", "path": "C:\\old\\paseo-plugin" } ]'
-        InModuleScope aos { Sync-AosPaseoPlugin }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -eq 'paseo plugin remove aos' }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 1 -Exactly -ParameterFilter { $CommandLine -like 'paseo plugin install *' }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like '*remove other*' }
-    }
-
-    It 'keeps the old registration on an install failure unrelated to a duplicate id' {
-        $script:pluginList = '[ { "id": "aos", "path": "C:\\old\\paseo-plugin" } ]'
-        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 1; Text = 'build failed' } } -ParameterFilter { $CommandLine -like 'paseo plugin install *' }
-        InModuleScope aos { Sync-AosPaseoPlugin }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -eq 'paseo plugin remove aos' }
-        Should -Invoke Write-AosWarn -ModuleName aos -Times 1
-        Should -Invoke Write-AosOk -ModuleName aos -Times 0 -Exactly
-    }
-
-    It 'stops if removing a duplicate registration fails' {
-        $script:pluginList = '[ { "id": "aos", "path": "C:\\old\\paseo-plugin" } ]'
-        $calls = New-Object 'System.Collections.Generic.List[string]'
-        Mock Invoke-AosCapture -ModuleName aos {
-            $calls.Add($CommandLine)
-            @{ Code = 1; Text = 'Plugin aos already installed' }
-        } -ParameterFilter { $CommandLine -like 'paseo plugin install *' }
-        Mock Invoke-AosCapture -ModuleName aos {
-            $calls.Add($CommandLine)
-            @{ Code = 1; Text = 'remove failed' }
-        } -ParameterFilter { $CommandLine -eq 'paseo plugin remove aos' }
-        InModuleScope aos { Sync-AosPaseoPlugin }
-        ($calls -join '|') | Should -Be ('paseo plugin install "' + $pluginDir + '"|paseo plugin remove aos')
-        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'remove' }
-        Should -Invoke Write-AosOk -ModuleName aos -Times 0 -Exactly
-    }
-
-    It 'restores the old path after a duplicate replacement fails (restore exit <RestoreCode>)' -TestCases @(
-        @{ RestoreCode = 0 }, @{ RestoreCode = 1 }
-    ) {
-        param($RestoreCode)
-        $oldDir = Join-Path $caseRoot 'old plugin'
-        $script:pluginList = ConvertTo-Json -InputObject @(@{ id = 'aos'; path = $oldDir })
-        $calls = New-Object 'System.Collections.Generic.List[string]'
-        Mock Invoke-AosCapture -ModuleName aos {
-            $calls.Add($CommandLine)
-            if ($calls.Count -eq 1) { return @{ Code = 1; Text = 'Plugin aos already installed' } }
-            if ($CommandLine -eq 'paseo plugin remove aos') { return @{ Code = 0; Text = 'removed' } }
-            if ($CommandLine -eq ('paseo plugin install "' + $oldDir + '"')) { return @{ Code = $RestoreCode; Text = 'restore' } }
-            return @{ Code = 1; Text = 'build failed' }
-        } -ParameterFilter { $CommandLine -like 'paseo plugin install *' -or $CommandLine -eq 'paseo plugin remove aos' }
-        InModuleScope aos { Sync-AosPaseoPlugin }
-        ($calls -join '|') | Should -Be ('paseo plugin install "' + $pluginDir + '"|paseo plugin remove aos|paseo plugin install "' + $pluginDir + '"|paseo plugin install "' + $oldDir + '"')
-        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'install.*failed' }
-        if ($RestoreCode -ne 0) { Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'restor.*failed' } }
-        Should -Invoke Write-AosOk -ModuleName aos -Times 0 -Exactly
-    }
-
-    It 'repairs matching paths with enabled=<Enabled> and status=<Status>' -TestCases @(
-        @{ Enabled = $false; Status = 'disabled'; Enables = 1; Reloads = 1; StillFailed = $false },
-        @{ Enabled = $true; Status = 'failed'; Enables = 0; Reloads = 1; StillFailed = $true },
-        @{ Enabled = $true; Status = 'running'; Enables = 0; Reloads = 0; StillFailed = $false }
-    ) {
-        param($Enabled, $Status, $Enables, $Reloads, $StillFailed)
-        $state = @{ id = 'aos'; path = $pluginDir; enabled = $Enabled; status = $Status }
-        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = (ConvertTo-Json -InputObject @($state)) } } -ParameterFilter { $CommandLine -eq 'paseo plugin ls --json' }
-        Mock Invoke-AosCapture -ModuleName aos { $state.enabled = $true; @{ Code = 0; Text = 'enabled' } } -ParameterFilter { $CommandLine -eq 'paseo plugin enable aos' }
-        Mock Invoke-AosCapture -ModuleName aos {
-            if (-not $StillFailed) { $state.status = 'running' }
-            @{ Code = 0; Text = 'reloaded' }
-        } -ParameterFilter { $CommandLine -eq 'paseo plugin reload aos' }
-        InModuleScope aos { Sync-AosPaseoPlugin }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times $Enables -Exactly -ParameterFilter { $CommandLine -eq 'paseo plugin enable aos' }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times $Reloads -Exactly -ParameterFilter { $CommandLine -eq 'paseo plugin reload aos' }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times (1 + $Reloads) -Exactly -ParameterFilter { $CommandLine -eq 'paseo plugin ls --json' }
-        if ($StillFailed) {
-            Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'not running' }
-            Should -Invoke Write-AosOk -ModuleName aos -Times 0 -Exactly
-        }
-    }
-
-    It 'changes nothing in DryRun' {
-        InModuleScope aos { Sync-AosPaseoPlugin -DryRun }
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly -ParameterFilter { $CommandLine -like 'paseo plugin install *' }
-        Should -Invoke Write-AosDry -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'paseo plugin install' }
-    }
-
-    It 'warns when nar-tools has no plugin folder' {
-        Mock Get-AosPaseoPluginDir -ModuleName aos { Join-Path $caseRoot 'missing' }
-        InModuleScope aos { Sync-AosPaseoPlugin }
-        Should -Invoke Write-AosWarn -ModuleName aos -Times 1
-        Should -Invoke Invoke-AosCapture -ModuleName aos -Times 0 -Exactly
-    }
-
-    It 'runs from aos install phone' {
-        Mock Get-AosPackages -ModuleName aos { @{ phone_npm = @() } }
-        foreach ($f in 'Install-AosNpmTools', 'Sync-AosPaseo', 'Sync-AosPaseoPlugin', 'Sync-AosPaseoAutostart') { Mock $f -ModuleName aos { } }
-        InModuleScope aos { Install-AosPhone -DryRun }
-        Should -Invoke Sync-AosPaseoPlugin -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
-    }
-}
-
-Describe 'Paseo daemon at logon' {
-    BeforeEach {
-        $script:existingTask = $null
-        $script:wantArgs = '-NoProfile -WindowStyle Hidden -Command "& ''C:\u\.npm-global\paseo.cmd'' daemon start"'
-        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'paseo' }
-        Mock Get-AosPaseoAutostartCommand -ModuleName aos { @{ Execute = 'C:\ps\pwsh.exe'; Arguments = $script:wantArgs } }
-        Mock Get-AosLogonTaskState -ModuleName aos { $script:existingTask }
-        # Register-ScheduledTask is a CDXML command whose dynamic parameters cannot be mocked; aos wraps it
-        # in Register-AosLogonTask (checked live: at logon, also on battery).
-        Mock Register-AosLogonTask -ModuleName aos { }
-        foreach ($f in 'Write-AosOk', 'Write-AosDry', 'Write-AosWarn', 'Write-AosInfo') { Mock $f -ModuleName aos { } }
-    }
-
-    It 'registers a task that starts the daemon at logon' {
-        InModuleScope aos { Sync-AosPaseoAutostart }
-        Should -Invoke Register-AosLogonTask -ModuleName aos -Times 1 -Exactly -ParameterFilter {
-            $Name -eq 'agentic-os Paseo daemon' -and $Execute -eq 'C:\ps\pwsh.exe' -and $Arguments -eq $script:wantArgs
-        }
-    }
-
-    It 'does nothing when the task already runs the same command' {
-        $script:existingTask = [pscustomobject]@{
-            Actions = @([pscustomobject]@{ Execute = 'C:\ps\pwsh.exe'; Arguments = $script:wantArgs })
-            Enabled = $true; HasCurrentUserLogonTrigger = $true; RepeatsEvery5Minutes = $true
-            DisallowStartIfOnBatteries = $false; StopIfGoingOnBatteries = $false
-        }
-        InModuleScope aos { Sync-AosPaseoAutostart }
-        Should -Invoke Register-AosLogonTask -ModuleName aos -Times 0 -Exactly
-    }
-
-    It 'repairs task drift in <Field>' -TestCases @(
-        @{ Field = 'Enabled'; Value = $false },
-        @{ Field = 'HasCurrentUserLogonTrigger'; Value = $false },
-        @{ Field = 'DisallowStartIfOnBatteries'; Value = $true },
-        @{ Field = 'StopIfGoingOnBatteries'; Value = $true },
-        @{ Field = 'RepeatsEvery5Minutes'; Value = $false }
-    ) {
-        param($Field, $Value)
-        $script:existingTask = [pscustomobject]@{
-            Actions = @([pscustomobject]@{ Execute = 'C:\ps\pwsh.exe'; Arguments = $script:wantArgs })
-            Enabled = $true; HasCurrentUserLogonTrigger = $true; RepeatsEvery5Minutes = $true
-            DisallowStartIfOnBatteries = $false; StopIfGoingOnBatteries = $false
-        }
-        $script:existingTask.$Field = $Value
-        InModuleScope aos { Sync-AosPaseoAutostart }
-        Should -Invoke Register-AosLogonTask -ModuleName aos -Times 1 -Exactly
-    }
-
-    It 'replaces the task when its command changed' {
-        $script:existingTask = [pscustomobject]@{ Actions = @([pscustomobject]@{ Execute = 'C:\old\pwsh.exe'; Arguments = 'old' }) }
-        InModuleScope aos { Sync-AosPaseoAutostart }
-        Should -Invoke Register-AosLogonTask -ModuleName aos -Times 1 -Exactly
-    }
-
-    It 'warns instead of failing when Windows refuses the task' {
-        Mock Register-AosLogonTask -ModuleName aos { throw 'Access is denied' }
-        InModuleScope aos { Sync-AosPaseoAutostart }
-        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'Access is denied' }
-    }
-
-    It 'registers nothing in DryRun' {
-        InModuleScope aos { Sync-AosPaseoAutostart -DryRun }
-        Should -Invoke Register-AosLogonTask -ModuleName aos -Times 0 -Exactly
-        Should -Invoke Write-AosDry -ModuleName aos -Times 1
-    }
-
-    It 'does nothing without paseo' {
-        Mock Test-AosCommand -ModuleName aos { $false } -ParameterFilter { $Name -eq 'paseo' }
-        InModuleScope aos { Sync-AosPaseoAutostart }
-        Should -Invoke Register-AosLogonTask -ModuleName aos -Times 0 -Exactly
-    }
-
-    It 'runs from aos install phone' {
-        Mock Get-AosPackages -ModuleName aos { @{ phone_npm = @() } }
-        foreach ($f in 'Install-AosNpmTools', 'Sync-AosPaseo', 'Sync-AosPaseoPlugin', 'Sync-AosPaseoAutostart') { Mock $f -ModuleName aos { } }
-        InModuleScope aos { Install-AosPhone -DryRun }
-        Should -Invoke Sync-AosPaseoAutostart -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
-    }
-}
-
-Describe 'Logon task state' {
-    # Real tasks are CIM objects: the checked fields sit under Settings and Triggers.
-    BeforeAll {
-        function New-TestTrigger([string]$Class, [string]$User, $Enabled = $true, [string]$Interval = '') {
-            $t = [pscustomobject]@{ UserId = $User; Enabled = $Enabled; Repetition = [pscustomobject]@{ Interval = $Interval } }
-            $t.PSObject.TypeNames.Insert(0, "Microsoft.Management.Infrastructure.CimInstance#Root/Microsoft/Windows/TaskScheduler/$Class")
-            return $t
-        }
-        function New-TestTask($Triggers, [bool]$Enabled = $true, [bool]$Disallow = $false, [bool]$Stop = $false) {
-            [pscustomobject]@{
-                Actions = @([pscustomobject]@{ Execute = 'x.exe'; Arguments = 'a' })
-                Settings = [pscustomobject]@{ Enabled = $Enabled; DisallowStartIfOnBatteries = $Disallow; StopIfGoingOnBatteries = $Stop }
-                Triggers = @($Triggers)
-            }
-        }
-        $me = "$env:USERDOMAIN\$env:USERNAME"
-    }
-
-    It 'flattens a healthy task' {
-        $task = New-TestTask (New-TestTrigger 'MSFT_TaskLogonTrigger' $me)
-        $s = InModuleScope aos -Parameters @{ Task = $task } { param($Task) ConvertTo-AosLogonTaskState $Task }
-        $s.Enabled | Should -BeTrue
-        $s.HasCurrentUserLogonTrigger | Should -BeTrue
-        $s.DisallowStartIfOnBatteries | Should -BeFalse
-        $s.StopIfGoingOnBatteries | Should -BeFalse
-        @($s.Actions)[0].Execute | Should -Be 'x.exe'
-    }
-
-    It 'reads the 5-minute repetition that restarts a daemon that died' {
-        $task = New-TestTask (New-TestTrigger 'MSFT_TaskLogonTrigger' $me -Interval 'PT5M')
-        $s = InModuleScope aos -Parameters @{ Task = $task } { param($Task) ConvertTo-AosLogonTaskState $Task }
-        $s.RepeatsEvery5Minutes | Should -BeTrue
-        $task = New-TestTask (New-TestTrigger 'MSFT_TaskLogonTrigger' $me)
-        $s = InModuleScope aos -Parameters @{ Task = $task } { param($Task) ConvertTo-AosLogonTaskState $Task }
-        $s.RepeatsEvery5Minutes | Should -BeFalse
-    }
-
-    It 'reports settings drift' {
-        $task = New-TestTask (New-TestTrigger 'MSFT_TaskLogonTrigger' $me) -Enabled $false -Disallow $true -Stop $true
-        $s = InModuleScope aos -Parameters @{ Task = $task } { param($Task) ConvertTo-AosLogonTaskState $Task }
-        $s.Enabled | Should -BeFalse
-        $s.DisallowStartIfOnBatteries | Should -BeTrue
-        $s.StopIfGoingOnBatteries | Should -BeTrue
-    }
-
-    It 'finds no current-user logon trigger in <Case>' -TestCases @(
-        @{ Case = 'another user'; Class = 'MSFT_TaskLogonTrigger'; User = 'OTHER\someone'; On = $true },
-        @{ Case = 'a boot trigger'; Class = 'MSFT_TaskBootTrigger'; User = 'SELF'; On = $true },
-        @{ Case = 'a disabled trigger'; Class = 'MSFT_TaskLogonTrigger'; User = 'SELF'; On = $false }
-    ) {
-        param($Case, $Class, $User, $On)
-        if ($User -eq 'SELF') { $User = $me }
-        $task = New-TestTask (New-TestTrigger $Class $User $On)
-        $s = InModuleScope aos -Parameters @{ Task = $task } { param($Task) ConvertTo-AosLogonTaskState $Task }
-        $s.HasCurrentUserLogonTrigger | Should -BeFalse
-    }
-}
-
 Describe 'Pi directory resolution' {
     BeforeEach {
         $savedProjectsForPi = $env:AOS_PROJECTS
@@ -2855,91 +2496,6 @@ Describe 'Modelfile semantic comparison' {
         Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = $base } } -ParameterFilter { $CommandLine -eq 'ollama show base --modelfile' }
         Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = $variant } } -ParameterFilter { $CommandLine -eq 'ollama show variant --modelfile' }
         InModuleScope aos { Test-AosAgentModel -Name variant -From base -NumCtx 16384 } | Should -Be 'stale'
-    }
-}
-
-Describe 'Paseo daemon startup' {
-    BeforeAll {
-        # Test-only seams until the new scheduler wrapper and startup function exist.
-        InModuleScope aos {
-            if (-not (Get-Command Start-AosLogonTask -ErrorAction SilentlyContinue)) {
-                function script:Start-AosLogonTask { param($Name) throw 'startup wrapper missing' }
-            }
-            if (-not (Get-Command Start-AosPaseoDaemon -ErrorAction SilentlyContinue)) {
-                function script:Start-AosPaseoDaemon { param([switch]$DryRun) throw 'daemon startup missing' }
-            }
-        }
-    }
-    BeforeEach {
-        Mock Test-AosCommand -ModuleName aos { $true } -ParameterFilter { $Name -eq 'paseo' }
-        Mock Start-AosLogonTask -ModuleName aos { }
-        Mock Start-Sleep -ModuleName aos { }
-        foreach ($f in 'Write-AosOk', 'Write-AosWarn', 'Write-AosDry') { Mock $f -ModuleName aos { } }
-        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 0; Text = 'localDaemon: running' } } -ParameterFilter { $CommandLine -eq 'paseo daemon status' }
-    }
-
-    It 'does not start an already running daemon' {
-        InModuleScope aos { Start-AosPaseoDaemon }
-        Should -Invoke Start-AosLogonTask -ModuleName aos -Times 0 -Exactly
-        Should -Invoke Start-Sleep -ModuleName aos -Times 0 -Exactly
-    }
-
-    It 'starts the logon task and polls until ready' {
-        $state = @{ polls = 0 }
-        Mock Invoke-AosCapture -ModuleName aos {
-            $state.polls++
-            if ($state.polls -lt 3) { return @{ Code = 1; Text = 'localDaemon: stopped' } }
-            @{ Code = 0; Text = 'localDaemon: running' }
-        } -ParameterFilter { $CommandLine -eq 'paseo daemon status' }
-        InModuleScope aos { Start-AosPaseoDaemon }
-        Should -Invoke Start-AosLogonTask -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Name -eq 'agentic-os Paseo daemon' }
-        $state.polls | Should -Be 3
-        Should -Invoke Write-AosWarn -ModuleName aos -Times 0 -Exactly
-    }
-
-    It 'warns after sixty seconds without readiness' {
-        $state = @{ seconds = 0 }
-        Mock Start-Sleep -ModuleName aos { $state.seconds += $Seconds }
-        Mock Invoke-AosCapture -ModuleName aos { @{ Code = 1; Text = 'localDaemon: not_ready' } } -ParameterFilter { $CommandLine -eq 'paseo daemon status' }
-        InModuleScope aos { Start-AosPaseoDaemon }
-        $state.seconds | Should -Be 60
-        Should -Invoke Start-AosLogonTask -ModuleName aos -Times 1 -Exactly
-        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match '60|timed out' }
-        Should -Invoke Write-AosOk -ModuleName aos -Times 0 -Exactly
-    }
-
-    It 'starts nothing and does not poll in DryRun' {
-        InModuleScope aos { Start-AosPaseoDaemon -DryRun }
-        Should -Invoke Start-AosLogonTask -ModuleName aos -Times 0 -Exactly
-        Should -Invoke Start-Sleep -ModuleName aos -Times 0 -Exactly
-    }
-
-    It 'installs phone dependencies in readiness order with DryRun=<DryRun>' -TestCases @(@{ DryRun = $false }, @{ DryRun = $true }) {
-        param($DryRun)
-        $expectedDryRun = $DryRun
-        $calls = New-Object 'System.Collections.Generic.List[string]'
-        Mock Get-AosPackages -ModuleName aos { @{ phone_npm = @() } }
-        Mock Install-AosNpmTools -ModuleName aos { $calls.Add('npm') }
-        Mock Sync-AosPaseo -ModuleName aos { $calls.Add('config') }
-        Mock Sync-AosPaseoAutostart -ModuleName aos { $calls.Add('task') }
-        Mock Start-AosPaseoDaemon -ModuleName aos { $calls.Add('start') }
-        Mock Sync-AosPaseoPlugin -ModuleName aos { $calls.Add('plugin') }
-        InModuleScope aos -Parameters @{ DryRun = $DryRun } { param($DryRun) Install-AosPhone -DryRun:$DryRun }
-        ($calls -join ',') | Should -Be 'npm,config,task,start,plugin'
-        Should -Invoke Start-AosPaseoDaemon -ModuleName aos -Times 1 -Exactly -ParameterFilter { [bool]$DryRun -eq $expectedDryRun }
-    }
-}
-
-Describe 'Paseo daemon logon command' {
-    It 'starts paseo from the npm prefix through PowerShell, hidden, inside a headless console' {
-        # conhost --headless: the task repeats every 5 minutes, and a hidden PowerShell alone still flashes.
-        InModuleScope aos {
-            $c = Get-AosPaseoAutostartCommand
-            $c.Execute | Should -Match 'conhost\.exe$'
-            $c.Arguments | Should -Match '^--headless "[^"]*(pwsh|powershell)\.exe" -NoProfile -WindowStyle Hidden -Command '
-            $c.Arguments | Should -Match ([regex]::Escape((Join-Path (Get-AosNpmPrefix) 'paseo.cmd')))
-            $c.Arguments | Should -Match 'daemon start"$'
-        }
     }
 }
 
@@ -3114,7 +2670,7 @@ Describe 'Media layer' {
 
     It 'is left out of aos install all, and installed when named' {
         foreach ($f in 'Install-AosBase', 'Install-AosEngines', 'Sync-AosBrain', 'Install-AosBridges', 'Sync-AosRefs', 'Install-AosLocal',
-                       'Install-AosPhone', 'Install-AosMedia', 'Show-AosNextSteps') { Mock $f -ModuleName aos { } }
+                       'Install-AosMedia', 'Show-AosNextSteps') { Mock $f -ModuleName aos { } }
         InModuleScope aos { Install-AosLayer -Layer all -DryRun }
         Should -Invoke Install-AosMedia -ModuleName aos -Times 0 -Exactly
         Should -Invoke Install-AosLocal -ModuleName aos -Times 1 -Exactly
