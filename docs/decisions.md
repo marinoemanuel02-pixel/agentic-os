@@ -7,9 +7,11 @@ don't rewrite the old one: the record of what was rejected is the part that ages
 
 - **Why.** Paseo (installed 2026-09-29) was meant to give one phone conversation across Claude, Codex and the
   local model. The operator never used it from the phone and defaults to the Claude desktop app. Its agent records
-  are the 2026-09-29/30 setup and smoke tests, one 13-minute Claude session on 2026-10-07 (Riema, idle since) and a
-  Coordinator conversation last active 2026-10-08 that the files do not attribute to the operator or a test. The
-  daemon was down for days (2026-09-30..10-03) until a 5-minute restart repeat was added (a09ec89). The orchestration
+  are the 2026-09-29/30 setup and smoke tests, one 13-minute Claude session on 2026-10-07 (Riema, idle since; the
+  `paseo` skill's one recorded use came 52 s before it was created, so a Claude Code session most likely started
+  it, not the phone) and a Coordinator conversation last active 2026-10-08 that the files do not attribute to the
+  operator or a test. The daemon was down for days (2026-09-30..10-03) until a 5-minute restart repeat was added
+  (a09ec89). The orchestration
   the operator relies on (claims, ledger, `aos delegate`, `aos capacity`,
   the notes hook, the `handoff` and `second-opinion` skills) never ran on Paseo. This reverses the 2026-09-29
   entry "Phone access through Paseo; Pi as the local agent" and returns to the earlier position that Paseo is left

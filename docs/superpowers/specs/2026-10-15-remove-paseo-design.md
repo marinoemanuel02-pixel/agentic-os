@@ -23,7 +23,7 @@ uses still works; each stage can be checked and the first two can be undone in m
   setup and smoke tests (the newest activity there is a Coordinator conversation in agentic-os on 2026-10-08, which
   the files cannot attribute to the operator or a test). The one exception, found while executing stage 1 (my first
   count skipped a record whose folder name contains a space): a Claude session "Riema - orchestrazione esplorazione
-  visiva" in `~\Sito Riema`, 13 minutes on 2026-10-07, idle since; who started it is not recorded, and its record
+  visiva" in `~\Sito Riema`, 13 minutes on 2026-10-07, idle since; the `paseo` skill's one recorded use (the usage counter in ~/.claude.json) came 52 s earlier, so a Claude Code session most likely started it, and its record
   (1.8 KB) is copied to the backup in stage 3. The daemon was down most of 09-30..10-03 (recorded in the watch-and-steer plan).
 - The orchestration the operator relies on is Paseo-free: claims and guard hook, ledger, `aos delegate`,
   `aos capacity`, the notes hook, the `handoff` and `second-opinion` skills use plain files, `claude -p` and
