@@ -113,7 +113,6 @@ does" > Plugged in: Do nothing. The Claude app only holds the PC awake while a s
 Missing folders are left absent; only a missing Inbox is created.
 
 Notes and links go into the Inbox with the `inbox` skill.
-After a lost reply, the panel keeps your text: refresh the recent list before saving again.
 For photos or other files, use Android Share -> OneDrive -> Desktop/Inbox; OneDrive syncs them separately.
 The shared `inbox` skill can propose filing items into configured vaults and waits for confirmation before moving them.
 

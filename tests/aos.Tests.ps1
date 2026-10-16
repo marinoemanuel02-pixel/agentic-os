@@ -2885,6 +2885,9 @@ Describe 'Tombstone: removed tool' {
     It 'documents no install layer called phone' {
         Get-TrackedHits ('install ' + 'phone') -Fixed | Should -BeNullOrEmpty
     }
+    It 'documents no panel of the removed phone app' {
+        Get-TrackedHits ('the panel ' + 'keeps your text') -Fixed | Should -BeNullOrEmpty
+    }
 }
 
 Describe 'Inbox skill' {
