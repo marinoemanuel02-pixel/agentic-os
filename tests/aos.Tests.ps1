@@ -4611,4 +4611,251 @@ Describe 'cooperative messages' {
         Test-Path -LiteralPath (Join-Path $caseRoot 'outside\run.json') | Should -BeFalse
     }
 }
+
+Describe 'coordination tuning safety' {
+    BeforeAll {
+        function New-TuningRepo([string]$Path) {
+            New-TestFolder $Path | Out-Null
+            & git -C $Path init -q
+            return $Path
+        }
+
+        function Write-TuningContract([string]$Path, [string]$Id, [hashtable]$Override = @{}) {
+            $c = [ordered]@{ version = 1; id = $Id; objective = "objective of $Id"; task_class = 'implementation'
+                depends_on = @(); allow = @(); verify = 'git diff --check'; artifacts = @('output.txt'); context = @() }
+            foreach ($k in @($Override.Keys)) { $c[$k] = $Override[$k] }
+            Write-TestFile $Path (ConvertTo-Json -InputObject $c -Depth 8)
+            return $Path
+        }
+
+        function Add-TuningTask([string]$Id, [hashtable]$Override = @{}) {
+            $file = Write-TuningContract (Join-Path $caseRoot ("contracts\$Id-" + [guid]::NewGuid().ToString('N') + '.json')) $Id $Override
+            return (InModuleScope aos -Parameters @{ F = $file; R = $repo } { param($F, $R) Register-AosTaskContract -Path $F -Repo $R })
+        }
+
+        function Test-TuningReady([string]$Id) {
+            return (InModuleScope aos -Parameters @{ I = $Id; R = $repo } { param($I, $R) Test-AosTaskReady -Id $I -Repo $R })
+        }
+
+        function Start-TuningAttempt([string]$Id, [string]$Run) {
+            return (InModuleScope aos -Parameters @{ I = $Id; U = $Run } { param($I, $U) Start-AosTaskAttempt -Id $I -RunId $U })
+        }
+
+        # Host-side receipt written the way the delegate path would; never trusted from the caller.
+        function Write-TuningReceipt([string]$Run, [string]$TaskId, [hashtable]$Override = @{}) {
+            $r = [ordered]@{ id = $Run; task_id = $TaskId; repo = $repo; workdir = $repo; accepted = $true; outcome = 'accepted'
+                commit = ''; verify = [ordered]@{ command = 'git diff --check'; exit_code = 0 }; changed = @('output.txt') }
+            foreach ($k in @($Override.Keys)) { $r[$k] = $Override[$k] }
+            Write-TestFile (Join-Path $env:AOS_COORD "delegations\$Run\receipt.json") (ConvertTo-Json -InputObject $r -Depth 8)
+        }
+
+        function Complete-TuningAttempt([string]$Id, [string]$Run) {
+            # A rejected completion may throw or return; what matters is the later readiness answer.
+            try { return (InModuleScope aos -Parameters @{ I = $Id; U = $Run } { param($I, $U) Complete-AosTaskAttempt -Id $I -RunId $U }) }
+            catch { return $null }
+        }
+
+        function Invoke-TuningAccepted([string]$Id, [string]$Run, [string]$Text = 'artifact bytes') {
+            Write-TestFile (Join-Path $repo 'output.txt') $Text
+            $null = Start-TuningAttempt $Id $Run
+            Write-TuningReceipt $Run $Id
+            $null = Complete-TuningAttempt $Id $Run
+        }
+    }
+
+    BeforeEach {
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        $repo = New-TuningRepo (Join-Path $caseRoot 'repo')
+    }
+
+    It 'registers a minimal contract and is idempotent only for the same contract and repository' {
+        $task = Add-TuningTask 'ta'
+        [string]$task.id | Should -BeExactly 'ta'
+        $record = InModuleScope aos { Get-AosTaskRecord -Id 'ta' }
+        $record | Should -Not -BeNullOrEmpty
+        InModuleScope aos { Get-AosTaskRecord -Id 'no-such-task' } | Should -BeNullOrEmpty
+        { Add-TuningTask 'ta' } | Should -Not -Throw
+        { Add-TuningTask 'ta' @{ objective = 'a different objective' } } | Should -Throw
+        $otherRepo = New-TuningRepo (Join-Path $caseRoot 'other repo')
+        $file = Write-TuningContract (Join-Path $caseRoot 'contracts\ta-other.json') 'ta'
+        { InModuleScope aos -Parameters @{ F = $file; R = $otherRepo } { param($F, $R) Register-AosTaskContract -Path $F -Repo $R } } | Should -Throw
+    }
+
+    It 'rejects unsafe artifact or context paths and unknown fields' {
+        $cases = @(
+            @{ artifacts = @('..\escape.txt') },
+            @{ artifacts = @('a/../../escape.txt') },
+            @{ artifacts = @('C:\Windows\x.txt') },
+            @{ artifacts = @('/rooted.txt') },
+            @{ artifacts = @('.git/config') },
+            @{ artifacts = @('sub/.git/hooks/x') },
+            @{ context = @(@{ path = '..\secret.txt'; start_line = 1; end_line = 2 }) },
+            @{ context = @(@{ path = '.git/HEAD'; start_line = 1; end_line = 2 }) },
+            @{ context = @(@{ path = 'C:\x.txt'; start_line = 1; end_line = 2 }) },
+            @{ surprise_field = 'x' }
+        )
+        $n = 0
+        foreach ($case in $cases) {
+            $n++
+            { Add-TuningTask "bad$n" $case } | Should -Throw
+            InModuleScope aos -Parameters @{ I = "bad$n" } { param($I) Get-AosTaskRecord -Id $I } | Should -BeNullOrEmpty
+        }
+    }
+
+    It 'rejects an artifact path that passes through a link out of the repository' {
+        $outside = New-TestFolder (Join-Path $caseRoot 'outside')
+        $link = Join-Path $repo 'linked'
+        & cmd /c mklink /J "$link" "$outside" | Out-Null
+        Test-Path -LiteralPath $link | Should -BeTrue
+        { Add-TuningTask 'viajunction' @{ artifacts = @('linked/output.txt') } } | Should -Throw
+        { Add-TuningTask 'ctxjunction' @{ context = @(@{ path = 'linked/output.txt'; start_line = 1; end_line = 1 }) } } | Should -Throw
+        Test-Path -LiteralPath (Join-Path $outside 'output.txt') | Should -BeFalse
+    }
+
+    It 'stores a missing dependency but reports it not ready and refuses to start' {
+        $null = Add-TuningTask 'child' @{ depends_on = @('absent-parent') }
+        InModuleScope aos { Get-AosTaskRecord -Id 'child' } | Should -Not -BeNullOrEmpty
+        $ready = Test-TuningReady 'child'
+        $ready.Ready | Should -BeFalse
+        @($ready.Reasons).Count | Should -BeGreaterThan 0
+        { Start-TuningAttempt 'child' 'run-child-1' } | Should -Throw
+    }
+
+    It 'rejects cyclic registrations without storing the closing task' {
+        $null = Add-TuningTask 'ca' @{ depends_on = @('cb') }
+        $null = Add-TuningTask 'cb' @{ depends_on = @('cc') }
+        { Add-TuningTask 'cc' @{ depends_on = @('ca') } } | Should -Throw
+        { Add-TuningTask 'selfdep' @{ depends_on = @('selfdep') } } | Should -Throw
+        InModuleScope aos { Get-AosTaskRecord -Id 'cc' } | Should -BeNullOrEmpty
+        InModuleScope aos { Get-AosTaskRecord -Id 'selfdep' } | Should -BeNullOrEmpty
+    }
+
+    It 'prevents a second active attempt for the same task' {
+        $null = Add-TuningTask 'solo'
+        $first = Start-TuningAttempt 'solo' 'run-solo-1'
+        $first | Should -Not -BeNullOrEmpty
+        { Start-TuningAttempt 'solo' 'run-solo-2' } | Should -Throw
+        { Start-TuningAttempt 'solo' 'run-solo-1' } | Should -Throw
+    }
+
+    It 'does not let missing, failed or forged receipts satisfy a prerequisite' {
+        $cases = @(
+            @{ Name = 'none';        Receipt = $null },
+            @{ Name = 'rejected';    Receipt = @{ accepted = $false; outcome = 'rejected' } },
+            @{ Name = 'flagonly';    Receipt = @{ accepted = $true; outcome = 'failed' } },
+            @{ Name = 'outcomeonly'; Receipt = @{ accepted = $false; outcome = 'accepted' } },
+            @{ Name = 'othertask';   Receipt = @{ task_id = 'some-other-task' } },
+            @{ Name = 'verifyfail';  Receipt = @{ verify = [ordered]@{ command = 'git diff --check'; exit_code = 1 } } },
+            @{ Name = 'verifynull';  Receipt = @{ verify = $null } },
+            @{ Name = 'otherrepo';   Receipt = @{ repo = (Join-Path $caseRoot 'elsewhere'); workdir = (Join-Path $caseRoot 'elsewhere') } }
+        )
+        foreach ($case in $cases) {
+            $parent = "p-$($case.Name)"
+            $run = "run-$($case.Name)"
+            $null = Add-TuningTask $parent
+            $null = Add-TuningTask "c-$($case.Name)" @{ depends_on = @($parent) }
+            Write-TestFile (Join-Path $repo 'output.txt') 'artifact bytes'
+            $null = Start-TuningAttempt $parent $run
+            if ($case.Receipt) { Write-TuningReceipt $run $parent $case.Receipt }
+            $null = Complete-TuningAttempt $parent $run
+            (Test-TuningReady "c-$($case.Name)").Ready | Should -BeFalse -Because "case $($case.Name)"
+        }
+    }
+
+    It 'rejects a malformed receipt file instead of accepting the task' {
+        $null = Add-TuningTask 'pm'
+        $null = Add-TuningTask 'cm' @{ depends_on = @('pm') }
+        Write-TestFile (Join-Path $repo 'output.txt') 'artifact bytes'
+        $null = Start-TuningAttempt 'pm' 'run-pm'
+        Write-TestFile (Join-Path $env:AOS_COORD 'delegations\run-pm\receipt.json') '{ "accepted": true, "outcome": '
+        $null = Complete-TuningAttempt 'pm' 'run-pm'
+        (Test-TuningReady 'cm').Ready | Should -BeFalse
+    }
+
+    It 'accepts a genuine host receipt, binds artifact bytes, and blocks dependents when they change or vanish' {
+        $null = Add-TuningTask 'pa'
+        $null = Add-TuningTask 'cx' @{ depends_on = @('pa') }
+        (Test-TuningReady 'cx').Ready | Should -BeFalse
+        Invoke-TuningAccepted 'pa' 'run-pa-1'
+        $ready = Test-TuningReady 'cx'
+        $ready.Ready | Should -BeTrue
+        $ready.Inputs | Should -Not -BeNullOrEmpty
+        $path = Join-Path $repo 'output.txt'
+        Write-TestFile $path 'artifact bytes changed afterwards'
+        (Test-TuningReady 'cx').Ready | Should -BeFalse
+        Write-TestFile $path 'artifact bytes'
+        (Test-TuningReady 'cx').Ready | Should -BeTrue
+        Remove-Item -LiteralPath $path -Force
+        (Test-TuningReady 'cx').Ready | Should -BeFalse
+    }
+
+    It 'checks accepted artifacts in the dispatch repository, not in another checkout' {
+        $null = Add-TuningTask 'pr'
+        $null = Add-TuningTask 'cr' @{ depends_on = @('pr') }
+        Invoke-TuningAccepted 'pr' 'run-pr-1'
+        $other = New-TuningRepo (Join-Path $caseRoot 'dispatch checkout')
+        $ready = InModuleScope aos -Parameters @{ R = $other } { param($R) Test-AosTaskReady -Id 'cr' -Repo $R }
+        $ready.Ready | Should -BeFalse
+        Write-TestFile (Join-Path $other 'output.txt') 'artifact bytes'
+        (InModuleScope aos -Parameters @{ R = $other } { param($R) Test-AosTaskReady -Id 'cr' -Repo $R }).Ready | Should -BeTrue
+    }
+
+    It 'prevents a duplicate attempt after acceptance' {
+        $null = Add-TuningTask 'done1'
+        Invoke-TuningAccepted 'done1' 'run-done1-a'
+        { Start-TuningAttempt 'done1' 'run-done1-b' } | Should -Throw
+    }
+
+    It 'permits a new attempt with a new run id after a failed terminal attempt' {
+        $null = Add-TuningTask 'retry'
+        $null = Start-TuningAttempt 'retry' 'run-retry-1'
+        Write-TuningReceipt 'run-retry-1' 'retry' @{ accepted = $false; outcome = 'failed'; verify = [ordered]@{ command = 'git diff --check'; exit_code = 1 } }
+        $null = Complete-TuningAttempt 'retry' 'run-retry-1'
+        { Start-TuningAttempt 'retry' 'run-retry-2' } | Should -Not -Throw
+        { Start-TuningAttempt 'retry' 'run-retry-3' } | Should -Throw
+    }
+
+    It 'does not accept a receipt from a different run id than the attempt' {
+        $null = Add-TuningTask 'pw'
+        $null = Add-TuningTask 'cw' @{ depends_on = @('pw') }
+        Write-TestFile (Join-Path $repo 'output.txt') 'artifact bytes'
+        $null = Start-TuningAttempt 'pw' 'run-pw-real'
+        # A genuine accepted receipt exists, but for a run that was never this task's attempt.
+        Write-TuningReceipt 'run-pw-stranger' 'pw'
+        $null = Complete-TuningAttempt 'pw' 'run-pw-stranger'
+        (Test-TuningReady 'cw').Ready | Should -BeFalse
+    }
+
+    Context 'owner-scoped release of a removed checkout' {
+        BeforeEach {
+            $wt = New-TuningRepo (Join-Path $caseRoot 'wt checkout')
+            $claim = InModuleScope aos -Parameters @{ P = $wt } { param($P) Invoke-AosClaim -Path $P -Agent 'codex' -Session 'owner1' }
+            $claim.Ok | Should -BeTrue
+            $claimFile = InModuleScope aos -Parameters @{ C = $claim.Claim.checkout } { param($C) Get-AosClaimPath $C }
+            Test-Path -LiteralPath $claimFile | Should -BeTrue
+            # The fixture folder lives under TestDrive only; remove it, as a finished worktree would be.
+            $wt.StartsWith($caseRoot) | Should -BeTrue
+            Get-ChildItem -LiteralPath $wt -Force -Recurse | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReadOnly } |
+                ForEach-Object { $_.Attributes = [IO.FileAttributes]::Normal }
+            Remove-Item -LiteralPath $wt -Recurse -Force
+            Test-Path -LiteralPath $wt | Should -BeFalse
+        }
+
+        It 'lets the owner release the claim after the folder is gone' {
+            $r = InModuleScope aos -Parameters @{ P = $wt } { param($P) Invoke-AosRelease -Path $P -Agent 'codex' -Session 'owner1' }
+            $r.Ok | Should -BeTrue
+            Test-Path -LiteralPath $claimFile | Should -BeFalse
+        }
+
+        It 'refuses a foreign session and preserves the claim bytes' {
+            $before = [System.IO.File]::ReadAllBytes($claimFile)
+            foreach ($who in @(@{ A = 'codex'; S = 'owner2' }, @{ A = 'claude'; S = 'owner1' })) {
+                $r = InModuleScope aos -Parameters @{ P = $wt; A = $who.A; S = $who.S } { param($P, $A, $S) Invoke-AosRelease -Path $P -Agent $A -Session $S }
+                $r.Ok | Should -BeFalse
+            }
+            Test-Path -LiteralPath $claimFile | Should -BeTrue
+            [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($claimFile)) | Should -BeExactly ([Convert]::ToBase64String($before))
+        }
+    }
+}
 }
