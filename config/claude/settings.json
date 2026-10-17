@@ -33,6 +33,12 @@
     "padding": 0
   },
   "hooks": {
+    "SubagentStart": [
+      {"hooks": [{"type": "command", "command": "node \"{{root}}\\tools\\coordination-hook.mjs\"", "timeout": 5}]}
+    ],
+    "SubagentStop": [
+      {"hooks": [{"type": "command", "command": "node \"{{root}}\\tools\\coordination-hook.mjs\"", "timeout": 5}]}
+    ],
     "PreToolUse": [
       {
         "matcher": "Edit|Write|MultiEdit|NotebookEdit",

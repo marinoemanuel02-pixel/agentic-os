@@ -4858,4 +4858,97 @@ Describe 'coordination tuning safety' {
         }
     }
 }
+
+Describe 'coordination tuning launch' {
+    BeforeEach {
+        $env:AOS_COORD=Join-Path $caseRoot 'coord'
+        $repo=New-TestFolder (Join-Path $caseRoot 'repo')
+        git -C $repo init -q
+        git -C $repo -c user.name=Fixture -c user.email=fixture@example.invalid commit --allow-empty -qm initial
+        Write-TestFile (Join-Path $repo 'input.txt') 'packet-value'
+        $task=Join-Path $caseRoot 'task.md';Write-TestFile $task 'Read the input'
+        $contract=Join-Path $caseRoot 'contract.json'
+        Write-TestFile $contract '{"version":1,"id":"launch-task","objective":"Read the exact input","task_class":"mechanical","depends_on":[],"allow":[],"verify":"git diff --check","artifacts":["input.txt"],"context":[{"path":"input.txt","start_line":1,"end_line":1}],"route_reason":"narrow deterministic task","review":"inline check","budget":{"timeout_minutes":2,"max_turns":8}}'
+        Mock Test-AosDelegatePreflight -ModuleName aos { @{Ok=$true;Model='fixture-model';Reasons=@()} }
+        Mock Invoke-AosProcess -ModuleName aos {
+            if ($Exe -eq 'cmd.exe') { return @{Code=0;TimedOut=$false;KillFailed=$false} }
+            [IO.File]::WriteAllText($StdoutFile,"{`"type`":`"thread.started`",`"thread_id`":`"fixture-thread`"}`n{`"type`":`"turn.completed`",`"usage`":{`"input_tokens`":0,`"cached_input_tokens`":0,`"output_tokens`":0}}")
+            [IO.File]::WriteAllText((Join-Path (Split-Path $StdoutFile -Parent) 'result.json'),'{"status":"done","summary":"read","files_changed":[],"tests_run":[],"unverified":[]}')
+            @{Code=0;TimedOut=$false;KillFailed=$false;Cancelled=$false}
+        }
+    }
+    It 'binds a contract and bounded packet to a host-verified measured receipt' {
+        $r=InModuleScope aos -Parameters @{T=$task;R=$repo;C=$contract} {param($T,$R,$C) Invoke-AosDelegate -Vendor codex -TaskFile $T -Repo $R -ContractFile $C}
+        $r.accepted | Should -BeTrue
+        $r.task_id | Should -Be launch-task
+        $r.task_class | Should -Be mechanical
+        $r.usage_observed | Should -BeTrue
+        $r.phase_seconds.execution | Should -BeGreaterOrEqual 0
+        $r.review_choice | Should -Be 'inline check'
+        $r.context_chars | Should -BeGreaterThan 0
+        $prompt=Get-Content (Join-Path $env:AOS_COORD "delegations/$($r.id)/prompt.md") -Raw
+        $prompt | Should -Match 'packet-value'
+        (InModuleScope aos {Get-AosTaskRecord launch-task}).state | Should -Be accepted
+    }
+    It 'refuses unmet dependencies before probing or launching' {
+        $c=Get-Content $contract -Raw | ConvertFrom-Json;$c.depends_on=@('missing');Write-TestFile $contract ($c | ConvertTo-Json -Depth 8)
+        $r=InModuleScope aos -Parameters @{T=$task;R=$repo;C=$contract} {param($T,$R,$C) Invoke-AosDelegate -Vendor codex -TaskFile $T -Repo $R -ContractFile $C}
+        $r.accepted | Should -BeFalse
+        Should -Invoke Test-AosDelegatePreflight -ModuleName aos -Times 0 -Exactly
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
+    }
+    It 'routes the optional transport through the adapter and preserves verification' {
+        $r=InModuleScope aos -Parameters @{T=$task;R=$repo;C=$contract} {param($T,$R,$C) Invoke-AosDelegate -Vendor codex -TaskFile $T -Repo $R -ContractFile $C -Transport app-server}
+        $r.accepted | Should -BeTrue
+        $r.transport | Should -Be app-server
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly -ParameterFilter {$Exe -eq 'node.exe' -and $Arguments -contains '--run-dir' -and $Arguments -contains '--schema'}
+    }
+    It 'closes the contracted attempt after a preflight failure without accepting it' {
+        Mock Test-AosDelegatePreflight -ModuleName aos { @{Ok=$false;Model='';Reasons=@('fixture unavailable')} }
+        $r=InModuleScope aos -Parameters @{T=$task;R=$repo;C=$contract} {param($T,$R,$C) Invoke-AosDelegate -Vendor codex -TaskFile $T -Repo $R -ContractFile $C}
+        $r.accepted | Should -BeFalse
+        $row=InModuleScope aos {Get-AosTaskRecord launch-task}
+        $row.state | Should -Be failed
+        $row.active_run | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'coordination tuning events' {
+    BeforeEach { $env:AOS_COORD=Join-Path $caseRoot 'coord' }
+    It 'measures time spent waiting without resetting the first wait on repeated updates' {
+        InModuleScope aos {
+            Reserve-AosActor -Id waitmetric -Vendor codex -Task event-task | Out-Null
+            Set-AosRunState -Id waitmetric -State waiting-input | Out-Null
+            $r=Get-AosRunState waitmetric;$r['waiting_since']=(Get-Date).ToUniversalTime().AddSeconds(-3).ToString('o')
+            Write-AosCoordJson (Join-Path (Get-AosCoordDir) 'delegations/waitmetric/run.json') $r
+            Set-AosRunState -Id waitmetric -State waiting-input | Out-Null
+            Set-AosRunState -Id waitmetric -State running | Out-Null
+            (Get-AosRunState waitmetric)['waiting_seconds'] | Should -BeGreaterOrEqual 3
+        }
+    }
+    It 'correlates steering with the active normalized turn and clears it on completion' {
+        InModuleScope aos {
+            Reserve-AosActor -Id evrun -Vendor codex -Task event-task | Out-Null
+            Set-AosRunState -Id evrun -State running | Out-Null
+            $r=Get-AosRunState evrun;$r['transport']='app-server'
+            Write-AosCoordJson (Join-Path (Get-AosCoordDir) 'delegations/evrun/run.json') $r
+            Receive-AosCoordEvent evrun '{"type":"turn.started","thread_id":"thread1","turn_id":"turn1"}'
+            (Get-AosRunState evrun)['active_turn_id'] | Should -Be turn1
+            { Send-AosTurnSteering evrun 'Use fixed checks' turn1 } | Should -Not -Throw
+            Receive-AosCoordEvent evrun '{"type":"turn.completed","usage":null}'
+            { Send-AosTurnSteering evrun 'Too late' turn1 } | Should -Throw
+        }
+    }
+    It 'retains an unexpected native launch for inspection when no allowance was reserved' {
+        InModuleScope aos {
+            Reserve-AosActor -Id unknownnative -Vendor claude -Task event-task | Out-Null
+            Set-AosRunState -Id unknownnative -State running | Out-Null
+            $signal=@{id=[guid]::NewGuid().ToString();run_id='unknownnative';session_id='session1';agent_id='child1';phase='start';source='claude-hook';observed_at=(Get-Date).ToUniversalTime().ToString('o')}
+            Write-AosText (Join-Path (Get-AosCoordDir) 'native-signals/unknownnative.jsonl') ((ConvertTo-Json $signal -Compress)+"`n")
+            Import-AosNativeSignals unknownnative | Out-Null
+            (Get-AosRunState unknownnative)['state'] | Should -Be needs-inspection
+            (Get-AosActors | Where-Object id -eq unknownnative).state | Should -Be suspect
+        }
+    }
+}
 }

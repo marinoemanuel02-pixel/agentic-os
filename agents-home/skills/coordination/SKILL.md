@@ -102,3 +102,32 @@ The lead reads and verifies each result, checks scope and dependencies, integrat
 the relevant acceptance checks on the combined result. A host receipt is evidence that its checks ran,
 not a semantic guarantee or permission to publish. Report actual checks, failed or unavailable routes,
 and unknowns. Do not claim savings without observed model and comparison evidence.
+
+## Checked tasks and reusable evidence
+
+For dependent or repeatable work, add `--contract <json>` to delegation. Use `aos coord task
+register|ready|packet` to register and inspect the bounded input. A dependent task needs accepted
+host receipts and matching artifacts already integrated in its checkout. A task id is stable across
+failed retries; each attempt gets a new run id. Unknown/stale evidence blocks dispatch.
+
+Use `aos coord capabilities` before choosing native controls. Managed `aos-explore`, `aos-implement`
+and `aos-verify` roles come from local routing; unsupported settings are omitted. Pass supported
+settings explicitly through the native harness. Codex native turn budgets are advisory. Claude
+lifecycle hooks can establish identity and termination only for a matching reserved child; hooks
+observe launch and do not enforce pre-launch admission. Preserve an unconfirmed child's allowance.
+
+`--transport app-server` is an optional Codex CLI route with ChatGPT authentication and exact active
+turn steering (`aos coord steer`). Keep `exec` as the ordinary route. A partial or interrupted turn
+never counts as accepted work. The host still verifies scope, output and completion.
+
+Read `aos coord report` to assess comparable task classes, failures, timing and unknown usage.
+After integration, use `aos coord annotate` for corrections and measured integration/review time.
+Do not tune from one successful run. The six-case `tools/coordination-eval.ps1` prepares without
+model calls; explicit execution needs selected cases and an active parent, within existing capacity.
+
+Before a long continuation, commit required source and use `aos coord checkpoint save|check` along
+with `handoff`. Check tracked-file preservation and inspect live actors before resuming. Keep
+necessary ignored/untracked material separately. Never archive the only recovery source on the
+strength of an untested snapshot. `aos coord procedure save|list` promotes scoped reusable guidance
+only with two distinct host-verified successes; stale or contradicted guidance is not retrieved.
+See `docs/coordination-tuning.md` in agentic-os for contract fields and exact command examples.

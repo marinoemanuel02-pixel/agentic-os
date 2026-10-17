@@ -179,6 +179,10 @@ function Import-AosNativeSignals([string]$RunId) {
                 $store = Read-AosActorStore; $owner = $store['actors'][$RunId]; $child = $store['actors'][$childId]
                 if (-not $owner -or -not $child -or $owner['vendor'] -ne 'claude' -or $owner['kind'] -notin @('lead','delegate') -or $child['vendor'] -ne 'claude' -or
                     $child['kind'] -ne 'native' -or $child['parent'] -ne $RunId -or $child['task'] -ne $owner['task']) {
+                    if ($owner -and (Test-AosActorActive $owner)) {
+                        $null=Set-AosRunState -Id $RunId -State needs-inspection -Text 'native launch outside reserved allowance'
+                        $null=Set-AosActorState -Id $RunId -State suspect -Text 'unaccounted native lifecycle needs inspection'
+                    }
                     $diagnostics.Add('Native signal does not match the reserved actor identity.'); continue
                 }
                 $reference = 'native-signals/' + $RunId + '.jsonl#' + $eventId

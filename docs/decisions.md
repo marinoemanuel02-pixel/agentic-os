@@ -3,6 +3,22 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-18 - Measured coordination, checked inputs and recoverable continuation
+
+- **Decision.** Extend the existing dispatcher with optional checked contracts, bounded context,
+  phase/usage evidence and six offline evaluation fixtures. Add managed native roles, correlated
+  lifecycle observations and an opt-in short-lived Codex App Server transport. Keep prose-only
+  delegation and selective risk-based review. No new service, dependency or API spending.
+- **Acceptance.** Task prerequisites require accepted host checks and matching file hashes in the
+  dispatch checkout. Unknown native identity, partial results and unconfirmed termination remain
+  inspection states. Requested settings and unknown usage never become observations by inference.
+- **Recovery.** Checkpoints bind revision, task state and tracked content copies; required ignored
+  material needs explicit preservation. Keep source worktrees until recovery is verified. Procedures
+  need two distinct host-verified successes and current file hashes; retain contradictory evidence.
+- **Limits.** Native controls depend on installed schemas. Hooks observe after launch; the global
+  two-actor rule remains cooperative. Small fixtures and API cost estimates prove no quota savings.
+  See `docs/coordination-tuning.md` and the source-linked research for interfaces and limitations.
+
 ## 2026-10-17 - Task-aware routing and cooperative coordination
 
 - **Decision.** The lead agent chooses whether to work inline or dispatch a bounded worker and selects

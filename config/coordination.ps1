@@ -303,8 +303,15 @@ function Set-AosRunState {
             if (-not $actors[$Id] -and $State -in @('running','preparing','waiting-input','reserved')) { throw 'active run needs an admitted actor' }
             $parent=''; if ($actors[$Id]) { $parent=[string]$actors[$Id]['parent'] }
             $run=[ordered]@{ id=$Id; actor=$Id; parent=$parent; state=$State; text=''; sequence=0;
-                cancel_requested=$false; process_id=0; process_started=''; updated='' }
+                cancel_requested=$false; process_id=0; process_started=''; updated=''; waiting_seconds=0.0; waiting_since='' }
         }
+        if (-not $run.Contains('waiting_seconds')) { $run['waiting_seconds']=0.0 }
+        if ($run['waiting_since'] -and $State -ne 'waiting-input') {
+            $since=[DateTime]::Parse($run['waiting_since']).ToUniversalTime()
+            $run['waiting_seconds']=[Math]::Round(([double]$run['waiting_seconds']+[Math]::Max(0,([DateTime]::UtcNow-$since).TotalSeconds)),4)
+            $run['waiting_since']=''
+        }
+        if ($State -eq 'waiting-input' -and -not $run['waiting_since']) { $run['waiting_since']=Get-AosUtcStamp }
         $run['state']=$State; $run['text']=$Text; $run['sequence']=[long]$run['sequence']+1; $run['updated']=Get-AosUtcStamp
         if ($ProcessId -gt 0) { $run['process_id']=$ProcessId; $run['process_started']=$ProcessStarted }
         if ($Cancel) { $run['cancel_requested']=$true }
@@ -347,6 +354,17 @@ function Receive-AosCoordEvent([string]$RunId, [string]$JsonLine) {
     # Only completed vendor tool output is a transport. Assistant prose is never a request.
     $event=$null
     try { $event=ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $JsonLine -ErrorAction Stop) } catch { return }
+    if ($event['type'] -in @('turn.started','turn.completed','turn.failed','account.rate_limits')) {
+        Invoke-AosCoordLocked {
+            $state=Get-AosRunState $RunId
+            if ($state -and $state['actor'] -eq $RunId -and $state['transport'] -eq 'app-server') {
+                if ($event['type'] -eq 'turn.started') { $state['active_turn_id']=$event['turn_id'];$state['thread_id']=$event['thread_id'] }
+                elseif ($event['type'] -in @('turn.completed','turn.failed')) { $state['active_turn_id']='' }
+                else { $state['rate_limits']=$event['rate_limits'];$state['rate_limits_by_limit_id']=$event['rate_limits_by_limit_id'] }
+                Write-AosCoordJson (Join-Path (Join-Path (Join-Path (Get-AosCoordDir) 'delegations') $RunId) 'run.json') $state
+            }
+        }
+    }
     $outputs=@()
     if ($event['type'] -eq 'item.completed' -and $event['item']['type'] -eq 'command_execution') {
         $outputs+= [string]$event['item']['aggregated_output']
@@ -429,6 +447,7 @@ function Invoke-AosWorkerCoord([string[]]$Arguments) {
 }
 
 function Invoke-AosCoordControl([string[]]$Arguments) {
+    if (Invoke-AosTuningControl $Arguments) { return }
     $sub = @($Arguments)[0]
     $rest = @($Arguments | Select-Object -Skip 1)
     $p = ConvertFrom-AosCliArgs $rest @() @('as','task','parent','kind','workers','handle','evidence','process','started','state','text','to','reply-to','seconds') @('ack')

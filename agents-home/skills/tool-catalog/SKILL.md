@@ -41,6 +41,12 @@ Servers cost context on every request: add one only when a command line cannot d
 `python ~/.video-intel/video_intel.py <reel-url>... [--limit N]` (public reels to local Whisper transcripts in `~/.video-intel/out/`; no cookies needed, profile pages are listed through the browser; Instagram media only, the `video-intel` skill drives it);
 `aos` itself: `status`, `sync`, `test`, `new`, `video new` (a video project from the template), `who` (claims), `note`, `delegate codex|claude` (hand a task to the other vendor; supports task tier, effort, parent and one native-worker allowance), `coord` (actor reservation, observation, finish, listing, reconciliation, addressed send/inbox/ack/wait and run status/cancellation), `secret` (keys; never print them), `place` (known folders), `install <layer>`.
 
+Coordination tuning: optional `delegate --contract` and Codex `--transport app-server`; `coord task`
+for checked dependencies and compact packets, `report`/`annotate` for routing evidence,
+`capabilities`/`roles`/`native`/`steer` for supported native controls and lifecycle, and
+`checkpoint`/`procedure` for verified continuation and scoped guidance. The six-case
+`tools/coordination-eval.ps1` defaults to model-free preparation. See `docs/coordination-tuning.md`.
+
 ## Other agents
 
 | Agent | Reach it with | Good for |

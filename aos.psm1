@@ -10,6 +10,9 @@ $script:Utf8Bom = New-Object System.Text.UTF8Encoding($true)
 $script:Layers = @('base', 'engines', 'brain', 'bridges', 'refs', 'local', 'media')
 $script:OptInLayers = @('media')   # big downloads: installed only when named, never by `aos install` / `all`
 . (Join-Path $PSScriptRoot 'config\coordination.ps1')
+. (Join-Path $PSScriptRoot 'config\task-contracts.ps1')
+. (Join-Path $PSScriptRoot 'config\coordination-learning.ps1')
+. (Join-Path $PSScriptRoot 'config\native-coordination.ps1')
 
 # Windows PowerShell 5.1 serializes some arrays as {"value":[...],"Count":n} unless this is removed.
 if ($PSVersionTable.PSVersion.Major -lt 6) { Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue }
@@ -814,6 +817,9 @@ function Sync-AosBrain([switch]$DryRun) {
     Write-AosStep 'Codex profiles (~/.codex/<name>.config.toml; config.toml itself stays the app''s)'
     Sync-AosCodexProfiles -DryRun:$DryRun
 
+    Write-AosStep 'Native worker role definitions (capability-gated; requested settings remain unobserved)'
+    Sync-AosNativeRoles -DryRun:$DryRun | ForEach-Object { Write-AosInfo ("$($_.vendor) $($_.role): $($_.status)") }
+
     Write-AosStep 'Local model state (~\.aos\local.json, read by nar)'
     Sync-AosLocalState -DryRun:$DryRun
 
@@ -1566,7 +1572,7 @@ function Invoke-AosTest {
     $root = $script:Root
     $failed = $false
     Write-AosStep 'Static checks'
-    foreach ($f in @('aos.psm1', 'bootstrap.ps1', 'tests\Run-Tests.ps1', 'config\coordination.ps1', 'tools\coord.ps1', 'tools\coordination-smoke.ps1')) {
+    foreach ($f in @('aos.psm1', 'bootstrap.ps1', 'tests\Run-Tests.ps1', 'config\coordination.ps1', 'config\task-contracts.ps1', 'config\coordination-learning.ps1', 'config\native-coordination.ps1', 'tools\coord.ps1', 'tools\coordination-smoke.ps1')) {
         $path = Join-Path $root $f
         $tokens = $null
         $errors = $null
@@ -2333,6 +2339,7 @@ function Start-AosProcessCore {
             if ($read) { [void]$read.Wait(200); . $pump }
             elseif (-not $p.HasExited) { Start-Sleep -Milliseconds 200 }
             if ($LiveRunId) {
+                if (Test-Path -LiteralPath (Join-Path (Join-Path (Get-AosCoordDir) 'native-signals') ($LiveRunId+'.jsonl'))) { $null=Import-AosNativeSignals -RunId $LiveRunId }
                 $liveState=Get-AosRunState $LiveRunId
                 if ($liveState['cancel_requested']) { $cancelled=$true; break }
                 if ($liveState['state'] -eq 'waiting-input') { $lastOutput=[DateTime]::UtcNow }
@@ -2518,6 +2525,8 @@ function Invoke-AosClaim {
 
 function Invoke-AosRelease([string]$Path, [string]$Agent, [string]$Session) {
     $aosRelCheckout = Get-AosCheckout $Path
+    # A finished worktree can already be gone. Never resolve its identity to the nearest parent.
+    if ($Path -and -not (Test-Path -LiteralPath $Path)) { $aosRelCheckout=[IO.Path]::GetFullPath($Path).TrimEnd('\') }
     $aosRelFile = Get-AosClaimPath $aosRelCheckout
     $aosRelArgs = @{ Agent = $Agent; Session = $Session }
     return (Invoke-AosCoordLocked {
@@ -2658,7 +2667,7 @@ function Expand-AosHookTree($Value) {
 
 function Test-AosOwnedHook($Hook) {
     if (-not ($Hook -is [System.Collections.IDictionary])) { return $false }
-    foreach ($k in @('command', 'commandWindows', 'command_windows')) { if ([string]$Hook[$k] -match 'aos guard|aos-notes\.mjs') { return $true } }
+    foreach ($k in @('command', 'commandWindows', 'command_windows')) { if ([string]$Hook[$k] -match 'aos guard|aos-notes\.mjs|coordination-hook\.mjs') { return $true } }
     return $false
 }
 
@@ -2766,7 +2775,7 @@ function Get-AosErrorCategory([string]$Message) {
 
 function Read-AosCodexEvents([string]$Path) {
     # Facts from `codex exec --json` output. Errors come ONLY from error/turn.failed events.
-    $f = [ordered]@{ ThreadId = ''; Input = 0; Cached = 0; Output = 0; Completed = $false; Messages = @(); Errors = @() }
+    $f = [ordered]@{ ThreadId = ''; Input = 0; Cached = 0; Output = 0; UsageObserved = $false; Completed = $false; Messages = @(); Errors = @() }
     if (-not (Test-Path -LiteralPath $Path)) { return [pscustomobject]$f }
     $msgs = New-Object System.Collections.Generic.List[string]
     $errs = New-Object System.Collections.Generic.List[string]
@@ -2780,6 +2789,7 @@ function Read-AosCodexEvents([string]$Path) {
                 $f.Completed = $true
                 $u = $e['usage']
                 if ($u -is [System.Collections.IDictionary]) {
+                    $f.UsageObserved=($null -ne $u['input_tokens'] -and $null -ne $u['output_tokens'] -and $null -ne $u['cached_input_tokens'])
                     $f.Input += [long]$u['input_tokens']; $f.Cached += [long]$u['cached_input_tokens']; $f.Output += [long]$u['output_tokens']
                 }
             }
@@ -3134,7 +3144,8 @@ function Invoke-AosCapacity([string[]]$Arguments) {
 function Invoke-AosDelegate {
     param([string]$Vendor, [string]$TaskFile, [switch]$Write, [string]$Model, [string[]]$Needs, [string]$Verify,
         [string[]]$Allow, [string[]]$Setup, [int]$TimeoutMinutes = 30, [string]$Repo, [int]$IdleMinutes = 15,
-        [string]$Tier = 'standard', [string]$Effort, [string]$Parent, [ValidateRange(0,1)][int]$Workers = 0)
+        [string]$Tier = 'standard', [string]$Effort, [string]$Parent, [ValidateRange(0,1)][int]$Workers = 0,
+        [string]$ContractFile,[string]$Transport='exec')
     $refuse = {
         param($m)
         Write-AosWarn "delegate refused: $m"
@@ -3143,6 +3154,7 @@ function Invoke-AosDelegate {
     }
     if ($Vendor -notin @('codex', 'claude')) { return (& $refuse "unknown vendor '$Vendor' (codex or claude)") }
     if ($env:AOS_DELEGATE_ID) { return (& $refuse 'a delegated worker cannot launch another CLI delegate; use its reserved native allowance') }
+    if ($Transport -notin @('exec','app-server') -or ($Transport -eq 'app-server' -and $Vendor -ne 'codex')) { return (& $refuse 'transport must be exec, or app-server for Codex') }
     try { $route = Resolve-AosTaskRoute -Vendor $Vendor -Tier $Tier -Model $Model -Effort $Effort }
     catch { return (& $refuse $_.Exception.Message) }
     $Model = $route.Model
@@ -3155,11 +3167,25 @@ function Invoke-AosDelegate {
         return (& $refuse "$Vendor has fresh limited capacity; do not launch or probe until reset")
     }
     if (-not $TaskFile -or -not (Test-Path -LiteralPath $TaskFile)) { return (& $refuse "task file not found: $TaskFile") }
-    if ($Write -and -not $Verify) { return (& $refuse 'write mode needs --verify <command>: the host checks the result, not the delegate') }
     $taskText = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $TaskFile).ProviderPath)
     $repoDir = $Repo
     if (-not $repoDir) { $repoDir = (Get-Location).ProviderPath }
     $repoDir = Get-AosCheckout $repoDir
+    $contractRow=$null;$taskState=@{Owned=$false}
+    if ($ContractFile) {
+        try {
+            $contractRow=Register-AosTaskContract -Path $ContractFile -Repo $repoDir
+            $c=$contractRow.contract
+            if (-not $c['verify']) { throw 'contract requires a host verification command' }
+            if ($Verify -and $Verify -ne $c['verify']) { throw 'verification conflicts with contract' }
+            if (@($Allow).Count -and @($c['allow']).Count -and ($Allow -join '|') -ne ($c['allow'] -join '|')) { throw 'write scope conflicts with contract' }
+            $Verify=[string]$c['verify'];$Allow=@($c['allow'])
+            if ($c['budget'] -and $c['budget']['timeout_minutes']) { $TimeoutMinutes=[Math]::Min($TimeoutMinutes,[int]$c['budget']['timeout_minutes']) }
+            $ready=Test-AosTaskReady -Id $contractRow.id -Repo $repoDir
+            if (-not $ready.Ready) { throw ($ready.Reasons -join '; ') }
+        } catch { return (& $refuse $_.Exception.Message) }
+    }
+    if ($Write -and -not $Verify) { return (& $refuse 'write mode needs --verify <command>: the host checks the result, not the delegate') }
     if ($Write -and (Invoke-AosGit -Dir $repoDir -Arguments @('rev-parse', '--show-toplevel')).Code -ne 0) {
         return (& $refuse "write mode needs a git repository: $repoDir")
     }
@@ -3178,14 +3204,34 @@ function Invoke-AosDelegate {
     if (-not $id) { return (& $refuse 'could not create a unique delegation folder') }
     Write-AosText -Path (Join-Path $dir 'task.md') -Text $taskText
     $started = [DateTime]::UtcNow
+    $clock=[Diagnostics.Stopwatch]::StartNew()
     $receipt = [ordered]@{ id = $id; vendor = $Vendor; model = ''; mode = 'read'; repo = $repoDir; workdir = $repoDir; branch = ''; base = ''; commit = ''
         requested_model = $Model; requested_effort = $Effort; requested_tier = $Tier; tier = $route.Tier; route_reason = $route.Reason
         observed_model = $null; observed_models = @(); observed_effort = $null
         started = $started.ToString('yyyy-MM-ddTHH:mm:ssZ'); ended = ''; seconds = 0; exit_code = $null; timed_out = $false; kill_failed = $false
         thread_id = ''; session_id = ''; usage = [ordered]@{ input = 0; cached = 0; output = 0 }; cost_usd = $null
-        error = $null; delegate = $null; changed = @(); outside_allow = @(); verify = $null; accepted = $false; outcome = 'failed' }
+        error = $null; delegate = $null; changed = @(); outside_allow = @(); verify = $null; accepted = $false; outcome = 'failed'
+        task_id='';task_class='unclassified';transport=$Transport;review_choice=$null;corrections=$null;usage_observed=$false;context_chars=0
+        phase_seconds=[ordered]@{launch=0.0;execution=$null;verification=$null;waiting=$null;integration=$null;review=$null};_phase='launch';_phase_started=0.0 }
+    if ($contractRow) { $receipt.task_id=$contractRow.id;$receipt.task_class=$contractRow.contract['task_class'];$receipt['decision_reason']=$contractRow.contract['route_reason'];$receipt.review_choice=$contractRow.contract['review'] }
     $finish = {
         param($outcome)
+        Set-AosReceiptPhase $receipt $clock ''
+        $waitRun=Get-AosRunState $id
+        if ($waitRun) {
+            $waiting=[double]$waitRun['waiting_seconds']
+            if ($waitRun['waiting_since']) { $waiting+=[Math]::Max(0,([DateTime]::UtcNow-[DateTime]::Parse($waitRun['waiting_since']).ToUniversalTime()).TotalSeconds) }
+            # Waiting is a measured subset of execution, not an additional phase to sum.
+            $receipt.phase_seconds.waiting=[Math]::Round($waiting,4)
+        }
+        $receipt.Remove('_phase');$receipt.Remove('_phase_started')
+        if ($taskState.Owned) {
+            $receipt.outcome=$outcome;$receipt.accepted=($outcome -eq 'accepted')
+            $receipt.ended=Get-AosUtcStamp;$receipt.seconds=[int]([DateTime]::UtcNow-$started).TotalSeconds
+            Write-AosText -Path (Join-Path $dir 'receipt.json') -Text ((ConvertTo-Json -InputObject $receipt -Depth 10)+"`n")
+            try { $null=Complete-AosTaskAttempt -Id $contractRow.id -RunId $id;$taskState.Owned=$false }
+            catch { $outcome='needs-inspection';$receipt.error=[ordered]@{category='task-evidence';message=$_.Exception.Message} }
+        }
         if ($actorOwned) {
             $actorState = 'failed'
             if ($outcome -eq 'accepted') { $actorState = 'done' }
@@ -3201,6 +3247,7 @@ function Invoke-AosDelegate {
         }
         if ($receipt.error -and $receipt.error.category -eq 'quota') { try { Add-AosCapacityFromError -Vendor $Vendor -Message ([string]$receipt.error.message) } catch { } }
         $receipt.outcome = $outcome
+        $receipt.accepted=($outcome -eq 'accepted')
         $receipt.ended = (Get-AosUtcStamp)
         $receipt.seconds = [int]([DateTime]::UtcNow - $started).TotalSeconds
         Write-AosText -Path (Join-Path $dir 'receipt.json') -Text ((ConvertTo-Json -InputObject $receipt -Depth 10) + "`n")
@@ -3226,6 +3273,9 @@ function Invoke-AosDelegate {
     }
     $actorOwned = $true
     $null = Set-AosRunState -Id $id -State preparing
+    $activeRun=Get-AosRunState $id;$activeRun['transport']=$Transport
+    Write-AosCoordJson (Join-Path $dir 'run.json') $activeRun
+    if ($contractRow) { $null=Start-AosTaskAttempt -Id $contractRow.id -RunId $id;$taskState.Owned=$true }
     if ($Write) {
         $receipt.mode = 'write'
         $top = Invoke-AosGit -Dir $repoDir -Arguments @('rev-parse', '--show-toplevel')
@@ -3266,9 +3316,18 @@ function Invoke-AosDelegate {
     $null = Set-AosActorState -Id $id -State running -Text 'model launch'
     $schemaPath = Join-Path $script:Root 'config\delegate\result.schema.json'
     $promptPath = Join-Path $dir 'prompt.md'
-    Write-AosText -Path $promptPath -Text (Get-AosDelegatePrompt -TaskText $taskText -WorkDir $workdir -Branch $receipt.branch -Write:$Write -RunId $id -Parent $Parent -Workers $Workers)
+    if ($contractRow) { $packet=Get-AosTaskPacket -Id $contractRow.id -Repo $repoDir;$receipt.context_chars=$packet.Length;$taskText+="`n`n$packet" }
     $workerEnvironment=@{ AOS_DELEGATE_ID=$id; AOS_ACTOR_ID=$id; AOS_RUN_ID=$id; AOS_COORD_TRANSPORT='stdout' }
+    if ($Workers) {
+        $maxTurns=24;if ($contractRow -and $contractRow.contract['budget'] -and $contractRow.contract['budget']['max_turns']) {$maxTurns=[int]$contractRow.contract['budget']['max_turns']}
+        $receipt['native_request']=Get-AosNativeRole -Vendor $Vendor -Role implement -Tier $route.Tier -MaxTurns $maxTurns
+        $workerEnvironment['AOS_NATIVE_MAX_TURNS']=[string]$maxTurns
+        $taskText+="`nNative worker request (requested settings, not observations): " + (ConvertTo-Json -InputObject $receipt['native_request'] -Depth 6 -Compress)
+        $taskText+="`nUse the managed aos-implement role or pass its supported settings explicitly through the native harness. The max_turns budget applies to your child. Do not claim enforcement or observed settings that the harness does not expose. Return blocked or partial if the budget is exhausted."
+    }
+    Write-AosText -Path $promptPath -Text (Get-AosDelegatePrompt -TaskText $taskText -WorkDir $workdir -Branch $receipt.branch -Write:$Write -RunId $id -Parent $Parent -Workers $Workers)
     $result = $null
+    Set-AosReceiptPhase $receipt $clock 'execution'
     if ($Vendor -eq 'codex') {
         $mode = 'read-only'
         if ($Write) { $mode = 'workspace-write' }
@@ -3276,12 +3335,20 @@ function Invoke-AosDelegate {
         $codexArgs = @('exec', '-m', $pre.Model, '--json', '--output-schema', $schemaPath, '-o', $resultPath,
             '-C', $workdir, '--sandbox', $mode, '--skip-git-repo-check')
         if ($Effort) { $codexArgs += @('-c', ('model_reasoning_effort="' + $Effort + '"')) }
+        if ($Workers) { $codexArgs+=@('-c','agents.max_threads=1') }
         $codexArgs += '-'
-        $run = Invoke-AosProcess -Exe 'codex.exe' -Arguments $codexArgs -WorkingDirectory $workdir -StdinFile $promptPath `
+        $modelExe='codex.exe'
+        if ($Transport -eq 'app-server') {
+            $modelExe='node.exe'
+            $codexArgs=@((Join-Path $script:Root 'tools\codex-app-server.mjs'),'--cwd',$workdir,'--model',$pre.Model,'--sandbox',$mode,'--schema',$schemaPath,'--output',$resultPath,'--run-dir',$dir)
+            if ($Effort) { $codexArgs+=@('--effort',$Effort) }
+        }
+        $run = Invoke-AosProcess -Exe $modelExe -Arguments $codexArgs -WorkingDirectory $workdir -StdinFile $promptPath `
             -StdoutFile (Join-Path $dir 'events.jsonl') -StderrFile (Join-Path $dir 'stderr.log') -TimeoutSeconds ($TimeoutMinutes * 60) `
             -Environment $workerEnvironment -LiveRunId $id -IdleSeconds ([Math]::Max(0, $IdleMinutes) * 60)
         $ev = Read-AosCodexEvents (Join-Path $dir 'events.jsonl')
         $receipt.thread_id = $ev.ThreadId
+        $receipt.usage_observed=$ev.UsageObserved
         $receipt.usage = [ordered]@{ input = $ev.Input; cached = $ev.Cached; output = $ev.Output }
         if ($ev.Errors.Count -gt 0) {
             $cat = Get-AosErrorCategory $ev.Errors[0]
@@ -3316,6 +3383,7 @@ function Invoke-AosDelegate {
             $receipt.cost_usd = $cj['total_cost_usd']
             $u = $cj['usage']
             if ($u -is [System.Collections.IDictionary]) {
+                $receipt.usage_observed=($null -ne $u['input_tokens'] -and $null -ne $u['output_tokens'])
                 $receipt.usage = [ordered]@{ input = [long]$u['input_tokens']; cached = [long]$u['cache_read_input_tokens']; output = [long]$u['output_tokens'] }
             }
             if ($cj['is_error'] -eq $true) {
@@ -3328,6 +3396,11 @@ function Invoke-AosDelegate {
         elseif (-not $run.TimedOut) { $receipt.error = [ordered]@{ category = 'other'; message = "no JSON from claude (exit $($run.Code))" } }
     }
     $receipt.exit_code = $run.Code
+    if ($Vendor -eq 'claude') {
+        $null=Import-AosNativeSignals -RunId $id
+        if ((Get-AosRunState $id)['state'] -eq 'needs-inspection') { $receipt['native_unconfirmed']=$true }
+    }
+    Set-AosReceiptPhase $receipt $clock 'verification'
     $receipt['cancelled']=[bool]$run.Cancelled
     if ($run.Cancelled) { $receipt.error=[ordered]@{category='cancelled';message='cancellation requested; process stop confirmed separately'} }
     if ($null -eq $receipt.error -and -not $run.TimedOut -and $run.Code -ne 0) {
@@ -3377,8 +3450,10 @@ function Invoke-AosDelegate {
             $receipt['verify_changed_tree'] = ([bool]$after.Out -or ($receipt.commit -and $head -ne $receipt.commit))
         }
     }
+    if ($contractRow -and -not (Test-AosTaskReady -Id $contractRow.id -Repo $repoDir).Ready) { $receipt.error=[ordered]@{category='task-input';message='prerequisite changed during execution'} }
     $outcome = 'rejected'
     if ($run.Cancelled) { $outcome = 'cancelled' }
+    elseif ($receipt['native_unconfirmed']) { $outcome='needs-inspection' }
     elseif ($run.TimedOut) { $outcome = 'timed-out' }
     elseif ($null -ne $receipt.error) { $outcome = 'failed' }
     else {
@@ -3566,7 +3641,7 @@ function Invoke-AosCoordCommand([string]$Command, [string[]]$Arguments) {
                     'show' { Show-AosDelegation -Id (@($rest)[0]) }
                     'clean' { $p = ConvertFrom-AosCliArgs $rest @('force') @() @(); Remove-AosDelegation -Id ($p.Pos | Select-Object -First 1) -Force:([bool]$p.Opts['force']) }
                     { $_ -in @('codex', 'claude') } {
-                        $p = ConvertFrom-AosCliArgs $rest @('write') @('task', 'model', 'tier', 'effort', 'parent', 'workers', 'verify', 'timeout', 'idle', 'repo') @('needs', 'allow', 'setup')
+                        $p = ConvertFrom-AosCliArgs $rest @('write') @('task', 'model', 'tier', 'effort', 'parent', 'workers', 'verify', 'timeout', 'idle', 'repo','contract','transport') @('needs', 'allow', 'setup')
                         if (-not $p.Opts['task']) { throw 'usage: aos delegate <codex|claude> --task <file> [--write --verify <cmd>] [--model <m>] [--needs <cmd>]... [--allow <glob>]... [--setup <cmd>]... [--timeout <min>] [--idle <min, 0 = off>] [--repo <path>]' }
                         $t = 30
                         if ($p.Opts['timeout']) { $t = [int]$p.Opts['timeout'] }
@@ -3576,7 +3651,7 @@ function Invoke-AosCoordCommand([string]$Command, [string[]]$Arguments) {
                         if ($null -ne $p.Opts['workers']) { $workers = [int]$p.Opts['workers'] }
                         $null = Invoke-AosDelegate -Vendor $sub -TaskFile $p.Opts['task'] -Write:([bool]$p.Opts['write']) -Model $p.Opts['model'] `
                             -Needs @($p.Opts['needs']) -Verify $p.Opts['verify'] -Allow @($p.Opts['allow']) -Setup @($p.Opts['setup']) -TimeoutMinutes $t -IdleMinutes $idle -Repo $p.Opts['repo'] `
-                            -Tier $p.Opts['tier'] -Effort $p.Opts['effort'] -Parent $p.Opts['parent'] -Workers $workers
+                            -Tier $p.Opts['tier'] -Effort $p.Opts['effort'] -Parent $p.Opts['parent'] -Workers $workers -ContractFile $p.Opts['contract'] -Transport $(if ($p.Opts['transport']) {$p.Opts['transport']} else {'exec'})
                     }
                     default { throw 'usage: aos delegate <codex|claude|ls|show|clean> ...' }
                 }

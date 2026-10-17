@@ -27,6 +27,11 @@ Goal: the next agent resumes from `HANDOFF.md` alone, with no chat history.
    - **Next steps** — numbered, smallest first, with exact commands and file paths.
    - **Traps** — what wasted time: flaky tests, wrong paths, environment quirks.
    - **Written by** — vendor and local date/time, e.g. `Claude Code, 2026-09-27 18:40`.
+   For managed coordination work, also use `aos coord checkpoint save <id> --repo . --task <id>
+   --next-check <check>` and link its JSON from **State**. Run `aos coord checkpoint check <id>
+   --repo .` before continuing. It preserves tracked content and detects drift, but required
+   untracked/ignored files need separate preservation. Active actors require inspection; a checkpoint
+   never establishes that they stopped. Retain the source checkout until recovery is verified.
 5. Check it: re-read the file. Every line under **Verified** must match a command you ran in this
    session. Delete any that don't. No secrets, tokens or `.env` contents anywhere in the file.
 6. Tell the user how to resume, in one short block:

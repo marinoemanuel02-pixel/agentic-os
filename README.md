@@ -133,6 +133,9 @@ is not required for every task. The shared state lives in `~\.aos\coord` (outsid
   the host checks its receipt and verification result. One writer owns each checkout at a time,
   including native workers. Use `aos delegate ls|show|clean` to inspect or clean managed runs. See
   [docs/routing.md](docs/routing.md) and the shared `coordination` skill.
+  Optional checked task contracts, routing reports, evaluation fixtures, native roles/events,
+  App Server transport and recovery/procedure commands are described in
+  [docs/coordination-tuning.md](docs/coordination-tuning.md).
 - **Actors and runs.** `aos coord reserve|observe|finish|actors|reconcile` manages cooperative actor
   reservations and state. An actor id is routing metadata; registration alone does not prove a native
   worker ran. Use observed native tool-handle or transcript evidence for that claim. The two-actor
