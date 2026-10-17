@@ -21,7 +21,10 @@ Use `light`, `standard` or `deep` for task requirements. Light is narrow and has
 standard is ordinary work; deep is for ambiguity, difficult diagnosis or consequential reasoning.
 The route is resolved from available vendor options. A fallback is recorded. Tiers, priority labels
 and model choice do not prove lower cost or quota savings. Report model or effort as unknown unless
-the runtime observed it.
+the runtime observed it. Local tier overrides live in `~/.aos/routing.json` (or `AOS_ROUTING`), as
+`{"claude":{"light":{"model":"<account-supported-id>","effort":"low"}},"codex":{...}}`.
+An unmapped tier uses the standard/default route with cost unknown. Native tools choose their own
+supported model option; do not assume the CLI map configures a native child automatically.
 
 Dispatch the other vendor with `aos delegate codex|claude --task <file>`, adding `--tier light|standard|deep`,
 `--effort <supported-value>`, `--parent <actor-id>` and `--workers 0|1` when needed. `--workers` reserves
@@ -60,6 +63,16 @@ Keep messages short and link to larger artifacts. A question should identify the
 fact and the worker should enter `waiting-input`; the lead replies to that actor. The wait command is
 bounded and does not wake an arbitrary idle model or interrupt a running tool. Check status at safe
 tool boundaries and avoid repeated polling when nothing changes.
+
+Supervised CLI workers use the injected actor/run identity and `tools/coord.ps1` supplied in their
+prompt. With `AOS_COORD_TRANSPORT=stdout`, `question --to <parent> --text <question>` emits a narrow
+metadata request; the host handles it after the tool call completes. Finish that call before using
+`wait --seconds 30` in another call, then explicitly `ack --ack <id>` and
+`status --state running --text <progress>`. Inbox/status reads take no write lock. Return `blocked`
+after a bounded unanswered wait. This route does not inject text into arbitrary idle model sessions.
+Native workers use their harness's messaging tools; the coordinator relays cross-vendor questions.
+If a sandbox prevents the helper or inbox read, report that blocked route and rerun with the supplied
+answer; do not weaken the project sandbox. Check actual route coverage before promising live exchange.
 
 ## Review and verification
 

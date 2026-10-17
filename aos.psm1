@@ -1566,7 +1566,7 @@ function Invoke-AosTest {
     $root = $script:Root
     $failed = $false
     Write-AosStep 'Static checks'
-    foreach ($f in @('aos.psm1', 'bootstrap.ps1', 'tests\Run-Tests.ps1', 'config\coordination.ps1', 'tools\coord.ps1')) {
+    foreach ($f in @('aos.psm1', 'bootstrap.ps1', 'tests\Run-Tests.ps1', 'config\coordination.ps1', 'tools\coord.ps1', 'tools\coordination-smoke.ps1')) {
         $path = Join-Path $root $f
         $tokens = $null
         $errors = $null

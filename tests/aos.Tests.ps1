@@ -4421,6 +4421,25 @@ if ($run.process_id -eq $PID -and [IO.File]::ReadAllText($env:FIXTURE_OUT).Conta
     }
 }
 
+Describe 'cooperative smoke fixture' {
+    It 'exchanges a necessary reply between live processes and proves cancellation and busy admission' {
+        $smoke=Join-Path $PSScriptRoot '..\tools\coordination-smoke.ps1'
+        Test-Path -LiteralPath $smoke | Should -BeTrue
+        $output=Join-Path $caseRoot 'smoke.json'
+        $r=InModuleScope aos -Parameters @{S=$smoke;O=$output} { param($S,$O)
+            Start-AosProcessCore -Exe powershell.exe -Arguments @('-NoProfile','-ExecutionPolicy','Bypass','-File',$S,'-OutputPath',$O) -TimeoutSeconds 40
+        }
+        $r.Code | Should -Be 0
+        $evidence=Get-Content -LiteralPath $output -Raw | ConvertFrom-Json
+        $evidence.reply_required | Should -BeTrue
+        $evidence.reply_received_while_alive | Should -BeTrue
+        $evidence.cancel_confirmed | Should -BeTrue
+        $evidence.third_actor_refused | Should -BeTrue
+        $evidence.launch_failure_cleaned | Should -BeTrue
+        $evidence.real_profile_untouched | Should -BeTrue
+    }
+}
+
 Describe 'cooperative messages' {
     BeforeEach {
         $env:AOS_COORD = Join-Path $caseRoot 'coord'
