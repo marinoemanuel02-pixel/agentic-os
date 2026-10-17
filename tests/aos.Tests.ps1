@@ -4440,6 +4440,59 @@ Describe 'cooperative smoke fixture' {
     }
 }
 
+Describe 'cooperative review regressions' {
+    BeforeEach {
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        InModuleScope aos {
+            $null = Reserve-AosActor -Id 'lead' -Vendor 'codex' -Task 'review' -Kind 'lead'
+            $null = Reserve-AosActor -Id 'worker' -Vendor 'codex' -Task 'review' -Parent 'lead' -Kind 'delegate'
+            Set-AosRunState -Id 'worker' -State 'preparing'
+            $script:questionLine = @{
+                type = 'item.completed'
+                item = @{
+                    type = 'command_execution'
+                    aggregated_output = 'AOS_COORD_REQUEST:{"op":"question","to":"lead","text":"needed value"}'
+                }
+            } | ConvertTo-Json -Compress -Depth 8
+        }
+    }
+    It 'delivers no message and keeps the actor reserved when the actor waiting-input write fails' {
+        InModuleScope aos {
+            Mock Set-AosActorState -ModuleName aos -ParameterFilter { $State -eq 'waiting-input' } -MockWith { throw 'actor state write failed' }
+            { Receive-AosCoordEvent -RunId 'worker' -JsonLine $script:questionLine } | Should -Throw
+            @(Get-AosTaskInbox -Actor 'lead').Count | Should -Be 0
+            $worker = @(Get-AosActors) | Where-Object { $_.Id -eq 'worker' } | Select-Object -First 1
+            $worker.State | Should -Be 'reserved'
+            (Get-AosRunState -Id 'worker').state | Should -Be 'preparing'
+        }
+    }
+    It 'does not leave the actor waiting when the run-state waiting-input write fails' {
+        InModuleScope aos {
+            Mock Set-AosRunState -ModuleName aos -ParameterFilter { $State -eq 'waiting-input' } -MockWith { throw 'run state write failed' }
+            { Receive-AosCoordEvent -RunId 'worker' -JsonLine $script:questionLine } | Should -Throw
+            @(Get-AosTaskInbox -Actor 'lead').Count | Should -Be 0
+            $worker = @(Get-AosActors) | Where-Object { $_.Id -eq 'worker' } | Select-Object -First 1
+            $worker.State | Should -Be 'reserved'
+            (Get-AosRunState -Id 'worker').state | Should -Be 'preparing'
+        }
+    }
+    It 'keeps a worker with an exited model process active until the host verifies it' {
+        InModuleScope aos {
+            $absentPid = 2147483647
+            $null = Get-Process -Id $absentPid -ErrorAction SilentlyContinue
+            (Get-Process -Id $absentPid -ErrorAction SilentlyContinue) | Should -BeNullOrEmpty
+            Set-AosActorState -Id 'worker' -State 'running' -ProcessId $absentPid -ProcessStarted '2020-01-01T00:00:00.0000000Z'
+            Set-AosRunState -Id 'worker' -State 'running'
+            $null = Resolve-AosActors
+            $worker = @(Get-AosActors) | Where-Object { $_.Id -eq 'worker' } | Select-Object -First 1
+            @('reserved', 'running', 'waiting-input', 'suspect') | Should -Contain $worker.State
+            $third = Reserve-AosActor -Id 'third' -Vendor 'codex' -Task 'review' -Parent 'lead' -Kind 'delegate'
+            $third.Ok | Should -BeFalse
+            { Set-AosActorState -Id 'worker' -State 'done' } | Should -Not -Throw
+        }
+    }
+}
+
 Describe 'cooperative messages' {
     BeforeEach {
         $env:AOS_COORD = Join-Path $caseRoot 'coord'

@@ -198,7 +198,14 @@ function Resolve-AosActors {
                 }
                 finally { $live.Dispose() }
             }
-            catch [ArgumentException] { $row['state']='failed'; $row['text']='own process confirmed ended' }
+            catch [ArgumentException] {
+                $run=Get-AosRunState ([string]$row['id'])
+                if ($run -and $run['state'] -in @('preparing','reserved','running','waiting-input','suspect','needs-inspection')) {
+                    # The model can exit before host verification and receipt finalization finish.
+                    $row['state']='suspect'; $row['text']='model process ended; host completion unconfirmed'
+                }
+                else { $row['state']='failed'; $row['text']='own process confirmed ended' }
+            }
             catch { $row['state']='suspect'; $row['text']='process state unavailable; not released' }
         }
         foreach ($row in @($store['actors'].Values)) {
@@ -315,6 +322,27 @@ function Get-AosReadonlyInbox([string]$Actor) {
         ForEach-Object { [pscustomobject]$_ })
 }
 
+function Send-AosTaskQuestion([string]$RunId, [string]$To, [string]$Text, [string]$ReplyTo) {
+    # Publish only after both waiting-state writes succeed. Roll back failed transitions under
+    # the same lock so a delivered question cannot leave idle supervision in the old state.
+    return (Invoke-AosCoordLocked {
+        $actorsBefore=Read-AosActorStore
+        $runBefore=Get-AosRunState $RunId
+        if (-not $runBefore) { throw 'question needs an active run' }
+        $runPath=Join-Path (Join-Path (Join-Path (Get-AosCoordDir) 'delegations') $RunId) 'run.json'
+        try {
+            $null=Set-AosActorState -Id $RunId -State waiting-input -Text $Text
+            $null=Set-AosRunState -Id $RunId -State waiting-input -Text $Text
+            return (Send-AosTaskMessage -From $RunId -To $To -Text $Text -ReplyTo $ReplyTo)
+        }
+        catch {
+            Write-AosCoordJson -Path (Join-Path (Get-AosCoordDir) 'actors.json') -Value $actorsBefore
+            Write-AosCoordJson -Path $runPath -Value $runBefore
+            throw
+        }
+    })
+}
+
 function Receive-AosCoordEvent([string]$RunId, [string]$JsonLine) {
     # Only completed vendor tool output is a transport. Assistant prose is never a request.
     $event=$null
@@ -339,11 +367,10 @@ function Receive-AosCoordEvent([string]$RunId, [string]$JsonLine) {
             if (-not $run -or $run['actor'] -ne $RunId) { throw 'request has no supervised actor' }
             switch ([string]$request['op']) {
                 { $_ -in @('send','question') } {
-                    $null=Send-AosTaskMessage -From $RunId -To ([string]$request['to']) -Text ([string]$request['text']) -ReplyTo ([string]$request['reply_to'])
                     if ($request['op'] -eq 'question') {
-                        $null=Set-AosActorState -Id $RunId -State waiting-input -Text ([string]$request['text'])
-                        $null=Set-AosRunState -Id $RunId -State waiting-input -Text ([string]$request['text'])
+                        $null=Send-AosTaskQuestion -RunId $RunId -To ([string]$request['to']) -Text ([string]$request['text']) -ReplyTo ([string]$request['reply_to'])
                     }
+                    else { $null=Send-AosTaskMessage -From $RunId -To ([string]$request['to']) -Text ([string]$request['text']) -ReplyTo ([string]$request['reply_to']) }
                 }
                 'ack' { $null=Get-AosTaskInbox -Actor $RunId -AckIds @($request['ack_ids']) }
                 'status' {
