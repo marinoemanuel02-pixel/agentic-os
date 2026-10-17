@@ -4287,4 +4287,123 @@ Describe 'cooperative routing' {
         Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
     }
 }
+
+Describe 'cooperative messages' {
+    BeforeEach {
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        $lead = InModuleScope aos { Reserve-AosActor -Id 'lead1' -Vendor codex -Task t1 -Kind lead }
+        $child = InModuleScope aos { Reserve-AosActor -Id 'child1' -Vendor claude -Task t1 -Parent lead1 -Kind delegate }
+        $other = InModuleScope aos { Reserve-AosActor -Id 'lead2' -Vendor claude -Task t2 -Kind lead }
+        $lead.Ok | Should -BeTrue
+        $child.Ok | Should -BeTrue
+        $other.Ok | Should -BeTrue
+    }
+
+    It 'delivers a message only to its addressed actor and records the shared task' {
+        $available = InModuleScope aos { [bool](Get-Command Send-AosTaskMessage -ErrorAction SilentlyContinue) -and [bool](Get-Command Get-AosTaskInbox -ErrorAction SilentlyContinue) }
+        $available | Should -BeTrue
+        if (-not $available) { return }
+        $sent = InModuleScope aos { Send-AosTaskMessage -From lead1 -To child1 -Text 'Need the fixture value.' }
+        $sent.from | Should -BeExactly 'lead1'
+        $sent.to | Should -BeExactly 'child1'
+        $sent.task | Should -BeExactly 't1'
+        [string]$sent.id | Should -Not -BeNullOrEmpty
+        $inbox = InModuleScope aos { @(Get-AosTaskInbox -Actor child1) }
+        @($inbox | Where-Object id -eq $sent.id).Count | Should -Be 1
+        (InModuleScope aos { @(Get-AosTaskInbox -Actor lead2) } | Where-Object id -eq $sent.id).Count | Should -Be 0
+    }
+
+    It 'does not acknowledge messages when the recipient reads its inbox' {
+        $available = InModuleScope aos { [bool](Get-Command Send-AosTaskMessage -ErrorAction SilentlyContinue) -and [bool](Get-Command Get-AosTaskInbox -ErrorAction SilentlyContinue) }
+        $available | Should -BeTrue
+        if (-not $available) { return }
+        $sent = InModuleScope aos { Send-AosTaskMessage -From lead1 -To child1 -Text 'Read twice.' }
+        (InModuleScope aos { @(Get-AosTaskInbox -Actor child1) } | Where-Object id -eq $sent.id).Count | Should -Be 1
+        (InModuleScope aos { @(Get-AosTaskInbox -Actor child1) } | Where-Object id -eq $sent.id).Count | Should -Be 1
+        $sent.acknowledged | Should -BeFalse
+    }
+
+    It 'acknowledges explicitly and treats repeated recipient acknowledgements as idempotent' {
+        $available = InModuleScope aos { [bool](Get-Command Send-AosTaskMessage -ErrorAction SilentlyContinue) -and [bool](Get-Command Get-AosTaskInbox -ErrorAction SilentlyContinue) }
+        $available | Should -BeTrue
+        if (-not $available) { return }
+        $sent = InModuleScope aos { Send-AosTaskMessage -From lead1 -To child1 -Text 'Acknowledge once.' }
+        $first = InModuleScope aos -Parameters @{ Id=$sent.id } { param($Id) @(Get-AosTaskInbox -Actor child1 -AckIds @($Id)) }
+        $second = InModuleScope aos -Parameters @{ Id=$sent.id } { param($Id) @(Get-AosTaskInbox -Actor child1 -AckIds @($Id)) }
+        @($first).Count | Should -Be 0
+        @($second).Count | Should -Be 0
+        (InModuleScope aos { @(Get-AosTaskInbox -Actor child1) } | Where-Object id -eq $sent.id).Count | Should -Be 0
+    }
+
+    It 'does not let another actor acknowledge the intended recipient message' {
+        $available = InModuleScope aos { [bool](Get-Command Send-AosTaskMessage -ErrorAction SilentlyContinue) -and [bool](Get-Command Get-AosTaskInbox -ErrorAction SilentlyContinue) }
+        $available | Should -BeTrue
+        if (-not $available) { return }
+        $sent = InModuleScope aos { Send-AosTaskMessage -From lead1 -To child1 -Text 'Only child1 may acknowledge.' }
+        InModuleScope aos -Parameters @{ Id=$sent.id } { param($Id) Get-AosTaskInbox -Actor lead1 -AckIds @($Id) | Out-Null }
+        (InModuleScope aos { @(Get-AosTaskInbox -Actor child1) } | Where-Object id -eq $sent.id).Count | Should -Be 1
+        $sent.acknowledged | Should -BeFalse
+    }
+
+    It 'rejects cross-tree messages' {
+        $available = InModuleScope aos { [bool](Get-Command Send-AosTaskMessage -ErrorAction SilentlyContinue) }
+        $available | Should -BeTrue
+        if (-not $available) { return }
+        { InModuleScope aos { Send-AosTaskMessage -From lead1 -To lead2 -Text 'Must not cross tasks.' } } | Should -Throw
+    }
+
+    It 'rejects invalid actor identifiers during reservation' {
+        $bad = InModuleScope aos { Reserve-AosActor -Id '..\outside' -Vendor codex -Task t3 -Kind lead }
+        $bad.Ok | Should -BeFalse
+        InModuleScope aos { Get-Command Send-AosTaskMessage -ErrorAction SilentlyContinue } | Should -Not -BeNullOrEmpty
+        if (InModuleScope aos { [bool](Get-Command Send-AosTaskMessage -ErrorAction SilentlyContinue) }) {
+            { InModuleScope aos { Send-AosTaskMessage -From 'bad/id' -To child1 -Text 'Invalid id.' } } | Should -Throw
+        }
+    }
+
+    It 'accepts reply_to only for a message between the same two actors' {
+        $available = InModuleScope aos { [bool](Get-Command Send-AosTaskMessage -ErrorAction SilentlyContinue) }
+        $available | Should -BeTrue
+        if (-not $available) { return }
+        $original = InModuleScope aos { Send-AosTaskMessage -From lead1 -To child1 -Text 'Question.' }
+        $reply = InModuleScope aos -Parameters @{ Id=$original.id } { param($Id) Send-AosTaskMessage -From child1 -To lead1 -Text 'Answer.' -ReplyTo $Id }
+        $reply.reply_to | Should -BeExactly $original.id
+        { InModuleScope aos -Parameters @{ Id=$original.id } { param($Id) Send-AosTaskMessage -From lead2 -To child1 -Text 'Unrelated reply.' -ReplyTo $Id } } | Should -Throw
+    }
+
+    It 'publishes run state immediately and advances its sequence on updates' {
+        $available = InModuleScope aos { [bool](Get-Command Set-AosRunState -ErrorAction SilentlyContinue) -and [bool](Get-Command Get-AosRunState -ErrorAction SilentlyContinue) }
+        $available | Should -BeTrue
+        if (-not $available) { return }
+        $first = InModuleScope aos { Set-AosRunState -Id lead1 -State running -Text 'started' -ProcessId 101 -ProcessStarted '2026-10-17T10:00:00Z' }
+        $visible = InModuleScope aos { Get-AosRunState -Id lead1 }
+        $visible.state | Should -BeExactly 'running'
+        $visible.id | Should -BeExactly 'lead1'
+        $next = InModuleScope aos { Set-AosRunState -Id lead1 -State waiting-input -Text 'question pending' -ProcessId 101 -ProcessStarted '2026-10-17T10:00:00Z' }
+        $next.sequence | Should -BeGreaterThan $first.sequence
+        $next.state | Should -BeExactly 'waiting-input'
+    }
+
+    It 'preserves a pending cancellation through an unrelated run status update' {
+        $available = InModuleScope aos { [bool](Get-Command Set-AosRunState -ErrorAction SilentlyContinue) -and [bool](Get-Command Get-AosRunState -ErrorAction SilentlyContinue) }
+        $available | Should -BeTrue
+        if (-not $available) { return }
+        InModuleScope aos { Set-AosRunState -Id lead1 -State running -Text 'started' -ProcessId 101 -ProcessStarted '2026-10-17T10:00:00Z' | Out-Null }
+        $runPath = Join-Path $env:AOS_COORD 'delegations\lead1\run.json'
+        $run = Get-Content -LiteralPath $runPath -Raw | ConvertFrom-Json
+        $run.cancel_requested = $true
+        Write-TestFile $runPath (ConvertTo-Json -InputObject $run -Depth 10 -Compress)
+        $updated = InModuleScope aos { Set-AosRunState -Id lead1 -State waiting-input -Text 'waiting on a reply' -ProcessId 101 -ProcessStarted '2026-10-17T10:00:00Z' }
+        $updated.cancel_requested | Should -BeTrue
+        (InModuleScope aos { Get-AosRunState -Id lead1 }).cancel_requested | Should -BeTrue
+    }
+
+    It 'refuses run identifiers that traverse out of the coordination directory' {
+        $available = InModuleScope aos { [bool](Get-Command Set-AosRunState -ErrorAction SilentlyContinue) -and [bool](Get-Command Get-AosRunState -ErrorAction SilentlyContinue) }
+        $available | Should -BeTrue
+        if (-not $available) { return }
+        { InModuleScope aos { Set-AosRunState -Id '..\outside' -State running -Text 'bad path' } } | Should -Throw
+        Test-Path -LiteralPath (Join-Path $caseRoot 'outside\run.json') | Should -BeFalse
+    }
+}
 }
