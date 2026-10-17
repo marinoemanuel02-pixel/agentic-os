@@ -1,6 +1,6 @@
 ---
 name: tool-catalog
-description: What this machine's agents can use and which one to reach for first: skills, MCP servers, CLIs, media apps, the other vendor, the local model. Read when choosing a tool, or before saying a capability is missing.
+description: "What this machine's agents can use and which one to reach for first: skills, MCP servers, CLIs, media apps, the other vendor, the local model. Read when choosing a tool, or before saying a capability is missing."
 ---
 
 # Tool catalog

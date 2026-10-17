@@ -152,12 +152,26 @@ function Complete-AosTaskAttempt([string]$Id,[string]$RunId) {
         $r=Read-AosEvidenceReceipt $RunId
         $state='failed';$manifest=@()
         if (Test-AosHostReceipt $r $row['repo'] $Id) {
-            $ready=Test-AosTaskReady $Id $row['repo']
-            if (-not $ready.Ready) { throw 'prerequisite changed during execution' }
-            $manifest=Get-AosArtifactManifest -Repo $r['workdir'] -Files @($row['contract']['artifacts'])
+            try {
+                $ready=Test-AosTaskReady $Id $row['repo']
+                if (-not $ready.Ready) { throw 'prerequisite changed during execution' }
+                $manifest=Get-AosArtifactManifest -Repo $r['workdir'] -Files @($row['contract']['artifacts'])
+            }
+            catch {
+                # A genuine completed host receipt proves this attempt ended, even if its output failed.
+                $row['state']='failed';$row['active_run']='';$row['artifacts']=@();$row['failure_reason']=$_.Exception.Message
+                $row['updated']=Get-AosUtcStamp
+                Write-AosCoordJson (Get-AosTaskPath $Id) $row
+                throw
+            }
             $state='accepted'
         }
         elseif ($r['accepted'] -eq $true -or $r['outcome'] -eq 'accepted') { throw 'invalid accepted task receipt' }
+        elseif ($r['outcome'] -eq 'needs-inspection') {
+            $row['state']='needs-inspection';$row['updated']=Get-AosUtcStamp
+            Write-AosCoordJson (Get-AosTaskPath $Id) $row
+            return [pscustomobject]$row
+        }
         $row['state']=$state;$row['active_run']='';$row['artifacts']=@($manifest)
         if ($state -eq 'accepted') { $row['accepted_run']=$RunId }
         $row['updated']=Get-AosUtcStamp

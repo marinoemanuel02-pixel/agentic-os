@@ -4,6 +4,16 @@ Describe 'coordination evaluation isolated suite' {
         Import-Module (Join-Path $evalRoot 'aos.psm1') -Force -DisableNameChecking
         $savedEvalCoord = $env:AOS_COORD
         function Read-EvalJson([string]$Path) { return (Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json) }
+        function Invoke-EvalGrader([string]$Grader,[string]$Id,[string]$Repo) {
+            # Expected native stderr must not become a terminating PS 5.1 RemoteException.
+            $previousPreference=$ErrorActionPreference
+            try {
+                $ErrorActionPreference='Continue'
+                $text=& node $Grader $Id $Repo 2>&1 | Out-String
+                return @{Code=$LASTEXITCODE;Text=$text}
+            }
+            finally { $ErrorActionPreference=$previousPreference }
+        }
         function Set-EvalSolution([string]$CaseId, [string]$Repo) {
             $solutions = @{
                 mechanical = @{ 'labels.txt' = "status=ready`nowner=team`n" }
@@ -81,25 +91,21 @@ Describe 'coordination evaluation isolated suite' {
         $report = Invoke-AosCoordinationEval -OutputRoot (Join-Path $caseRoot 'out')
         $grader = Join-Path $evalRoot 'tools\coordination-eval-grade.mjs'
         foreach ($trial in $report.trials) {
-            $null = & node $grader $trial.case_id $trial.repo 2>&1
-            $LASTEXITCODE | Should -Be 1
+            (Invoke-EvalGrader $grader $trial.case_id $trial.repo).Code | Should -Be 1
             Set-EvalSolution $trial.case_id $trial.repo
-            $good = & node $grader $trial.case_id $trial.repo 2>&1 | Out-String
-            $LASTEXITCODE | Should -Be 0 -Because ($trial.case_id + ': ' + $good)
+            $good = Invoke-EvalGrader $grader $trial.case_id $trial.repo
+            $good.Code | Should -Be 0 -Because ($trial.case_id + ': ' + $good.Text)
             if ($trial.case_id -eq 'mechanical') {
-                $null = & node $grader $trial.case_id ($trial.repo.ToLowerInvariant()) 2>&1
-                $LASTEXITCODE | Should -Be 0 -Because 'Windows fixture paths may differ only in letter case'
+                (Invoke-EvalGrader $grader $trial.case_id ($trial.repo.ToLowerInvariant())).Code | Should -Be 0 -Because 'Windows fixture paths may differ only in letter case'
             }
             $contract = Read-EvalJson $trial.contract
             foreach ($file in $contract.artifacts) {
                 $path = Join-Path $trial.repo $file
                 $before = [IO.File]::ReadAllText($path)
                 Remove-Item -LiteralPath $path
-                $null = & node $grader $trial.case_id $trial.repo 2>&1
-                $LASTEXITCODE | Should -Be 1 -Because ('missing ' + $trial.case_id + '/' + $file)
+                (Invoke-EvalGrader $grader $trial.case_id $trial.repo).Code | Should -Be 1 -Because ('missing ' + $trial.case_id + '/' + $file)
                 [IO.File]::WriteAllText($path, 'corrupted contribution')
-                $null = & node $grader $trial.case_id $trial.repo 2>&1
-                $LASTEXITCODE | Should -Be 1 -Because ('corrupt ' + $trial.case_id + '/' + $file)
+                (Invoke-EvalGrader $grader $trial.case_id $trial.repo).Code | Should -Be 1 -Because ('corrupt ' + $trial.case_id + '/' + $file)
                 [IO.File]::WriteAllText($path, $before)
             }
         }

@@ -1572,7 +1572,7 @@ function Invoke-AosTest {
     $root = $script:Root
     $failed = $false
     Write-AosStep 'Static checks'
-    foreach ($f in @('aos.psm1', 'bootstrap.ps1', 'tests\Run-Tests.ps1', 'config\coordination.ps1', 'config\task-contracts.ps1', 'config\coordination-learning.ps1', 'config\native-coordination.ps1', 'tools\coord.ps1', 'tools\coordination-smoke.ps1')) {
+    foreach ($f in @('aos.psm1', 'bootstrap.ps1', 'tests\Run-Tests.ps1', 'config\coordination.ps1', 'config\task-contracts.ps1', 'config\coordination-learning.ps1', 'config\native-coordination.ps1', 'tools\coordination-eval.ps1', 'tools\coord.ps1', 'tools\coordination-smoke.ps1')) {
         $path = Join-Path $root $f
         $tokens = $null
         $errors = $null
@@ -3185,6 +3185,7 @@ function Invoke-AosDelegate {
             if (-not $ready.Ready) { throw ($ready.Reasons -join '; ') }
         } catch { return (& $refuse $_.Exception.Message) }
     }
+    if ($contractRow -and $Write -and @($contractRow.contract['allow']).Count -eq 0) { throw 'write contract needs a nonempty allow scope' }
     if ($Write -and -not $Verify) { return (& $refuse 'write mode needs --verify <command>: the host checks the result, not the delegate') }
     if ($Write -and (Invoke-AosGit -Dir $repoDir -Arguments @('rev-parse', '--show-toplevel')).Code -ne 0) {
         return (& $refuse "write mode needs a git repository: $repoDir")
@@ -3230,7 +3231,12 @@ function Invoke-AosDelegate {
             $receipt.ended=Get-AosUtcStamp;$receipt.seconds=[int]([DateTime]::UtcNow-$started).TotalSeconds
             Write-AosText -Path (Join-Path $dir 'receipt.json') -Text ((ConvertTo-Json -InputObject $receipt -Depth 10)+"`n")
             try { $null=Complete-AosTaskAttempt -Id $contractRow.id -RunId $id;$taskState.Owned=$false }
-            catch { $outcome='needs-inspection';$receipt.error=[ordered]@{category='task-evidence';message=$_.Exception.Message} }
+            catch {
+                $outcome='needs-inspection'
+                $failedTask=Get-AosTaskRecord $contractRow.id
+                if ($failedTask['state'] -eq 'failed' -and -not $failedTask['active_run']) { $outcome='rejected';$taskState.Owned=$false }
+                $receipt.error=[ordered]@{category='task-evidence';message=$_.Exception.Message}
+            }
         }
         if ($actorOwned) {
             $actorState = 'failed'
@@ -3340,7 +3346,7 @@ function Invoke-AosDelegate {
         $modelExe='codex.exe'
         if ($Transport -eq 'app-server') {
             $modelExe='node.exe'
-            $codexArgs=@((Join-Path $script:Root 'tools\codex-app-server.mjs'),'--cwd',$workdir,'--model',$pre.Model,'--sandbox',$mode,'--schema',$schemaPath,'--output',$resultPath,'--run-dir',$dir)
+            $codexArgs=@((Join-Path $script:Root 'tools\codex-app-server.mjs'),'--cwd',$workdir,'--model',$pre.Model,'--sandbox',$mode,'--schema',$schemaPath,'--output',$resultPath,'--run-dir',$dir,'--timeout-seconds',[string]($TimeoutMinutes*60))
             if ($Effort) { $codexArgs+=@('--effort',$Effort) }
         }
         $run = Invoke-AosProcess -Exe $modelExe -Arguments $codexArgs -WorkingDirectory $workdir -StdinFile $promptPath `
@@ -3398,7 +3404,8 @@ function Invoke-AosDelegate {
     $receipt.exit_code = $run.Code
     if ($Vendor -eq 'claude') {
         $null=Import-AosNativeSignals -RunId $id
-        if ((Get-AosRunState $id)['state'] -eq 'needs-inspection') { $receipt['native_unconfirmed']=$true }
+        $nativeRun=Get-AosRunState $id
+        if ($nativeRun['native_inspection_required'] -or $nativeRun['state'] -eq 'needs-inspection') { $receipt['native_unconfirmed']=$true }
     }
     Set-AosReceiptPhase $receipt $clock 'verification'
     $receipt['cancelled']=[bool]$run.Cancelled
@@ -3468,6 +3475,7 @@ function Invoke-AosDelegate {
     }
     $receipt.accepted = ($outcome -eq 'accepted')
     & $finish $outcome
+    $outcome=$receipt.outcome
     $line = "delegate $id ($Vendor $($receipt.model)): $outcome, $($receipt.seconds) s, $($receipt.usage.input) in / $($receipt.usage.output) out tokens"
     if ($receipt.accepted) { Write-AosOk $line } else { Write-AosWarn $line }
     Write-AosInfo (Join-Path $dir 'receipt.json')

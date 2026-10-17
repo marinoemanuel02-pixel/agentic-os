@@ -212,7 +212,10 @@ function Invoke-AosTuningControl([string[]]$Arguments) {
         'capabilities' {$result=Get-AosNativeCapabilities}
         'roles' {$result=Sync-AosNativeRoles -DryRun:([bool]$p.Opts['dry-run'])}
         'native' {$result=Import-AosNativeSignals -RunId $first}
-        'steer' {$result=Send-AosTurnSteering -RunId $first -Text $p.Opts['text'] -ExpectedTurnId $p.Opts['turn']}
+        'steer' {
+            if ($p.Opts['text']) {$result=Send-AosTurnSteering -RunId $first -Text $p.Opts['text'] -ExpectedTurnId $p.Opts['turn']}
+            else {$result=Get-AosTurnSteering -RunId $first}
+        }
     }
     Write-Host (ConvertTo-Json -InputObject $result -Depth 20)
     $global:LASTEXITCODE=0;if (-not $ok) {$global:LASTEXITCODE=1}

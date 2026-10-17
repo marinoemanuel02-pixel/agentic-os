@@ -114,8 +114,15 @@ function Sync-AosNativeRoles {
         foreach ($name in @('explore','implement','verify')) {
             $role = Get-AosNativeRole -Vendor $vendor -Role $name -Capabilities $Capabilities
             $profiles[$name] = $role
+            $extension='toml';if ($vendor -eq 'claude') {$extension='md'}
+            $target = Join-Path (Join-Path $root 'agents') ('aos-' + $name + '.' + $extension)
             if (-not $support.nativeRoleFiles) {
-                $results += [pscustomobject]@{ vendor=$vendor; role=$name; status='unsupported' }; continue
+                $status='unsupported'
+                if ((Test-Path -LiteralPath $target -PathType Leaf) -and ([IO.File]::ReadAllText($target)).Contains($marker)) {
+                    $status='unsupported-existing-managed'
+                    Write-AosWarn "existing native role needs capability review: $target"
+                }
+                $results += [pscustomobject]@{ vendor=$vendor; role=$name; status=$status }; continue
             }
             $lines = @()
             $extension = 'toml'
@@ -180,6 +187,8 @@ function Import-AosNativeSignals([string]$RunId) {
                 if (-not $owner -or -not $child -or $owner['vendor'] -ne 'claude' -or $owner['kind'] -notin @('lead','delegate') -or $child['vendor'] -ne 'claude' -or
                     $child['kind'] -ne 'native' -or $child['parent'] -ne $RunId -or $child['task'] -ne $owner['task']) {
                     if ($owner -and (Test-AosActorActive $owner)) {
+                        $run=Get-AosRunState $RunId;$run['native_inspection_required']=$true
+                        Write-AosCoordJson (Join-Path (Join-Path (Join-Path (Get-AosCoordDir) 'delegations') $RunId) 'run.json') $run
                         $null=Set-AosRunState -Id $RunId -State needs-inspection -Text 'native launch outside reserved allowance'
                         $null=Set-AosActorState -Id $RunId -State suspect -Text 'unaccounted native lifecycle needs inspection'
                     }
@@ -199,6 +208,8 @@ function Import-AosNativeSignals([string]$RunId) {
                     elseif ($child['state'] -in @('running','waiting-input') -and $child['handle'] -eq $handle -and
                         $currentRun['native_signal_session_id'] -eq $signal['session_id']) { $imported++ }
                     else {
+                        $currentRun['native_inspection_required']=$true
+                        Write-AosCoordJson (Join-Path (Join-Path (Join-Path (Get-AosCoordDir) 'delegations') $RunId) 'run.json') $currentRun
                         $null = Set-AosRunState -Id $RunId -State needs-inspection -Text 'native start conflicts with reserved handle or terminal state'
                         if (Test-AosActorActive $owner) { $null = Set-AosActorState -Id $RunId -State suspect -Text 'native lifecycle needs inspection' }
                         $diagnostics.Add('Conflicting native start requires inspection; no actor was allocated or revived.')
@@ -221,6 +232,16 @@ function Import-AosNativeSignals([string]$RunId) {
     })
 }
 
+function Get-AosTurnSteering([string]$RunId) {
+    Assert-AosCoordId $RunId
+    $dir=Join-Path (Join-Path (Get-AosCoordDir) 'delegations') $RunId
+    $request=Read-AosCoordJsonFile (Join-Path $dir 'steering.json')
+    $ack=Read-AosCoordJsonFile (Join-Path $dir 'steering-ack.json')
+    $matched=($request -and $ack -and $ack['id'] -eq $request['id'] -and
+        $ack['turn_id'] -eq $request['expected_turn_id'] -and $ack['status'] -in @('accepted','rejected'))
+    return [pscustomobject]@{request=$request;ack=$ack;pending=[bool]($request -and -not $matched)}
+}
+
 function Send-AosTurnSteering {
     param([string]$RunId, [string]$Text, [string]$ExpectedTurnId)
     Assert-AosCoordId $RunId; Assert-AosCoordId $ExpectedTurnId
@@ -231,6 +252,7 @@ function Send-AosTurnSteering {
             $run['state'] -notin @('running','waiting-input') -or $run['active_turn_id'] -ne $ExpectedTurnId) {
             throw 'steering requires the exact active app-server turn'
         }
+        if ((Get-AosTurnSteering $RunId).pending) { throw 'previous steering request is pending acknowledgement' }
         $request = [ordered]@{ id=[guid]::NewGuid().ToString(); text=$Text; expected_turn_id=$ExpectedTurnId }
         Write-AosCoordJson -Path (Join-Path (Join-Path (Join-Path (Get-AosCoordDir) 'delegations') $RunId) 'steering.json') -Value $request
         return [pscustomobject]$request

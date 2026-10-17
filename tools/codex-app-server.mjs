@@ -178,6 +178,7 @@ async function readControl(path) {
 
 export async function runAdapter(options, dependencies = {}) {
   const { cwd, model, effort, sandbox, schema, output, runDir, prompt } = options;
+  if (options.timeoutMs !== undefined && (!Number.isInteger(options.timeoutMs) || options.timeoutMs < 1 || options.timeoutMs > 86_400_000)) throw error('INVALID_OPTIONS');
   if (!cwd || !model || !output || !runDir || !schema || typeof schema !== 'object' || Array.isArray(schema)
       || typeof prompt !== 'string' || !prompt.trim() || Buffer.byteLength(prompt) > MAX_PROMPT
       || !['read-only', 'workspace-write'].includes(sandbox)) throw error('INVALID_OPTIONS');
@@ -310,7 +311,7 @@ export async function runAdapter(options, dependencies = {}) {
     return controlTask;
   };
   let pollTimer;
-  const deadline = setTimeout(() => protocol.abort(error('RUN_TIMEOUT')), dependencies.maxRunMs ?? 60 * 60 * 1000);
+  const deadline = setTimeout(() => protocol.abort(error('RUN_TIMEOUT')), dependencies.maxRunMs ?? options.timeoutMs ?? 60 * 60 * 1000);
   try {
     await protocol.request('initialize', { clientInfo: { name: 'aos_bounded_adapter', version: '1' } });
     protocol.send({ method: 'initialized' });
@@ -371,7 +372,7 @@ export async function runAdapter(options, dependencies = {}) {
 
 export async function main(args = process.argv.slice(2), input = process.stdin) {
   const values = {};
-  const allowed = new Set(['cwd', 'model', 'effort', 'sandbox', 'schema', 'output', 'run-dir']);
+  const allowed = new Set(['cwd', 'model', 'effort', 'sandbox', 'schema', 'output', 'run-dir', 'timeout-seconds']);
   for (let index = 0; index < args.length; index += 2) {
     const key = args[index].replace(/^--/, '');
     if (!args[index].startsWith('--') || !allowed.has(key) || values[key] !== undefined
@@ -381,6 +382,7 @@ export async function main(args = process.argv.slice(2), input = process.stdin) 
   for (const key of ['cwd', 'model', 'sandbox', 'schema', 'output', 'run-dir']) {
     if (!values[key]) throw error('INVALID_ARGUMENTS');
   }
+  if (values['timeout-seconds'] !== undefined && (!/^\d+$/.test(values['timeout-seconds']) || Number(values['timeout-seconds']) < 1 || Number(values['timeout-seconds']) > 86400)) throw error('INVALID_ARGUMENTS');
   const schema = JSON.parse(await readFile(resolve(values.schema), 'utf8'));
   let prompt = '';
   input.setEncoding('utf8');
@@ -389,7 +391,8 @@ export async function main(args = process.argv.slice(2), input = process.stdin) 
     if (Buffer.byteLength(prompt) > MAX_PROMPT) throw error('PROMPT_LIMIT');
   }
   return runAdapter({ cwd: resolve(values.cwd), model: values.model, effort: values.effort,
-    sandbox: values.sandbox, schema, output: resolve(values.output), runDir: resolve(values['run-dir']), prompt });
+    sandbox: values.sandbox, schema, output: resolve(values.output), runDir: resolve(values['run-dir']), prompt,
+    timeoutMs: values['timeout-seconds'] === undefined ? undefined : Number(values['timeout-seconds']) * 1000 });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

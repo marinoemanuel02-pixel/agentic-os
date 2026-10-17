@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Write HANDOFF.md so another session - often the other vendor (Claude Code <-> Codex) - can continue this work cold, from files alone. Use when a usage limit is near or hit, when switching vendors, before ending a long session, or when the user says "hand off", "handoff", "switch to codex", "switch to claude", "save state", "out of tokens", "hit the limit". Not for describing finished work (that belongs in the commit message or PR).
+description: Write HANDOFF.md so another session - often the other vendor (Claude Code or Codex) - can continue this work cold, from files alone. Use when a usage limit is near or hit, when switching vendors, before ending a long session, or when the user says "hand off", "handoff", "switch to codex", "switch to claude", "save state", "out of tokens", "hit the limit". Not for describing finished work (that belongs in the commit message or PR).
 ---
 
 # Handoff

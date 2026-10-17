@@ -197,7 +197,7 @@ Describe 'coordination tuning follow-up regressions' {
         Mock Invoke-AosProcess -ModuleName aos { @{ Code = 0; TimedOut = $false; KillFailed = $false; Cancelled = $false } }
         { InModuleScope aos -Parameters @{ T = $task; R = $repo; C = $contract } {
             param($T, $R, $C)
-            Invoke-AosDelegate -Vendor codex -TaskFile $T -Repo $R -ContractFile $C
+            Invoke-AosDelegate -Vendor codex -TaskFile $T -Repo $R -ContractFile $C -Write
         } } | Should -Throw
         InModuleScope aos {
             Assert-MockCalled -CommandName Test-AosDelegatePreflight -Times 0 -Scope It

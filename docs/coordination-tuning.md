@@ -31,6 +31,8 @@ Use unique task ids; retries have separate run ids. The classes are `mechanical`
 unsafe paths, invalid limits and cycles. Missing prerequisites block dispatch. A prerequisite needs
 an accepted host receipt, a successful host check, and matching artifact hashes in the destination
 checkout. Integrate its commit before dispatching dependent work. Recheck occurs before acceptance.
+Write contracts require a nonempty `allow` scope. A confirmed terminal output failure is retryable;
+missing receipt evidence and `needs-inspection` attempts retain ownership for inspection.
 
 ```powershell
 aos coord task register task.json --repo .
@@ -90,12 +92,15 @@ steering. Failed, interrupted or partial turns are not completion. `exec` remain
 ```powershell
 aos coord status <run-id>
 aos coord steer <run-id> --turn <observed-active-turn-id> --text "Use the clarified requirement"
+aos coord steer <run-id>
 aos coord cancel <run-id>
 ```
 
 A cancellation request is not proof of process termination. The supervisor confirms stop or leaves
 the run needing inspection. Steering supports only the exact active App Server turn; ordinary
 addressed messages remain available on both transports.
+Read steering status before sending again. An unacknowledged request cannot be overwritten; the
+acknowledgement must match its request and turn. The host forwards its timeout to the adapter.
 
 ## Recovery and procedures
 
