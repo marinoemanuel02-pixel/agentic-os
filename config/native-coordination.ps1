@@ -30,8 +30,8 @@ function Get-AosNativeCapabilities {
     $claudeKnown = [bool]($claude -and $claude -ge [version]'2.1.246')
     $effort = [bool]($claude -and $claude -ge [version]'2.1.292')
     $compact = [bool]($claude -and $claude -ge [version]'2.1.296')
-    # Exact reviewed release, not an open-ended minimum-version guess. Update only after schema review.
-    $codexKnown = $codexText -eq '0.157.1'
+    # Exact reviewed releases, not an open-ended minimum-version guess. Update only after schema review.
+    $codexKnown = $codexText -in @('0.157.1','0.163.0')
     $claudeLimits = @('Native role instructions do not establish a separate sandbox or global admission cap.')
     if (-not $claudeKnown) { $claudeLimits += 'Native role and partial turn-limit behavior unavailable for this version.' }
     if (-not $effort) { $claudeLimits += 'Per-invocation effort unverified; no effort override rendered.' }
@@ -49,7 +49,7 @@ function Get-AosNativeCapabilities {
         codex = [pscustomobject][ordered]@{
             version=$codexText; nativeRoleFiles=$codexKnown; model=$codexKnown; reasoningEffort=$codexKnown;
             maxTurns=$false; concurrentThreadLimitSetting=$codexKnown;
-            evidence='https://learn.chatgpt.com/docs/agent-configuration/subagents (0.157.1 reviewed 2026-10-17; child settings unobserved)';
+            evidence='https://learn.chatgpt.com/docs/agent-configuration/subagents (0.157.1 and 0.163.0 reviewed 2026-10-18; child settings unobserved)';
             limitations=@($codexLimits)
         }
     }
