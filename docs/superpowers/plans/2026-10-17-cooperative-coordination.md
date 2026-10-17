@@ -14,7 +14,7 @@ subscription-authenticated vendor CLIs. No new runtime dependencies or resident 
 
 **Spec:** `docs/superpowers/specs/2026-10-17-cooperative-coordination-design.md`.
 **Execution:** The operator approved autonomous continuation after reviewing the design. Use inline
-execution for the connected implementation, independently authored Claude safety tests, a focused
+execution by Codex for the connected implementation, independently authored Claude safety tests, a focused
 pre-code plan critique, and one final independent review. No per-task reviewer requirement.
 
 ## Global constraints
@@ -44,6 +44,9 @@ Internal helper contracts, returning PSCustomObjects or ordered dictionaries com
   `<aos-state>/routing.json` (redirect with `AOS_ROUTING` in tests). Map vendor/tier to model/effort;
   absent light/deep mappings fall back to the standard/default route with an explicit reason. Explicit
   overrides win. Validate vendor, tier and effort; availability remains the existing vendor preflight.
+  This wraps, rather than replaces, `Resolve-AosDelegateModel`. Validate Codex efforts against
+  none/minimal/low/medium/high/xhigh/max/ultra and Claude against low/medium/high/xhigh/max; the actual
+  model/client remains authoritative and an unsupported combination is an observed launch failure.
 - `Read-AosActorStore()` / `Write-AosCoordJson(Path, Value)`: fail closed on malformed existing state;
   JSON replacement is atomic, under the existing re-entrant coordination lock.
 - `Reserve-AosActor(Id, Vendor, Task, Parent, Kind, Handle, Evidence, ProcessId, ProcessStarted)`
@@ -53,6 +56,8 @@ Internal helper contracts, returning PSCustomObjects or ordered dictionaries com
 - `Set-AosActorState(Id, State, Text, Handle, Evidence)` -> actor. States reserved/running/waiting-input/
   suspect/done/failed/cancelled. Native terminal transitions require evidence; active children prevent
   reporting the parent task cleanly finished. Finishing a reserved never-launched actor is safe.
+  A reserved allowance without an observed handle is released when its coordinator is confirmed ended;
+  launched native children do not cascade without their own terminal evidence.
 - `Get-AosActors()` and `Reconcile-AosActors()` return rows; only confirmed ended process identities
   become terminal automatically. Native children require terminal native evidence or explicit verified
   operator reconciliation; never infer death solely from elapsed time or parent death.
@@ -64,6 +69,22 @@ Internal helper contracts, returning PSCustomObjects or ordered dictionaries com
   `<coord>/delegations/<id>/run.json`, with sequence, actor, timestamps and cancellation request.
 - `Invoke-AosCoordControl(Arguments)` dispatches JSON-returning `aos coord reserve|observe|finish|actors|
   reconcile|send|inbox|ack|status|wait|cancel`. Validate ids before forming paths; waits are at most 45 s.
+  Wait sleeps/polls outside the lock and reacquires it only for each short snapshot/update.
+
+Host-mediated transport is the default for CLI workers: `tools/coord.ps1` emits scoped JSON request
+markers to tool stdout without writing metadata when `AOS_COORD_TRANSPORT=stdout`. The supervisor
+decodes markers only from completed tool-result output in the vendor event stream, fixes sender/run
+from its own reservation, validates operation and recipient, and writes the shared state. Replies are
+read from atomic state snapshots by the worker. In this transport inbox reads do not create a lock or
+ack implicitly; acknowledgement is another host request. Claude uses verbose stream-json and the
+wrapper extracts the final result event (existing single-JSON fixtures remain readable). Explicit
+actor commands remain available for the lead/host. `AOS_ACTOR_ID` and `AOS_RUN_ID` are injected by the
+wrapper; ambiguous native-child hook identities never get addressed inbox consumption rights.
+
+Native evidence is verified from the vendor's own session transcript/status, read by the host, or an
+actual native-tool snapshot captured as evidence. Actor registration is an assertion, not its own
+proof. Preserve transcript/handle references for the final reviewer; if no independent source is
+available, mark that route cooperative/unproven and use an eligible route for the required fixture.
 
 Exact CLI options and root registration rules are documented with the implementation. Commands do not
 take an executable, arbitrary code string, force-release flag or unauthenticated third-party endpoint.
@@ -78,6 +99,16 @@ The actor ids identify cooperative native work, not a security boundary against 
    fallback; do not weaken the project sandbox or advertise a live route not demonstrated (4,7).
 5. Shared native output must reach the host-verified tree; combined acceptance must fail without either
    vendor's real contribution, and baseline comparisons must include coordination overhead (7).
+
+### Task 0: Establish read-only capability prerequisites
+
+**Files:** plan-owned ignored capability evidence; no production code.
+
+- [x] Safely inspect auth-status metadata: Claude uses its Pro subscription, Codex uses ChatGPT login.
+- [x] Inspect installed help: Claude supports model, effort and stream-json; Codex supports config and
+  JSON events. Codex's current session transcript exists for later native-evidence verification.
+- [x] Rule out assuming read-only metadata writes; use host-mediated stdout requests by default.
+- [x] Record evidence without account details or credentials in `capabilities.json` in the plan workspace.
 
 ### Task 1: Model/effort forwarding and honest receipts
 
@@ -120,6 +151,7 @@ Standalone delegates still reserve their own actor; the shared skill registers t
   creating a failed receipt/releasing confirmed stopped resources, active children rejecting clean
   completion, kill failure retaining claim/slot, limited capacity refusing dispatch and nested
   cross-vendor delegation refusing before launch. Existing tests continue unmodified.
+  Include quota/auth event failures with one model attempt and no blind retry.
 - [ ] Run them red. Wrap resource ownership in try/catch/finally without changing host verification;
   reserve before any model probe/launch, preserve partial work on failure, and write every final receipt.
 - [ ] Persist initial active run before launch; separate requested settings, observed settings,
@@ -137,6 +169,8 @@ delivery uses explicit actor ids unless the harness positively identifies the ac
   completion, cancellation of the recorded process, and waiting-input suspending only the idle timer.
 - [ ] Run red. Add optional live run/actor identity to process supervision. Reuse the existing .NET
   Process handle and process-tree kill, checkpoint stdout while running, and retain the hard deadline.
+- [ ] Implement the host-mediated transport defined above; test marker parsing with vendor tool-result
+  event fixtures. Markers in ordinary assistant text or a quoted prompt must not mutate metadata.
 - [ ] Add JSON control commands and a prompt contract for status/questions/inbox/replies. Permit only
   actor-scoped coordination metadata for read-only assignments. Use native tools for native children.
   Test each sandbox route before enabling live metadata for it; keep blocked/rerun on unsupported ones.
@@ -181,6 +215,8 @@ docs/routing.md, config/claude/CLAUDE.md, README.md, append-only docs/decisions.
   the other vendor produces the other artifact. Explicitly collect native output into its assigned tree.
 - [ ] Exercise a genuine bounded clarification before completion; inspect the question, reply and
   final receipt. If a sandbox route blocks live metadata, use the supported route and report the limit.
+  The worker must need a fixture value held only by the lead; fixed checks fail without the reply's
+  content. A scripted echo question whose answer cannot change acceptance is insufficient.
 - [ ] Integrate and run fixed checks; remove each contribution in disposable copies to prove the checks
   depend on both artifacts. Run the single-agent baseline and reverse-lead fixture with the same checks.
 - [ ] Record actual available settings, actor evidence, wall times and quota observations. Run a small
