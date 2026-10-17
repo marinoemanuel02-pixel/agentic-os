@@ -32,7 +32,8 @@ Describe 'coordination evaluation isolated suite' {
         }
     }
     BeforeEach {
-        $caseRoot = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        # Nested fixture repos include 40-character git objects; PS 5.1 cleanup has a path limit.
+        $caseRoot = Join-Path $TestDrive ('e' + [guid]::NewGuid().ToString('N').Substring(0,10))
         New-Item -ItemType Directory -Path $caseRoot | Out-Null
         $env:AOS_COORD = Join-Path $caseRoot 'coord'
         $runner = Join-Path $evalRoot 'tools\coordination-eval.ps1'
