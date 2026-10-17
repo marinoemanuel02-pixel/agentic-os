@@ -301,3 +301,18 @@ test('malformed protocol JSON and RPC errors fail closed with safe error codes',
     assert.equal(f.child.killed, true);
   }
 });
+
+test('options.timeoutMs governs the run deadline when dependencies.maxRunMs is omitted', async t => {
+  const f = await setup(t, () => {});
+  delete f.deps.maxRunMs;
+  f.options.timeoutMs = 70;
+  // Safety valve so an adapter that ignores timeoutMs fails fast instead of waiting on its default hour.
+  const valve = setTimeout(() => f.child.stdout.end(), 1500);
+  t.after(() => clearTimeout(valve));
+  const started = Date.now();
+  await assert.rejects(f.run(), { code: 'RUN_TIMEOUT' });
+  clearTimeout(valve);
+  assert.ok(Date.now() - started < 1200, 'deadline must come from options.timeoutMs');
+  assert.equal(f.child.killed, true);
+  assert.equal(f.events.some(e => e.type === 'turn.completed'), false);
+});
