@@ -9,6 +9,7 @@ $script:Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $script:Utf8Bom = New-Object System.Text.UTF8Encoding($true)
 $script:Layers = @('base', 'engines', 'brain', 'bridges', 'refs', 'local', 'media')
 $script:OptInLayers = @('media')   # big downloads: installed only when named, never by `aos install` / `all`
+. (Join-Path $PSScriptRoot 'config\coordination.ps1')
 
 # Windows PowerShell 5.1 serializes some arrays as {"value":[...],"Count":n} unless this is removed.
 if ($PSVersionTable.PSVersion.Major -lt 6) { Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue }
@@ -2797,7 +2798,7 @@ function Test-AosCodexModelProbe([string]$Model) {
 }
 
 function Resolve-AosDelegateModel([string]$Vendor, [string]$Model) {
-    if ($Vendor -eq 'claude') { return [pscustomobject]@{ Ok = $true; Model = ''; Category = 'ok'; Reason = '' } }
+    if ($Vendor -eq 'claude') { return [pscustomobject]@{ Ok = $true; Model = $Model; Category = 'ok'; Reason = '' } }
     $cachePath = Join-Path (Get-AosCoordDir) 'models.json'
     $cache = Read-AosJson $cachePath
     $cached = $null
@@ -3088,7 +3089,8 @@ function Invoke-AosCapacity([string[]]$Arguments) {
 
 function Invoke-AosDelegate {
     param([string]$Vendor, [string]$TaskFile, [switch]$Write, [string]$Model, [string[]]$Needs, [string]$Verify,
-        [string[]]$Allow, [string[]]$Setup, [int]$TimeoutMinutes = 30, [string]$Repo, [int]$IdleMinutes = 15)
+        [string[]]$Allow, [string[]]$Setup, [int]$TimeoutMinutes = 30, [string]$Repo, [int]$IdleMinutes = 15,
+        [string]$Tier = 'standard', [string]$Effort, [string]$Parent, [ValidateRange(0,1)][int]$Workers = 0)
     $refuse = {
         param($m)
         Write-AosWarn "delegate refused: $m"
@@ -3096,6 +3098,10 @@ function Invoke-AosDelegate {
         return [pscustomobject]@{ accepted = $false; outcome = 'refused'; error = [ordered]@{ category = 'usage'; message = $m } }
     }
     if ($Vendor -notin @('codex', 'claude')) { return (& $refuse "unknown vendor '$Vendor' (codex or claude)") }
+    try { $route = Resolve-AosTaskRoute -Vendor $Vendor -Tier $Tier -Model $Model -Effort $Effort }
+    catch { return (& $refuse $_.Exception.Message) }
+    $Model = $route.Model
+    $Effort = $route.Effort
     # Capacity is advice: a malformed ledger row must never stop a delegation (Codex review).
     try { $capacityWarning = Get-AosCapacityWarning -Vendor $Vendor; if ($capacityWarning) { Write-AosWarn "capacity: $capacityWarning" } } catch { }
     if (-not $TaskFile -or -not (Test-Path -LiteralPath $TaskFile)) { return (& $refuse "task file not found: $TaskFile") }
@@ -3120,6 +3126,8 @@ function Invoke-AosDelegate {
     Write-AosText -Path (Join-Path $dir 'task.md') -Text $taskText
     $started = [DateTime]::UtcNow
     $receipt = [ordered]@{ id = $id; vendor = $Vendor; model = ''; mode = 'read'; repo = $repoDir; workdir = $repoDir; branch = ''; base = ''; commit = ''
+        requested_model = $Model; requested_effort = $Effort; requested_tier = $Tier; tier = $route.Tier; route_reason = $route.Reason
+        observed_model = $null; observed_models = @(); observed_effort = $null
         started = $started.ToString('yyyy-MM-ddTHH:mm:ssZ'); ended = ''; seconds = 0; exit_code = $null; timed_out = $false; kill_failed = $false
         thread_id = ''; session_id = ''; usage = [ordered]@{ input = 0; cached = 0; output = 0 }; cost_usd = $null
         error = $null; delegate = $null; changed = @(); outside_allow = @(); verify = $null; accepted = $false; outcome = 'failed' }
@@ -3178,8 +3186,11 @@ function Invoke-AosDelegate {
         $mode = 'read-only'
         if ($Write) { $mode = 'workspace-write' }
         $resultPath = Join-Path $dir 'result.json'
-        $run = Invoke-AosProcess -Exe 'codex.exe' -Arguments @('exec', '-m', $pre.Model, '--json', '--output-schema', $schemaPath, '-o', $resultPath,
-            '-C', $workdir, '--sandbox', $mode, '--skip-git-repo-check', '-') -WorkingDirectory $workdir -StdinFile $promptPath `
+        $codexArgs = @('exec', '-m', $pre.Model, '--json', '--output-schema', $schemaPath, '-o', $resultPath,
+            '-C', $workdir, '--sandbox', $mode, '--skip-git-repo-check')
+        if ($Effort) { $codexArgs += @('-c', ('model_reasoning_effort="' + $Effort + '"')) }
+        $codexArgs += '-'
+        $run = Invoke-AosProcess -Exe 'codex.exe' -Arguments $codexArgs -WorkingDirectory $workdir -StdinFile $promptPath `
             -StdoutFile (Join-Path $dir 'events.jsonl') -StderrFile (Join-Path $dir 'stderr.log') -TimeoutSeconds ($TimeoutMinutes * 60) `
             -Environment @{ AOS_DELEGATE_ID = $id } -IdleSeconds ([Math]::Max(0, $IdleMinutes) * 60)
         $ev = Read-AosCodexEvents (Join-Path $dir 'events.jsonl')
@@ -3199,6 +3210,8 @@ function Invoke-AosDelegate {
         $perm = 'plan'
         if ($Write) { $perm = 'acceptEdits' }
         $claudeArgs = @('-p', '--output-format', 'json', '--json-schema', $schemaJson, '--permission-mode', $perm)
+        if ($pre.Model) { $claudeArgs += @('--model', $pre.Model) }
+        if ($Effort) { $claudeArgs += @('--effort', $Effort) }
         if ($Write) {
             $tools = @()
             foreach ($c in @(@($Verify) + @($Needs) | Where-Object { $_ })) { $tools += ('Bash(' + (Get-AosCommandExe $c) + ':*)') }
@@ -3211,6 +3224,8 @@ function Invoke-AosDelegate {
         $cj = $null
         if (Test-Path -LiteralPath $outPath) { try { $cj = ConvertTo-AosHashtable (ConvertFrom-Json -InputObject ([System.IO.File]::ReadAllText($outPath)) -ErrorAction Stop) } catch { } }
         if ($cj -is [System.Collections.IDictionary]) {
+            if ($cj['modelUsage'] -is [System.Collections.IDictionary]) { $receipt.observed_models = @($cj['modelUsage'].Keys | Sort-Object) }
+            if ($cj['model']) { $receipt.observed_model = [string]$cj['model'] }
             $receipt.session_id = [string]$cj['session_id']
             $receipt.cost_usd = $cj['total_cost_usd']
             $u = $cj['usage']
@@ -3432,14 +3447,17 @@ function Invoke-AosCoordCommand([string]$Command, [string[]]$Arguments) {
                     'show' { Show-AosDelegation -Id (@($rest)[0]) }
                     'clean' { $p = ConvertFrom-AosCliArgs $rest @('force') @() @(); Remove-AosDelegation -Id ($p.Pos | Select-Object -First 1) -Force:([bool]$p.Opts['force']) }
                     { $_ -in @('codex', 'claude') } {
-                        $p = ConvertFrom-AosCliArgs $rest @('write') @('task', 'model', 'verify', 'timeout', 'idle', 'repo') @('needs', 'allow', 'setup')
+                        $p = ConvertFrom-AosCliArgs $rest @('write') @('task', 'model', 'tier', 'effort', 'parent', 'workers', 'verify', 'timeout', 'idle', 'repo') @('needs', 'allow', 'setup')
                         if (-not $p.Opts['task']) { throw 'usage: aos delegate <codex|claude> --task <file> [--write --verify <cmd>] [--model <m>] [--needs <cmd>]... [--allow <glob>]... [--setup <cmd>]... [--timeout <min>] [--idle <min, 0 = off>] [--repo <path>]' }
                         $t = 30
                         if ($p.Opts['timeout']) { $t = [int]$p.Opts['timeout'] }
                         $idle = 15
                         if ($null -ne $p.Opts['idle']) { $idle = [int]$p.Opts['idle'] }
+                        $workers = 0
+                        if ($null -ne $p.Opts['workers']) { $workers = [int]$p.Opts['workers'] }
                         $null = Invoke-AosDelegate -Vendor $sub -TaskFile $p.Opts['task'] -Write:([bool]$p.Opts['write']) -Model $p.Opts['model'] `
-                            -Needs @($p.Opts['needs']) -Verify $p.Opts['verify'] -Allow @($p.Opts['allow']) -Setup @($p.Opts['setup']) -TimeoutMinutes $t -IdleMinutes $idle -Repo $p.Opts['repo']
+                            -Needs @($p.Opts['needs']) -Verify $p.Opts['verify'] -Allow @($p.Opts['allow']) -Setup @($p.Opts['setup']) -TimeoutMinutes $t -IdleMinutes $idle -Repo $p.Opts['repo'] `
+                            -Tier $p.Opts['tier'] -Effort $p.Opts['effort'] -Parent $p.Opts['parent'] -Workers $workers
                     }
                     default { throw 'usage: aos delegate <codex|claude|ls|show|clean> ...' }
                 }

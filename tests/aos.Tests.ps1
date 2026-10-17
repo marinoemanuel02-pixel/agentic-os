@@ -3846,4 +3846,80 @@ Describe 'Pass A review fixes' {
         $sw.Elapsed.TotalSeconds | Should -BeLessThan 15
     }
 }
+
+Describe 'cooperative routing' {
+    BeforeEach {
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        $coordPriorRouting = $env:AOS_ROUTING
+        $env:AOS_ROUTING = Join-Path $caseRoot 'routing.json'
+        $routeRepo = New-TestFolder (Join-Path $caseRoot 'route repo')
+        $routeTask = Join-Path $caseRoot 'route task.md'
+        Write-TestFile $routeTask 'Read the fixture and report.'
+        Mock Test-AosDelegatePreflight -ModuleName aos { @{ Ok=$true; Model=$Model; Reasons=@() } }
+        Mock Invoke-AosProcess -ModuleName aos {
+            if ($Exe -eq 'claude.exe') {
+                Write-TestFile $StdoutFile '{"is_error":false,"modelUsage":{"observed-fixture":{"inputTokens":1}},"structured_output":{"status":"done","summary":"done","files_changed":[],"tests_run":[],"unverified":[]}}'
+            }
+            else {
+                Write-TestFile $StdoutFile '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}'
+                Write-TestFile (Join-Path (Split-Path $StdoutFile -Parent) 'result.json') '{"status":"done","summary":"done","files_changed":[],"tests_run":[],"unverified":[]}'
+            }
+            @{ Code=0; TimedOut=$false; KillFailed=$false }
+        }
+    }
+    AfterEach { $env:AOS_ROUTING = $coordPriorRouting }
+
+    It 'preserves an explicit Claude model without a probe' {
+        $r = InModuleScope aos { Resolve-AosDelegateModel -Vendor 'claude' -Model 'requested-fixture' }
+        $r.Model | Should -BeExactly 'requested-fixture'
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
+    }
+    It 'passes the requested Claude model and effort to its launcher' {
+        $r = InModuleScope aos -Parameters @{ T=$routeTask; R=$routeRepo } {
+            param($T,$R) Invoke-AosDelegate -Vendor claude -TaskFile $T -Repo $R -Model 'requested-fixture' -Effort low
+        }
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly -ParameterFilter {
+            $Exe -eq 'claude.exe' -and ($Arguments -join '|') -match '--model\|requested-fixture' -and
+                ($Arguments -join '|') -match '--effort\|low'
+        }
+        $r.requested_model | Should -BeExactly 'requested-fixture'
+        $r.requested_effort | Should -BeExactly 'low'
+        @($r.observed_models) | Should -Contain 'observed-fixture'
+        $r.observed_model | Should -BeNullOrEmpty
+        $r.observed_effort | Should -BeNullOrEmpty
+    }
+    It 'passes Codex effort as a config override without inventing an observed effort' {
+        $r = InModuleScope aos -Parameters @{ T=$routeTask; R=$routeRepo } {
+            param($T,$R) Invoke-AosDelegate -Vendor codex -TaskFile $T -Repo $R -Model 'requested-fixture' -Effort low
+        }
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly -ParameterFilter {
+            $Exe -eq 'codex.exe' -and ($Arguments -join '|') -match 'model_reasoning_effort="low"'
+        }
+        $r.requested_effort | Should -BeExactly 'low'
+        $r.observed_effort | Should -BeNullOrEmpty
+    }
+    It 'uses the local tier mapping and lets explicit overrides win' {
+        Write-TestFile $env:AOS_ROUTING '{"claude":{"light":{"model":"small-fixture","effort":"low"},"standard":{"model":"normal-fixture","effort":"medium"}}}'
+        $r = InModuleScope aos { Resolve-AosTaskRoute -Vendor claude -Tier light }
+        $r.Model | Should -BeExactly 'small-fixture'
+        $r.Effort | Should -BeExactly 'low'
+        $x = InModuleScope aos { Resolve-AosTaskRoute -Vendor claude -Tier light -Model 'override-fixture' -Effort high }
+        $x.Model | Should -BeExactly 'override-fixture'
+        $x.Effort | Should -BeExactly 'high'
+    }
+    It 'records a missing light mapping as a standard fallback without claiming cheapness' {
+        Write-TestFile $env:AOS_ROUTING '{"codex":{"standard":{"model":"standard-fixture","effort":"medium"}}}'
+        $r = InModuleScope aos { Resolve-AosTaskRoute -Vendor codex -Tier light }
+        $r.Model | Should -BeExactly 'standard-fixture'
+        $r.Tier | Should -BeExactly 'standard'
+        $r.Reason | Should -Match 'light.*unmapped|unmapped.*light'
+    }
+    It 'rejects invalid tiers and effort before dispatch' {
+        InModuleScope aos { Get-Command Resolve-AosTaskRoute -ErrorAction SilentlyContinue } | Should -Not -BeNullOrEmpty
+        { InModuleScope aos { Resolve-AosTaskRoute -Vendor claude -Tier unknown } } | Should -Throw
+        { InModuleScope aos { Resolve-AosTaskRoute -Vendor codex -Effort infinite } } | Should -Throw
+        { InModuleScope aos { Resolve-AosTaskRoute -Vendor claude -Effort ultra } } | Should -Throw
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
+    }
+}
 }
