@@ -88,7 +88,10 @@ The earlier `main..HEAD` review range included unrelated history and was correct
 - The actual PowerShell profile retained its pre-sync hash and timestamp. The classic Windows
   PowerShell profile remained absent, as both sync logs reported. The fresh policy check above passed.
 - Preserved ignored validation evidence in the primary checkout and archived both managed development
-  worktrees through the app's recoverable archive. Source branches remain available.
+  worktrees through the app. Source branches remain available. A subsequent app restore attempt for
+  archived-claim cleanup reported a missing snapshot; archive recovery is therefore unverified.
+  Automatic approval review blocked direct claim-file cleanup with "blocked by policy". The supported
+  release command cleared the existing checkouts' claims; the archived-path claim is left to expire.
 - The earlier continuation failed on noninteractive tool permissions and then a subscription limit.
   It did not perform rollout; the resumed host completed the remaining work without weakening a
   sandbox or consuming reset credits.
