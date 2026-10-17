@@ -187,4 +187,44 @@ Describe 'coordination tuning follow-up regressions' {
             [IO.File]::ReadAllText($managed) | Should -BeExactly $managedBytes
         }
     }
+
+    It 'refuses to delegate when contract allow=[] before Test-AosDelegatePreflight or Invoke-AosProcess' {
+        $repo = New-FollowRepo (Join-Path $caseRoot 'repo')
+        $task = Join-Path $caseRoot 'task.md'; Write-FollowFile $task 'Write output'
+        $contract = Join-Path $caseRoot 'empty-allow-contract.json'
+        Write-FollowFile $contract '{"version":1,"id":"empty-allow-task","objective":"Produce output","task_class":"implementation","depends_on":[],"allow":[],"verify":"git diff --check","artifacts":["output.txt"],"context":[],"route_reason":"fixture","review":"inline","budget":{"timeout_minutes":2,"max_turns":8}}'
+        Mock Test-AosDelegatePreflight -ModuleName aos { @{ Ok = $true; Model = 'fixture-model'; Reasons = @() } }
+        Mock Invoke-AosProcess -ModuleName aos { @{ Code = 0; TimedOut = $false; KillFailed = $false; Cancelled = $false } }
+        { InModuleScope aos -Parameters @{ T = $task; R = $repo; C = $contract } {
+            param($T, $R, $C)
+            Invoke-AosDelegate -Vendor codex -TaskFile $T -Repo $R -ContractFile $C
+        } } | Should -Throw
+        InModuleScope aos {
+            Assert-MockCalled -CommandName Test-AosDelegatePreflight -Times 0 -Scope It
+            Assert-MockCalled -CommandName Invoke-AosProcess -Times 0 -Scope It
+        }
+    }
+
+    It 'terminates with needs-inspection when receipt has accepted=false and outcome=needs-inspection, retaining active_run' {
+        $repo = New-FollowRepo (Join-Path $caseRoot 'repo')
+        $contract = Write-FollowContract (Join-Path $caseRoot 'needs-insp-contract.json') 'needs-insp-task'
+        InModuleScope aos -Parameters @{ F = $contract; R = $repo } {
+            param($F, $R)
+            $null = Register-AosTaskContract -Path $F -Repo $R
+            $null = Start-AosTaskAttempt -Id 'needs-insp-task' -RunId 'run-insp-1'
+        }
+        $inspReceipt = [ordered]@{
+            id = 'run-insp-1'; task_id = 'needs-insp-task'; repo = $repo; workdir = $repo
+            accepted = $false; outcome = 'needs-inspection'; commit = ''
+            verify = [ordered]@{ command = 'git diff --check'; exit_code = 0 }; changed = @('output.txt')
+        }
+        Write-FollowFile (Join-Path $env:AOS_COORD 'delegations\run-insp-1\receipt.json') (ConvertTo-Json -InputObject $inspReceipt -Depth 8)
+        InModuleScope aos {
+            Complete-AosTaskAttempt -Id 'needs-insp-task' -RunId 'run-insp-1' -ErrorAction SilentlyContinue
+        }
+        $row = InModuleScope aos { Get-AosTaskRecord -Id 'needs-insp-task' }
+        $row.state | Should -Be 'needs-inspection'
+        $row.active_run | Should -Be 'run-insp-1'
+        { InModuleScope aos { Start-AosTaskAttempt -Id 'needs-insp-task' -RunId 'run-insp-2' } } | Should -Throw
+    }
 }
