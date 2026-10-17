@@ -3430,7 +3430,7 @@ function Invoke-AosDelegate {
         return $receipt
     }
     if ($Write) {
-        $st = Invoke-AosGit -Dir $workdir -Arguments @('status', '--porcelain')
+        $st = Invoke-AosGit -Dir $workdir -Arguments @('status', '--porcelain', '--untracked-files=all')
         $changed = @(Get-AosPorcelainPaths $st.Out)
         $receipt.changed = $changed
         if (@($Allow | Where-Object { $_ }).Count -gt 0) { $receipt.outside_allow = @($changed | Where-Object { -not (Test-AosAllowed $_ $Allow) }) }
