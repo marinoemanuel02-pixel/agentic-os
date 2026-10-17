@@ -4164,6 +4164,54 @@ Describe 'Pass A review fixes' {
     }
 }
 
+Describe 'cooperative lifecycle' {
+    BeforeEach {
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        $lifecycleRepo = New-TestFolder (Join-Path $caseRoot 'repo')
+        $lifecycleTask = Join-Path $caseRoot 'task.md'
+        Write-TestFile $lifecycleTask 'Read the fixture.'
+        $lifecycleDelegateId = $env:AOS_DELEGATE_ID
+        Mock Test-AosDelegatePreflight -ModuleName aos { @{ Ok=$true; Model='fixture-model'; Reasons=@() } }
+        Mock Invoke-AosProcess -ModuleName aos {
+            Write-TestFile $StdoutFile '{"type":"turn.completed"}'
+            Write-TestFile (Join-Path (Split-Path $StdoutFile -Parent) 'result.json') '{"status":"done","summary":"done","files_changed":[],"tests_run":[],"unverified":[]}'
+            @{ Code=0; TimedOut=$false; KillFailed=$false }
+        }
+    }
+    AfterEach { $env:AOS_DELEGATE_ID = $lifecycleDelegateId }
+    It 'refuses fresh limited capacity before probing or model launch' {
+        InModuleScope aos { Add-AosCapacityEvent -Vendor codex -Remaining 0 -Resets ([DateTime]::UtcNow.AddHours(1).ToString('o')) -Source reported -Note fixture }
+        $r = InModuleScope aos -Parameters @{ T=$lifecycleTask; R=$lifecycleRepo } { param($T,$R) Invoke-AosDelegate -Vendor codex -TaskFile $T -Repo $R }
+        $r.accepted | Should -BeFalse
+        Should -Invoke Test-AosDelegatePreflight -ModuleName aos -Times 0 -Exactly
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
+    }
+    It 'refuses recursive CLI delegation from a delegated worker' {
+        $env:AOS_DELEGATE_ID = 'outer-delegate'
+        $r = InModuleScope aos -Parameters @{ T=$lifecycleTask; R=$lifecycleRepo } { param($T,$R) Invoke-AosDelegate -Vendor codex -TaskFile $T -Repo $R }
+        $r.accepted | Should -BeFalse
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
+    }
+    It 'publishes an active actor and run before the model is invoked' {
+        Mock Invoke-AosProcess -ModuleName aos {
+            $dir = Split-Path $StdoutFile -Parent
+            $activePath = Join-Path $dir 'run.json'
+            if (-not (Test-Path -LiteralPath $activePath)) { throw 'active run not visible' }
+            $activeRun = Get-Content -LiteralPath $activePath -Raw | ConvertFrom-Json
+            if ($activeRun.state -notin @('preparing','running')) { throw 'active run not visible' }
+            $row = @(InModuleScope aos -Parameters @{ I=$activeRun.id } { param($I) Get-AosActors | Where-Object id -eq $I })
+            if ($row.Count -ne 1 -or $row[0].state -notin @('reserved','running')) { throw 'active actor not visible' }
+            Write-TestFile $StdoutFile '{"type":"turn.completed"}'
+            Write-TestFile (Join-Path $dir 'result.json') '{"status":"done","summary":"done","files_changed":[],"tests_run":[],"unverified":[]}'
+            @{ Code=0; TimedOut=$false; KillFailed=$false }
+        }
+        $r = InModuleScope aos -Parameters @{ T=$lifecycleTask; R=$lifecycleRepo } { param($T,$R) Invoke-AosDelegate -Vendor codex -TaskFile $T -Repo $R }
+        $r.accepted | Should -BeTrue
+        $row = InModuleScope aos -Parameters @{ I=$r.id } { param($I) Get-AosActors | Where-Object id -eq $I }
+        $row.state | Should -Be 'done'
+    }
+}
+
 Describe 'cooperative routing' {
     BeforeEach {
         $env:AOS_COORD = Join-Path $caseRoot 'coord'

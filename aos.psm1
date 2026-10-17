@@ -3099,18 +3099,27 @@ function Invoke-AosDelegate {
         return [pscustomobject]@{ accepted = $false; outcome = 'refused'; error = [ordered]@{ category = 'usage'; message = $m } }
     }
     if ($Vendor -notin @('codex', 'claude')) { return (& $refuse "unknown vendor '$Vendor' (codex or claude)") }
+    if ($env:AOS_DELEGATE_ID) { return (& $refuse 'a delegated worker cannot launch another CLI delegate; use its reserved native allowance') }
     try { $route = Resolve-AosTaskRoute -Vendor $Vendor -Tier $Tier -Model $Model -Effort $Effort }
     catch { return (& $refuse $_.Exception.Message) }
     $Model = $route.Model
     $Effort = $route.Effort
     # Capacity is advice: a malformed ledger row must never stop a delegation (Codex review).
     try { $capacityWarning = Get-AosCapacityWarning -Vendor $Vendor; if ($capacityWarning) { Write-AosWarn "capacity: $capacityWarning" } } catch { }
+    $capacity = $null
+    try { $capacity = Get-AosCapacity -Now ([DateTime]::UtcNow) } catch { }
+    if ($capacity -and $capacity.Contains($Vendor) -and $capacity[$Vendor].state -eq 'limited') {
+        return (& $refuse "$Vendor has fresh limited capacity; do not launch or probe until reset")
+    }
     if (-not $TaskFile -or -not (Test-Path -LiteralPath $TaskFile)) { return (& $refuse "task file not found: $TaskFile") }
     if ($Write -and -not $Verify) { return (& $refuse 'write mode needs --verify <command>: the host checks the result, not the delegate') }
     $taskText = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $TaskFile).ProviderPath)
     $repoDir = $Repo
     if (-not $repoDir) { $repoDir = (Get-Location).ProviderPath }
     $repoDir = Get-AosCheckout $repoDir
+    if ($Write -and (Invoke-AosGit -Dir $repoDir -Arguments @('rev-parse', '--show-toplevel')).Code -ne 0) {
+        return (& $refuse "write mode needs a git repository: $repoDir")
+    }
     $delegations = Join-Path (Get-AosCoordDir) 'delegations'
     if (-not (Test-Path -LiteralPath $delegations)) { New-Item -ItemType Directory -Force -Path $delegations | Out-Null }
     $id = $null
@@ -3134,16 +3143,47 @@ function Invoke-AosDelegate {
         error = $null; delegate = $null; changed = @(); outside_allow = @(); verify = $null; accepted = $false; outcome = 'failed' }
     $finish = {
         param($outcome)
+        if ($actorOwned) {
+            $actorState = 'failed'
+            if ($outcome -eq 'accepted') { $actorState = 'done' }
+            if ($outcome -eq 'needs-inspection') { $actorState = 'suspect' }
+            try { $null = Set-AosActorState -Id $id -State $actorState -Text $outcome }
+            catch {
+                $outcome = 'needs-inspection'
+                $receipt.accepted = $false
+                $receipt.error = [ordered]@{ category='children'; message=$_.Exception.Message }
+                try { $null = Set-AosActorState -Id $id -State suspect -Text 'completion could not be confirmed' } catch { }
+            }
+        }
         if ($receipt.error -and $receipt.error.category -eq 'quota') { try { Add-AosCapacityFromError -Vendor $Vendor -Message ([string]$receipt.error.message) } catch { } }
         $receipt.outcome = $outcome
         $receipt.ended = (Get-AosUtcStamp)
         $receipt.seconds = [int]([DateTime]::UtcNow - $started).TotalSeconds
         Write-AosText -Path (Join-Path $dir 'receipt.json') -Text ((ConvertTo-Json -InputObject $receipt -Depth 10) + "`n")
+        $null = Invoke-AosCoordLocked { Write-AosCoordJson -Path (Join-Path $dir 'run.json') -Value ([ordered]@{
+            id=$id; actor=$id; parent=$Parent; state=$outcome; text=''; sequence=2; updated=(Get-AosUtcStamp); cancel_requested=$false }) }
         Add-AosLedgerEvent ([ordered]@{ type = 'delegate'; id = $id; vendor = $Vendor; model = $receipt.model; outcome = $outcome
             seconds = $receipt.seconds; input = $receipt.usage.input; output = $receipt.usage.output })
     }
     $workdir = $repoDir
     $claimed = $false
+    $actorOwned = $false
+    try {
+    $taskId = $id
+    if ($Parent) {
+        $parentActor = @(Get-AosActors | Where-Object id -eq $Parent | Select-Object -First 1)
+        if ($parentActor.Count -eq 0) { throw 'unknown parent actor' }
+        $taskId = [string]$parentActor[0].task
+    }
+    $admission = Reserve-AosActor -Id $id -Vendor $Vendor -Task $taskId -Parent $Parent -Kind delegate -Workers $Workers
+    if (-not $admission.Ok) {
+        $receipt.error = [ordered]@{ category='admission'; message=$admission.Reason }
+        & $finish 'busy'
+        return $receipt
+    }
+    $actorOwned = $true
+    $null = Invoke-AosCoordLocked { Write-AosCoordJson -Path (Join-Path $dir 'run.json') -Value ([ordered]@{
+        id=$id; actor=$id; parent=$Parent; state='preparing'; text=''; sequence=1; updated=(Get-AosUtcStamp); cancel_requested=$false }) }
     if ($Write) {
         $receipt.mode = 'write'
         $top = Invoke-AosGit -Dir $repoDir -Arguments @('rev-parse', '--show-toplevel')
@@ -3160,16 +3200,18 @@ function Invoke-AosDelegate {
         $receipt.workdir = $workdir
         $cl = Invoke-AosClaim -Path $workdir -Agent $Vendor -Session $id -TtlMinutes ([Math]::Min(1440, $TimeoutMinutes + 30)) -Note "aos delegate $id"
         $claimed = $cl.Ok
+        if (-not $claimed) { throw "delegate claim refused: $($cl.Message)" }
         foreach ($s in @($Setup | Where-Object { $_ })) {
             $sr = Invoke-AosProcess -Exe 'cmd.exe' -ArgumentString ('/d /s /c "' + $s + '"') -WorkingDirectory $workdir -TimeoutSeconds 600
-            if ($sr.Code -ne 0) { Write-AosWarn "setup failed (exit $($sr.Code)): $s" }
+            if ($sr.KillFailed) { $receipt.kill_failed=$true; throw "setup could not be stopped: $s" }
+            if ($sr.Code -ne 0) { throw "required setup failed (exit $($sr.Code)): $s" }
         }
     }
     $pre = Test-AosDelegatePreflight -Vendor $Vendor -Model $Model -Needs $Needs -Verify $Verify -WorkDir $workdir -Write:$Write
     if (-not $pre.Ok) {
         $receipt.error = [ordered]@{ category = 'preflight'; message = ($pre.Reasons -join '; ') }
         if ($Write) {
-            if ($claimed) { $null = Invoke-AosRelease -Path $workdir -Agent $Vendor -Session $id }
+            if ($claimed) { $null = Invoke-AosRelease -Path $workdir -Agent $Vendor -Session $id; $claimed=$false }
             $null = Invoke-AosGit -Dir $repoDir -Arguments @('worktree', 'remove', '--force', $workdir)
             $null = Invoke-AosGit -Dir $repoDir -Arguments @('branch', '-D', $receipt.branch)
         }
@@ -3179,6 +3221,7 @@ function Invoke-AosDelegate {
         return $receipt
     }
     $receipt.model = $pre.Model
+    $null = Set-AosActorState -Id $id -State running -Text 'model launch'
     $schemaPath = Join-Path $script:Root 'config\delegate\result.schema.json'
     $promptPath = Join-Path $dir 'prompt.md'
     Write-AosText -Path $promptPath -Text (Get-AosDelegatePrompt -TaskText $taskText -WorkDir $workdir -Branch $receipt.branch -Write:$Write)
@@ -3268,7 +3311,7 @@ function Invoke-AosDelegate {
         $receipt.changed = $changed
         if (@($Allow | Where-Object { $_ }).Count -gt 0) { $receipt.outside_allow = @($changed | Where-Object { -not (Test-AosAllowed $_ $Allow) }) }
         # A timed-out delegate's edits are partial: leave them uncommitted in the worktree for inspection.
-        if ($changed.Count -gt 0 -and -not $run.TimedOut) {
+        if ($changed.Count -gt 0 -and -not $run.TimedOut -and -not $receipt.error -and $receipt.delegate -and $receipt.delegate.status -eq 'done') {
             $summary = 'changes'
             if ($receipt.delegate -and $receipt.delegate.summary) { $summary = (($receipt.delegate.summary -split "`r?`n")[0]) }
             if ($summary.Length -gt 72) { $summary = $summary.Substring(0, 72) }
@@ -3282,6 +3325,7 @@ function Invoke-AosDelegate {
         $vlog = Join-Path $dir 'verify.log'
         $vr = Invoke-AosProcess -Exe 'cmd.exe' -ArgumentString ('/d /s /c "' + $Verify + '"') -WorkingDirectory $workdir -StdoutFile $vlog -StderrFile (Join-Path $dir 'verify.err.log') -TimeoutSeconds 1800
         $receipt.verify = [ordered]@{ command = $Verify; exit_code = $vr.Code }
+        if ($vr.KillFailed) { $receipt.kill_failed=$true; throw 'verification process could not be stopped' }
         if ($Write) {
             # The verified tree must be the recorded commit: a verify step that rewrites files proves nothing.
             $after = Invoke-AosGit -Dir $workdir -Arguments @('status', '--porcelain')
@@ -3289,7 +3333,6 @@ function Invoke-AosDelegate {
             $receipt['verify_changed_tree'] = ([bool]$after.Out -or ($receipt.commit -and $head -ne $receipt.commit))
         }
     }
-    if ($Write -and $claimed) { $null = Invoke-AosRelease -Path $workdir -Agent $Vendor -Session $id }
     $outcome = 'rejected'
     if ($run.TimedOut) { $outcome = 'timed-out' }
     elseif ($null -ne $receipt.error) { $outcome = 'failed' }
@@ -3310,6 +3353,25 @@ function Invoke-AosDelegate {
     Write-AosInfo (Join-Path $dir 'receipt.json')
     if ($receipt.accepted) { $global:LASTEXITCODE = 0 } else { $global:LASTEXITCODE = 1 }
     return $receipt
+    }
+    catch {
+        $receipt.accepted=$false
+        $receipt.error=[ordered]@{ category='lifecycle'; message=$_.Exception.Message }
+        $failure='failed'; if ($receipt.kill_failed) { $failure='needs-inspection' }
+        & $finish $failure
+        return $receipt
+    }
+    finally {
+        if (-not $receipt.ended) {
+            $receipt.accepted=$false
+            $receipt.error=[ordered]@{ category='lifecycle'; message='delegate interrupted before completion' }
+            & $finish 'failed'
+        }
+        if ($claimed -and -not $receipt.kill_failed -and $receipt.outcome -ne 'needs-inspection') {
+            $null = Invoke-AosRelease -Path $workdir -Agent $Vendor -Session $id
+        }
+        $global:LASTEXITCODE=1; if ($receipt.accepted) { $global:LASTEXITCODE=0 }
+    }
 }
 
 function Show-AosDelegations([int]$Last = 10) {
