@@ -3,6 +3,25 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-17 - Task-aware routing and cooperative coordination
+
+- **Decision.** The lead agent chooses whether to work inline or dispatch a bounded worker and selects
+  light, standard or deep effort from the task. It can delegate within the existing subscriptions
+  without a separate per-dispatch approval. Keep small, reversible work inline; divide larger work
+  only when parallel progress, capability, independent reasoning or capacity can repay coordination.
+- **Review.** Retain independent review for user-requested checks, consequential auth, money, data,
+  migration, release or security work, and important uncertainty that other checks cannot resolve.
+  Meaningful tests and a lead's diff review can be enough for small reversible work. Imported process
+  skills do not make every task require another reviewer, an approval pause or the highest effort.
+- **Boundaries.** One writer per checkout, including native workers; the lead integrates cross-vendor
+  results. Actor metadata is cooperative and registration alone is not proof of native execution.
+  Native work needs observed harness evidence. The configured limit is two active actors per vendor.
+- **Evidence.** Routing and coordination commands exist, but supported native routes, observed model
+  choices, elapsed-time comparisons and subscription savings remain unverified until demonstrated.
+  Unknown settings stay unknown; no savings claim follows from tier selection alone.
+- **Supersedes.** The earlier fixed vendor split, blanket cross-review and strongest-model defaults in
+  `docs/routing.md` and the shared contract. Use the lead's task-specific routing and review decision.
+
 ## 2026-10-15 - Paseo removed: one phone app for three providers was never used
 
 - **Why.** Paseo (installed 2026-09-29) was meant to give one phone conversation across Claude, Codex and the

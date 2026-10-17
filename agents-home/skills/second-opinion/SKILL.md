@@ -1,14 +1,17 @@
 ---
 name: second-opinion
-description: Get an independent review from the OTHER vendor (Claude <-> GPT/Codex) and report both verdicts without merging them. Use before landing risky changes (auth, payments, data, migrations, deletes, releases, security), when no test could catch a mistake, when stuck after two failed attempts, or when the user says "second opinion", "cross-check", "have codex look", "have claude look", "double-check this". Not for routine or easily reverted edits.
+description: Get an independent review from the other vendor when the user asks, the risk is consequential, or tests cannot resolve important uncertainty. Not for routine reversible work with useful checks.
 ---
 
 # Second opinion (cross-vendor)
 
 ## 1. Decide it is worth it
 
-Worth it when being wrong is expensive or when tests can't discriminate. Say which in one line.
-If neither applies, say so and skip — two vendors cost two quotas.
+This skill is conditional; ordinary work does not trigger a review. Use it when the user asks, being
+wrong could cause consequential harm (auth, money, destructive data changes, migrations, releases or
+security), or important uncertainty remains that available checks cannot resolve. State the reason
+briefly. A small reversible change with meaningful checks can stay inline. Skip duplicate review of
+the same revision and scope; two vendors consume two subscription windows.
 
 ## 2. Write your own review first
 

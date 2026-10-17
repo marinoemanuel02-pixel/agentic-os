@@ -118,18 +118,30 @@ The shared `inbox` skill can propose filing items into configured vaults and wai
 
 ## Several agents at once
 
-Claude Code and Codex share one coordination layer in `~\.aos\coord` (outside OneDrive):
+The lead agent decides whether to work inline or delegate, using the `coordination` skill and
+the task's scope, tools and available capacity. Small tasks stay inline; a separate delegation choice
+is not required for every task. The shared state lives in `~\.aos\coord` (outside OneDrive):
 
 - **Claims.** The first edit in a checkout claims it for that session (a hook in both agents); another
   session's edits there are blocked with the holder's name until the claim ends (session end) or
   expires (60 minutes without edits). `aos who` lists claims and recent events; `aos note <text> --as
   <agent>` leaves a message there; `aos claim|release [<path>] --as <agent>` do it by hand.
-- **Delegation.** `aos delegate codex --task task.md` (read-only) or `aos delegate codex --task task.md
-  --write --verify "<test command>" [--allow <glob>]`. The model is probed once a day, the verify tool
-  is checked inside the delegate's sandbox, a writer works in `~\.aos\worktrees\<repo>-<id>` on
-  `delegate/<id>`, the host commits and verifies, and the receipt says accepted or why not. A Codex run
-  that emits no event for `--idle` minutes (default 15, `0` off) is killed as `stalled` before `--timeout`.
-  `aos delegate ls | show <id> | clean <id>`.
+- **Delegation.** `aos delegate codex|claude --task task.md` accepts `--write --verify "<command>"
+  [--allow <glob>]`, `--tier light|standard|deep`,
+  `--effort <supported-value>`, `--parent <actor-id>` and `--workers 0|1`. The lead selects a tier
+  for the work; it does not promise lower cost or quota use. A writer works in its own worktree, and
+  the host checks its receipt and verification result. One writer owns each checkout at a time,
+  including native workers. Use `aos delegate ls|show|clean` to inspect or clean managed runs. See
+  [docs/routing.md](docs/routing.md) and the shared `coordination` skill.
+- **Actors and runs.** `aos coord reserve|observe|finish|actors|reconcile` manages cooperative actor
+  reservations and state. An actor id is routing metadata; registration alone does not prove a native
+  worker ran. Use observed native tool-handle or transcript evidence for that claim. The two-actor
+  per-vendor limit is the configured policy; native routes without enforceable spawn controls remain
+  cooperative.
+- **Messages and status.** `aos coord send|inbox|ack|wait|status|cancel` exchanges addressed messages
+  within a task tree, reads run state, or requests cancellation. Inbox reads do not acknowledge a
+  message; acknowledgement is explicit. A cancellation request does not prove process termination.
+  `wait` is bounded to 45 seconds. Read the current implementation's usage text for exact arguments.
 - **Notes between agents.** `aos note "<text>" --as <claude|codex>` writes to the shared ledger; a PostToolUse hook
   (`config/hooks/aos-notes.mjs`) shows each agent the other's unread notes after its next shell or edit call.
 - After `aos sync` changes Codex hooks (also after a cc plugin update, which aos repairs), trust them

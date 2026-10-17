@@ -13,6 +13,7 @@ subscriptions (Claude and ChatGPT).
 
 | Skill | Use it for |
 |---|---|
+| `coordination` | choosing inline work or a bounded cross-vendor/native-worker assignment, tracking actors, addressed messages and run state |
 | `handoff` | writing `HANDOFF.md` when a limit is near or work moves to the other vendor |
 | `second-opinion` | independent review by the other vendor before risky changes |
 | `inbox` | saving a note or link to the global Inbox, filing Inbox items into vaults (with confirmation) |
@@ -38,15 +39,14 @@ Servers cost context on every request: add one only when a command line cannot d
 
 `gh` (GitHub), `rg`/`fd`/`jq` (search), `git`, `uv`/`python`, `node`/`npm`, `pwsh`; the media tools above;
 `python ~/.video-intel/video_intel.py <reel-url>... [--limit N]` (public reels to local Whisper transcripts in `~/.video-intel/out/`; no cookies needed, profile pages are listed through the browser; Instagram media only, the `video-intel` skill drives it);
-`aos` itself: `status`, `sync`, `test`, `new`, `video new` (a video project from the template), `who` (claims), `note`, `delegate codex|claude` (hand a task to the other
-vendor), `secret` (keys; never print them), `place` (known folders), `install <layer>`.
+`aos` itself: `status`, `sync`, `test`, `new`, `video new` (a video project from the template), `who` (claims), `note`, `delegate codex|claude` (hand a task to the other vendor; supports task tier, effort, parent and one native-worker allowance), `coord` (actor reservation, observation, finish, listing, reconciliation, addressed send/inbox/ack/wait and run status/cancellation), `secret` (keys; never print them), `place` (known folders), `install <layer>`.
 
 ## Other agents
 
 | Agent | Reach it with | Good for |
 |---|---|---|
-| Codex | `/codex:rescue`, `codex-rescue` subagent, `codex exec --profile review "<prompt>" </dev/null`, `aos delegate codex` | well-specified implementation, tests, mechanical refactors, reviews |
-| Claude Code | `$cc:rescue`, `$cc:review`, `aos delegate claude` | ambiguous or design work, prose, UI, cited research with many fetched pages |
+| Codex | `/codex:rescue`, `codex-rescue` subagent, `codex exec --profile review "<prompt>" </dev/null`, `aos delegate codex` | Select for its current capability, context and available capacity; it can take scoped work, tests, implementation or an independent review |
+| Claude Code | `$cc:rescue`, `$cc:review`, `aos delegate claude` | Select for its current capability, context and available capacity; it can take scoped work, design, writing or an independent review |
 | Pi on the local model | terminal sessions (`pi`); `web_search`, `file_search`, `text_read`, `pc_status` | small, well-defined tasks; its claims need checking |
 
 ## Browser and desktop

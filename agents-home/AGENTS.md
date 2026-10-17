@@ -55,13 +55,11 @@ Both are on entry plans (Claude Pro, ChatGPT Plus), each with a 5-hour and a wee
 second vendor is for **independence** (a reviewer that doesn't share your blind spots) and for
 **capacity** (keep working when one limit is hit).
 
-**Default split** (override freely):
-- Claude Code: ambiguous or design-heavy work, debugging across many files, writing and prose,
-  UI, anything that needs its skills and plugins, the knowledge base.
-- Codex: well-specified implementation, tests, mechanical refactors, reviews, and long or
-  background runs (Codex app worktrees or Codex cloud) that would burn Claude's window.
-- At most 2 parallel agents per vendor on these plans. Use the strongest model or highest effort
-  for planning and review; default settings for routine edits.
+The lead agent owns the result and decides when another worker is useful. Keep small, reversible
+work inline; split only when parallel work, a tool advantage, independent reasoning or capacity can
+repay startup and integration cost. Choose light, standard or deep effort from the task, and let each
+vendor's available tools and subscription limits shape the route. No model tier promises savings.
+Keep at most 2 active actors per vendor, including coordinators and native workers.
 
 **Second opinion** — run the `second-opinion` skill when being wrong is expensive (auth, money,
 data, migrations, deletes, releases, security) or when no test could catch the mistake.
@@ -76,8 +74,8 @@ data, migrations, deletes, releases, security) or when no test could catch the m
 
 **Split authorship for risky fixes** — the other vendor writes the failing test; this one writes the fix.
 
-**Plans before big work** — for anything over about an hour, write the plan to a file and have the
-other vendor critique it before code exists. That is the cheapest place to catch expensive mistakes.
+**Plans before big work** — for work over about an hour, write the plan to a file. Choose an
+independent critique when its risk or uncertainty makes it useful.
 
 **Capacity** — when a limit is close, don't stall: run the `handoff` skill (writes `HANDOFF.md`),
 then continue on the other vendor from that file.
@@ -87,9 +85,9 @@ then continue on the other vendor from that file.
 - Edits claim the checkout for your session (a guard hook). A blocked edit means another live session
   holds it: tell the user or work in a worktree; never work around the guard. `aos who` shows claims.
   The hook sees only edit tools: before writing in a checkout with a shell command, check `aos who` yourself.
-- Hand work to the other vendor with `aos delegate codex|claude --task <file>` (add `--write --verify
-  <cmd>` for changes). Accept it only from its receipt plus your own read of the diff and tests.
-- Parallel agents read and review; one writer per checkout; you integrate. `aos note` leaves a message.
+- Follow `coordination` for task tiers, worker routing, run status, addressed messages and review choice.
+  The lead integrates and verifies results. One writer owns a checkout at a time, including native
+  children; use an exclusive handoff or separate worktrees for concurrent edits.
 - Local-model output (nar, Pi) is a hint: check it against the files or tests before acting on or relaying it.
 
 ## Skills and tools

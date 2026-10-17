@@ -1,54 +1,64 @@
-# Routing: which agent, which surface
+# Routing work between agents
 
-Tuned for Claude Pro + ChatGPT Plus (both entry plans, each with a 5-hour and a weekly limit).
-Defaults, not laws: say "claude only" or "codex only" and they yield.
+The agent the user starts is the lead. It owns the task breakdown, dispatch choice, integration and
+answer. It may delegate automatically within the existing Claude and ChatGPT subscriptions. A user
+does not need to approve each bounded assignment separately. Keep a small, reversible task inline;
+split substantial work only when parallel progress, a capability advantage, independent reasoning or
+capacity can repay startup, context and integration costs.
 
-## Which vendor
+## Choose effort from the task
 
-| Work | Default | Why |
-|---|---|---|
-| Unclear goal, design, architecture | Claude Code (plan mode) | judgement-heavy; plan first, code later |
-| Debugging that spans many files | Claude Code | holds more of the repo in view |
-| Writing, docs, the knowledge base | Claude Code | the KB's skills live on the Claude side |
-| Well-specified implementation | Codex | saves Claude's window for judgement |
-| Tests, mechanical refactors, renames | Codex (`--profile quick` for trivial ones) | cheap, checkable work |
-| Review of anything risky | the other vendor | independence is the point |
-| Long or background runs | Codex app worktree or Codex cloud | runs while you do other things |
-| Scoring a choice among known options; private or offline quick checks | the local model (`nar` tools, `ollama run`) | free, private, works offline; much weaker. A hint only: on 2026-10-01 it filed AI-video tests into an unrelated vault folder at 0.94 and rated every review finding "low" |
-| Small, well-defined repo tasks with no quota left, or on private files | Pi on the local model (`pi`, model `aos/aos-agent`) | costs neither subscription; 16K context, asks before every command or write; check its claims |
+| Tier | Use when |
+|---|---|
+| `light` | The assignment is narrow and has a meaningful check. |
+| `standard` | The assignment is ordinary implementation, research or writing. |
+| `deep` | The work is ambiguous, difficult to diagnose or consequential. |
 
-## The patterns that pay for the second subscription
+The lead considers available vendor tools, context and current capacity. A tier maps through the local
+routing configuration and may fall back when unavailable. Model names stay in local routing data.
+Priority and tier labels do not establish price, subscription savings or capability; report actual
+model and effort only when observed. Unsupported explicit effort or model requests fail visibly.
 
-1. **Cross-review.** The builder never reviews its own work alone. You type `/codex:review` in
-   Claude Code (a user-only command; Claude itself uses `codex exec --profile review`), or
-   `$cc:review` in Codex. Report both verdicts side by side (the `second-opinion` skill).
-2. **Split authorship.** For a risky fix, the other vendor writes the failing test
-   (`/codex:rescue write a failing test for ... - don't fix it`), then this one fixes it.
-   A test written by whoever wrote the fix tends to pass either way.
-3. **Plan critique.** For anything over about an hour, write the plan to a file and have the
-   other vendor attack it before any code exists (you type `/codex:adversarial-review`, or ask
-   Claude for a second opinion on the plan file).
-4. **Failover.** A limit is a handoff, not a stop: `handoff` skill, then the other agent
-   continues from `HANDOFF.md`. From Claude Code, `/codex:transfer` also works.
-5. **Delegate with a receipt.** `aos delegate codex|claude --task <file>` (read-only) or with
-   `--write --verify <cmd> [--allow <glob>]`: the model and tools are checked first, a writer works
-   in its own worktree, the host commits and verifies, and `~/.aos/coord/delegations/<id>/receipt.json`
-   records model, tokens, outcome and the verify exit code. Merge `delegate/<id>` after reading the diff.
-6. **One writer per checkout.** Edits claim the checkout through a hook in both agents; a second
-   session is blocked until the first ends or its claim expires (60 min without edits). `aos who`.
-7. **Review gate (optional).** `/codex:setup --enable-review-gate` makes Codex review before
-   Claude finishes a turn. Strong, but it spends Codex quota on every turn; turn it on for
-   risky repos only.
+Use `aos delegate codex|claude --task <file>` for a bounded cross-vendor assignment. Optional flags
+are `--tier light|standard|deep`, `--effort <supported-value>`, `--parent <actor-id>` and `--workers 0|1`.
+The worker task names its goal, dependencies, allowed files, acceptance checks and return format.
+Review [the shared coordination skill](../agents-home/skills/coordination/SKILL.md) for native workers,
+actor registration, addressed messages and run status.
 
-## Stretching two entry plans
+## Keep ownership clear
 
-- Check before big work: `/usage` (Claude Code), `/status` (Codex).
-- Strongest model or high effort for planning and review; defaults for routine edits.
-  In Codex: `--profile deep` to plan, `--profile quick` for mechanical edits.
-- At most 2 parallel agents per vendor. Every agent carries the full context preamble, and
-  fan-out burns the 5-hour window before any real work happens.
-- `/clear` between unrelated tasks; subagents for broad searches; keep MCP servers few.
-- Push long, well-specified tasks to Codex cloud (it runs off your machine and your Claude window).
+Check semantic dependencies before parallel execution; disjoint file lists alone are insufficient.
+Dependent work starts from its accepted prerequisite. One writer owns a checkout at a time, including
+coordinators and native workers. Give a native worker exclusive write ownership while its coordinator
+reads, or use separate worktrees and collect scoped patches after the writers stop. Only the lead
+integrates cross-vendor work. A vendor coordinator may use one reserved native-worker allowance but
+cannot start a recursive CLI delegation or another cross-vendor tree.
+
+The configured limit is two active actors per vendor, counting the lead/coordinator and native
+workers. It is an admission policy, not a vendor-enforced limit on every native tool. If the route
+cannot be observed or capped, report it as cooperative. A registry row alone does not prove a native
+tool ran; use the harness's observed handle or transcript. Unknown activity stays unknown.
+
+## Choose review for risk
+
+Use an independent reviewer when the user asks, a mistake could cause consequential harm (auth,
+money, destructive data changes, migrations, releases or security), or important uncertainty cannot
+be resolved by other checks. The right check may be an independent design challenge, a separately
+authored test or a scoped review. Reuse a review of the same revision and scope; do not order duplicate
+reviews because multiple workflow skills mention review.
+
+Small reversible work with meaningful tests or other checks can be completed inline without another
+reviewer. Imported process skills do not impose a reviewer, approval pause or highest-effort model on
+every task. Follow their useful steps when they fit the user request, repository rules and risk.
+For review commands and reporting, see the [`second-opinion` skill](../agents-home/skills/second-opinion/SKILL.md).
+
+## Use the other surfaces
+
+- For account capacity, check `/usage` in Claude Code or `/status` in Codex before a long assignment.
+- When a subscription limit is near, use the `handoff` skill and continue from `HANDOFF.md`.
+- The local `nar` tools can score known options or classify short texts; check samples and treat their
+  output as a hint. Pi is a small local model for bounded tasks; check its claims.
+- Use `/clear` between unrelated tasks and keep MCP servers few.
 
 ## Which surface
 
