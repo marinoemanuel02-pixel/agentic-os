@@ -1566,7 +1566,7 @@ function Invoke-AosTest {
     $root = $script:Root
     $failed = $false
     Write-AosStep 'Static checks'
-    foreach ($f in @('aos.psm1', 'bootstrap.ps1', 'tests\Run-Tests.ps1')) {
+    foreach ($f in @('aos.psm1', 'bootstrap.ps1', 'tests\Run-Tests.ps1', 'config\coordination.ps1', 'tools\coord.ps1')) {
         $path = Join-Path $root $f
         $tokens = $null
         $errors = $null
@@ -1975,6 +1975,7 @@ function aos {
         'who'     { Invoke-AosCoordCommand -Command 'who' -Arguments @($Rest) }
         'note'    { Invoke-AosCoordCommand -Command 'note' -Arguments @($Rest) }
         'capacity' { Invoke-AosCapacity -Arguments @($Rest) }
+        'coord' { Invoke-AosCoordControl -Arguments @($Rest) }
         'delegate' { Invoke-AosCoordCommand -Command 'delegate' -Arguments @($Rest) }
         'guard'   { Invoke-AosGuardHook -Agent $a1 -Event $a2 }
         'where'   { $script:Root }
