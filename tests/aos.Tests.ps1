@@ -3737,6 +3737,323 @@ Describe 'aos delegate' {
     }
 }
 
+# Independent safety tests for cooperative coordination (plan Tasks 2 and 3). Written before the
+# implementation: they are expected to fail until config/coordination.ps1 exists.
+Describe 'cooperative actor safety' {
+    BeforeAll {
+        function Invoke-CoopReserve([hashtable]$Spec) {
+            InModuleScope aos -Parameters @{ Spec = $Spec } {
+                param($Spec)
+                if (-not (Get-Command Reserve-AosActor -ErrorAction SilentlyContinue)) { return $null }
+                try { return (Reserve-AosActor @Spec) }
+                catch { return [pscustomobject]@{ Ok = $false; Reason = "threw: $($_.Exception.Message)"; Actor = $null } }
+            }
+        }
+        function Set-CoopState([hashtable]$Spec) {
+            InModuleScope aos -Parameters @{ Spec = $Spec } {
+                param($Spec)
+                if (-not (Get-Command Set-AosActorState -ErrorAction SilentlyContinue)) { return $null }
+                try { return (Set-AosActorState @Spec) } catch { return $null }
+            }
+        }
+        function Get-CoopRows {
+            $rows = InModuleScope aos {
+                if (-not (Get-Command Get-AosActors -ErrorAction SilentlyContinue)) { return $null }
+                try { return @(Get-AosActors) } catch { return $null }
+            }
+            return @($rows | Where-Object { $_ })
+        }
+        function Get-CoopRow([string]$Id) {
+            return (Get-CoopRows | Where-Object { [string]$_.id -eq $Id } | Select-Object -First 1)
+        }
+        function Test-CoopActive($Row) {
+            if ($null -eq $Row) { return $false }
+            return ([string]$Row.state -in @('reserved', 'running', 'waiting-input', 'suspect'))
+        }
+        function Resolve-CoopActors {
+            InModuleScope aos {
+                if (-not (Get-Command Resolve-AosActors -ErrorAction SilentlyContinue)) { return $null }
+                try { return @(Resolve-AosActors) } catch { return $null }
+            }
+        }
+        function Get-CoopStorePath { return (Join-Path $env:AOS_COORD 'actors.json') }
+    }
+    BeforeEach {
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+    }
+
+    It 'refuses a third active actor per vendor and counts leads and read-only delegates' {
+        (Invoke-CoopReserve @{ Id = 'lead-a'; Vendor = 'codex'; Task = 't1'; Kind = 'lead' }).Ok | Should -BeTrue
+        (Invoke-CoopReserve @{ Id = 'del-b'; Vendor = 'codex'; Task = 't1'; Parent = 'lead-a'; Kind = 'delegate' }).Ok | Should -BeTrue
+        $third = Invoke-CoopReserve @{ Id = 'lead-c'; Vendor = 'codex'; Task = 't2'; Kind = 'lead' }
+        $third | Should -Not -BeNullOrEmpty
+        $third.Ok | Should -BeFalse
+        Test-Path -LiteralPath (Get-CoopStorePath) | Should -BeTrue
+        $store = Get-Content -LiteralPath (Get-CoopStorePath) -Raw | ConvertFrom-Json
+        $store.version | Should -Be 1
+        @($store.actors.PSObject.Properties).Count | Should -Be 2
+        (Invoke-CoopReserve @{ Id = 'lead-d'; Vendor = 'claude'; Task = 't2'; Kind = 'lead' }).Ok | Should -BeTrue
+    }
+
+    It 'frees a slot when an actor reaches a terminal state' {
+        $null = Invoke-CoopReserve @{ Id = 'lead-a'; Vendor = 'claude'; Task = 't1'; Kind = 'lead' }
+        $null = Invoke-CoopReserve @{ Id = 'lead-b'; Vendor = 'claude'; Task = 't2'; Kind = 'lead' }
+        (Invoke-CoopReserve @{ Id = 'lead-c'; Vendor = 'claude'; Task = 't3'; Kind = 'lead' }).Ok | Should -BeFalse
+        $null = Set-CoopState @{ Id = 'lead-a'; State = 'done'; Text = 'finished' }
+        (Get-CoopRow 'lead-a').state | Should -Be 'done'
+        (Invoke-CoopReserve @{ Id = 'lead-c'; Vendor = 'claude'; Task = 't3'; Kind = 'lead' }).Ok | Should -BeTrue
+    }
+
+    It 'reserves a native worker allowance atomically and counts it against the vendor budget' {
+        $r = Invoke-CoopReserve @{ Id = 'lead-a'; Vendor = 'codex'; Task = 't1'; Kind = 'lead'; Workers = 1 }
+        $r | Should -Not -BeNullOrEmpty
+        $r.Ok | Should -BeTrue
+        $child = Get-CoopRow 'lead-a-native-1'
+        $child | Should -Not -BeNullOrEmpty
+        $child.kind | Should -Be 'native'
+        $child.parent | Should -Be 'lead-a'
+        $child.vendor | Should -Be 'codex'
+        Test-CoopActive $child | Should -BeTrue
+        (Invoke-CoopReserve @{ Id = 'lead-b'; Vendor = 'codex'; Task = 't2'; Kind = 'lead' }).Ok | Should -BeFalse
+    }
+
+    It 'refuses a lead with a worker allowance when only one slot remains and leaves no partial row' {
+        $null = Invoke-CoopReserve @{ Id = 'lead-a'; Vendor = 'codex'; Task = 't1'; Kind = 'lead' }
+        $r = Invoke-CoopReserve @{ Id = 'lead-b'; Vendor = 'codex'; Task = 't2'; Kind = 'lead'; Workers = 1 }
+        $r | Should -Not -BeNullOrEmpty
+        $r.Ok | Should -BeFalse
+        (Get-CoopRow 'lead-b') | Should -BeNullOrEmpty
+        (Get-CoopRow 'lead-b-native-1') | Should -BeNullOrEmpty
+        (Invoke-CoopReserve @{ Id = 'lead-c'; Vendor = 'codex'; Task = 't3'; Kind = 'lead' }).Ok | Should -BeTrue
+    }
+
+    It 'treats the same active identity as idempotent without a second row' {
+        $first = Invoke-CoopReserve @{ Id = 'lead-a'; Vendor = 'claude'; Task = 't1'; Kind = 'lead' }
+        $again = Invoke-CoopReserve @{ Id = 'lead-a'; Vendor = 'claude'; Task = 't1'; Kind = 'lead' }
+        $first.Ok | Should -BeTrue
+        $again | Should -Not -BeNullOrEmpty
+        $again.Ok | Should -BeTrue
+        @(Get-CoopRows | Where-Object { [string]$_.id -eq 'lead-a' }).Count | Should -Be 1
+        (Invoke-CoopReserve @{ Id = 'lead-b'; Vendor = 'claude'; Task = 't2'; Kind = 'lead' }).Ok | Should -BeTrue
+    }
+
+    It 'refuses a changed vendor, task, parent or kind for an active id and leaves the row unchanged' {
+        $null = Invoke-CoopReserve @{ Id = 'lead-p'; Vendor = 'claude'; Task = 't1'; Kind = 'lead' }
+        $null = Invoke-CoopReserve @{ Id = 'del-a'; Vendor = 'codex'; Task = 't1'; Parent = 'lead-p'; Kind = 'delegate' }
+        $changes = @(
+            @{ Id = 'del-a'; Vendor = 'claude'; Task = 't1'; Parent = 'lead-p'; Kind = 'delegate' },
+            @{ Id = 'del-a'; Vendor = 'codex'; Task = 'other'; Parent = 'lead-p'; Kind = 'delegate' },
+            @{ Id = 'del-a'; Vendor = 'codex'; Task = 't1'; Parent = 'lead-x'; Kind = 'delegate' },
+            @{ Id = 'del-a'; Vendor = 'codex'; Task = 't1'; Parent = 'lead-p'; Kind = 'lead' }
+        )
+        foreach ($change in $changes) {
+            $r = Invoke-CoopReserve $change
+            $r | Should -Not -BeNullOrEmpty
+            $r.Ok | Should -BeFalse
+        }
+        $row = Get-CoopRow 'del-a'
+        $row.vendor | Should -Be 'codex'
+        $row.task | Should -Be 't1'
+        $row.parent | Should -Be 'lead-p'
+        $row.kind | Should -Be 'delegate'
+    }
+
+    It 'never reuses a terminal id' {
+        $null = Invoke-CoopReserve @{ Id = 'lead-a'; Vendor = 'codex'; Task = 't1'; Kind = 'lead' }
+        $null = Set-CoopState @{ Id = 'lead-a'; State = 'failed'; Text = 'gone' }
+        $r = Invoke-CoopReserve @{ Id = 'lead-a'; Vendor = 'codex'; Task = 't1'; Kind = 'lead' }
+        $r | Should -Not -BeNullOrEmpty
+        $r.Ok | Should -BeFalse
+        (Get-CoopRow 'lead-a').state | Should -Be 'failed'
+    }
+
+    It 'fails closed on a malformed registry and does not rewrite it' {
+        $path = Get-CoopStorePath
+        Write-TestFile $path '{ "version": 1, "actors": [ not json'
+        $before = [System.IO.File]::ReadAllText($path)
+        $r = Invoke-CoopReserve @{ Id = 'lead-a'; Vendor = 'codex'; Task = 't1'; Kind = 'lead' }
+        $r | Should -Not -BeNullOrEmpty
+        $r.Ok | Should -BeFalse
+        [System.IO.File]::ReadAllText($path) | Should -BeExactly $before
+    }
+
+    It 'rejects invalid and traversal ids without touching state outside the coordination folder' {
+        $bad = @('', ' ', '..', '..\evil', '../evil', 'a/b', 'a\b', 'x y', 'C:\evil', 'lead:1', ('a' * 200))
+        foreach ($badId in $bad) {
+            $r = Invoke-CoopReserve @{ Id = $badId; Vendor = 'codex'; Task = 't1'; Kind = 'lead' }
+            $r | Should -Not -BeNullOrEmpty
+            $r.Ok | Should -BeFalse
+        }
+        @(Get-CoopRows).Count | Should -Be 0
+        Test-Path -LiteralPath (Join-Path $caseRoot 'evil') | Should -BeFalse
+        Test-Path -LiteralPath (Join-Path $env:AOS_COORD 'evil') | Should -BeFalse
+    }
+
+    It 'requires an active parent and forbids a delegate from creating a foreign delegate' {
+        $missing = Invoke-CoopReserve @{ Id = 'del-a'; Vendor = 'codex'; Task = 't1'; Parent = 'nobody'; Kind = 'delegate' }
+        $missing | Should -Not -BeNullOrEmpty
+        $missing.Ok | Should -BeFalse
+        $null = Invoke-CoopReserve @{ Id = 'lead-p'; Vendor = 'claude'; Task = 't1'; Kind = 'lead' }
+        $null = Invoke-CoopReserve @{ Id = 'del-a'; Vendor = 'codex'; Task = 't1'; Parent = 'lead-p'; Kind = 'delegate' }
+        $foreign = Invoke-CoopReserve @{ Id = 'del-b'; Vendor = 'claude'; Task = 't1'; Parent = 'del-a'; Kind = 'delegate' }
+        $foreign.Ok | Should -BeFalse
+        $native = Invoke-CoopReserve @{ Id = 'del-a-native-9'; Vendor = 'codex'; Task = 't1'; Parent = 'del-a'; Kind = 'native' }
+        $native.Ok | Should -BeTrue
+        $null = Set-CoopState @{ Id = 'lead-p'; State = 'done'; Text = 'ended' }
+        $orphan = Invoke-CoopReserve @{ Id = 'del-c'; Vendor = 'codex'; Task = 't1'; Parent = 'lead-p'; Kind = 'delegate' }
+        $orphan.Ok | Should -BeFalse
+    }
+
+    It 'does not release live actors because their timestamps are old' {
+        $null = Invoke-CoopReserve @{ Id = 'lead-a'; Vendor = 'codex'; Task = 't1'; Kind = 'lead'; ProcessId = $PID }
+        $null = Invoke-CoopReserve @{ Id = 'lead-b'; Vendor = 'codex'; Task = 't2'; Kind = 'lead'; ProcessId = $PID }
+        $path = Get-CoopStorePath
+        $text = [System.IO.File]::ReadAllText($path)
+        $text = [regex]::Replace($text, '\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?', '2000-01-01T00:00:00Z')
+        [System.IO.File]::WriteAllText($path, $text)
+        (Get-Item -LiteralPath $path).LastWriteTimeUtc = [DateTime]::new(2000, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)
+        $null = Resolve-CoopActors
+        Test-CoopActive (Get-CoopRow 'lead-a') | Should -BeTrue
+        Test-CoopActive (Get-CoopRow 'lead-b') | Should -BeTrue
+        (Invoke-CoopReserve @{ Id = 'lead-c'; Vendor = 'codex'; Task = 't3'; Kind = 'lead' }).Ok | Should -BeFalse
+    }
+
+    It 'releases a never-launched allowance when its coordinator ends but keeps a launched native child' {
+        $null = Invoke-CoopReserve @{ Id = 'lead-a'; Vendor = 'codex'; Task = 't1'; Kind = 'lead'; Workers = 1 }
+        $null = Invoke-CoopReserve @{ Id = 'lead-b'; Vendor = 'claude'; Task = 't1'; Kind = 'lead'; Workers = 1 }
+        $null = Set-CoopState @{ Id = 'lead-b-native-1'; State = 'running'; Text = 'launched'; Handle = 'native-handle-1'; Evidence = 'fixture-transcript' }
+        (Get-CoopRow 'lead-b-native-1').state | Should -Be 'running'
+        $null = Set-CoopState @{ Id = 'lead-a'; State = 'done'; Text = 'ended' }
+        $null = Set-CoopState @{ Id = 'lead-b'; State = 'done'; Text = 'ended' }
+        $null = Resolve-CoopActors
+        $unlaunched = Get-CoopRow 'lead-a-native-1'
+        $unlaunched | Should -Not -BeNullOrEmpty
+        Test-CoopActive $unlaunched | Should -BeFalse
+        $launched = Get-CoopRow 'lead-b-native-1'
+        $launched | Should -Not -BeNullOrEmpty
+        Test-CoopActive $launched | Should -BeTrue
+    }
+}
+
+Describe 'cooperative delegate safety' {
+    BeforeAll {
+        function Get-CoopDelegateRow([string]$Id) {
+            $rows = InModuleScope aos {
+                if (-not (Get-Command Get-AosActors -ErrorAction SilentlyContinue)) { return $null }
+                try { return @(Get-AosActors) } catch { return $null }
+            }
+            return (@($rows | Where-Object { $_ }) | Where-Object { [string]$_.id -eq $Id } | Select-Object -First 1)
+        }
+        function Invoke-CoopDelegate([string]$TaskPath, [string]$RepoPath, [string[]]$SetupCommands) {
+            $out = [pscustomobject]@{ Receipt = $null; Thrown = $null }
+            try {
+                $out.Receipt = InModuleScope aos -Parameters @{ T = $TaskPath; R = $RepoPath; S = $SetupCommands } {
+                    param($T, $R, $S)
+                    Invoke-AosDelegate -Vendor 'codex' -TaskFile $T -Repo $R -Write -Verify 'fixture-verify' -Setup $S
+                }
+            }
+            catch { $out.Thrown = $_ }
+            return $out
+        }
+        function Get-CoopStoredReceipt {
+            $root = Join-Path $env:AOS_COORD 'delegations'
+            if (-not (Test-Path -LiteralPath $root)) { return $null }
+            foreach ($d in @(Get-ChildItem -LiteralPath $root -Directory)) {
+                $file = Join-Path $d.FullName 'receipt.json'
+                if (Test-Path -LiteralPath $file) { return (Get-Content -LiteralPath $file -Raw | ConvertFrom-Json) }
+            }
+            return $null
+        }
+    }
+    BeforeEach {
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        $savedCoopWorktrees = $env:AOS_WORKTREES
+        $env:AOS_WORKTREES = Join-Path $caseRoot 'worktrees'
+        $coopRepo = New-TestFolder (Join-Path $caseRoot 'repo space')
+        & git -C $coopRepo init -q
+        & git -C $coopRepo config user.name Fixture
+        & git -C $coopRepo config user.email fixture@example.invalid
+        & git -C $coopRepo commit --allow-empty -qm initial
+        $coopTask = Join-Path $caseRoot 'task file.md'
+        Write-TestFile $coopTask 'Write a fixture file'
+        Mock Test-AosDelegatePreflight -ModuleName aos { @{ Ok = $true; Model = 'fixture-model'; Reasons = @() } }
+        Mock Invoke-AosProcess -ModuleName aos {
+            if ($Exe -eq 'codex.exe') {
+                Write-TestFile (Join-Path $WorkingDirectory 'fixture.txt') 'delegate edit'
+                Write-TestFile $StdoutFile '{"type":"turn.completed"}'
+                Write-TestFile $Arguments[[Array]::IndexOf($Arguments, '-o') + 1] '{"status":"done","summary":"fixture change","files_changed":["fixture.txt"],"tests_run":[],"unverified":[]}'
+            }
+            else { Write-TestFile $StdoutFile 'host step' }
+            @{ Code = 0; TimedOut = $false; KillFailed = $false }
+        }
+    }
+    AfterEach { $env:AOS_WORKTREES = $savedCoopWorktrees }
+
+    It 'does not launch the model or accept when the claim fails' {
+        Mock Invoke-AosClaim -ModuleName aos { [pscustomobject]@{ Ok = $false; Action = 'refused'; Claim = $null; Holder = $null; Message = 'held by another session' } }
+        $run = Invoke-CoopDelegate $coopTask $coopRepo @()
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly -ParameterFilter { $Exe -eq 'codex.exe' }
+        if ($run.Receipt) { $run.Receipt.accepted | Should -BeFalse }
+    }
+
+    It 'does not launch the model or accept when a required setup command fails' {
+        Mock Invoke-AosProcess -ModuleName aos -ParameterFilter { $Exe -eq 'cmd.exe' -and $ArgumentString -like '*fixture-setup*' } {
+            @{ Code = 3; TimedOut = $false; KillFailed = $false }
+        }
+        $run = Invoke-CoopDelegate $coopTask $coopRepo @('fixture-setup')
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly -ParameterFilter { $Exe -eq 'codex.exe' }
+        if ($run.Receipt) { $run.Receipt.accepted | Should -BeFalse }
+    }
+
+    It 'writes a failed receipt when the model process throws' {
+        Mock Invoke-AosProcess -ModuleName aos -ParameterFilter { $Exe -eq 'codex.exe' } { throw 'fixture launch failure' }
+        $run = Invoke-CoopDelegate $coopTask $coopRepo @()
+        if ($run.Receipt) { $run.Receipt.accepted | Should -BeFalse }
+        $stored = Get-CoopStoredReceipt
+        $stored | Should -Not -BeNullOrEmpty
+        $stored.accepted | Should -BeFalse
+        $stored.outcome | Should -Be 'failed'
+    }
+
+    It 'releases the claim and stops the actor after a thrown launch' {
+        Mock Invoke-AosProcess -ModuleName aos -ParameterFilter { $Exe -eq 'codex.exe' } { throw 'fixture launch failure' }
+        $null = Invoke-CoopDelegate $coopTask $coopRepo @()
+        @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 0
+        $stored = Get-CoopStoredReceipt
+        $stored | Should -Not -BeNullOrEmpty
+        $row = Get-CoopDelegateRow ([string]$stored.id)
+        $row | Should -Not -BeNullOrEmpty
+        ([string]$row.state -in @('reserved', 'running', 'waiting-input', 'suspect')) | Should -BeFalse
+    }
+
+    It 'keeps both the claim and the active actor when killing the model fails' {
+        Mock Invoke-AosProcess -ModuleName aos -ParameterFilter { $Exe -eq 'codex.exe' } {
+            @{ Code = 1; TimedOut = $true; KillFailed = $true }
+        }
+        $run = Invoke-CoopDelegate $coopTask $coopRepo @()
+        $run.Receipt | Should -Not -BeNullOrEmpty
+        $run.Receipt.outcome | Should -Be 'needs-inspection'
+        $run.Receipt.accepted | Should -BeFalse
+        @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 1
+        $row = Get-CoopDelegateRow ([string]$run.Receipt.id)
+        $row | Should -Not -BeNullOrEmpty
+        ([string]$row.state -in @('reserved', 'running', 'waiting-input', 'suspect')) | Should -BeTrue
+    }
+
+    It 'does not retry or accept a quota error result' {
+        Mock Invoke-AosProcess -ModuleName aos -ParameterFilter { $Exe -eq 'codex.exe' } {
+            Write-TestFile $StdoutFile "{`"type`":`"error`",`"message`":`"You've hit your usage limit`"}`n{`"type`":`"turn.failed`",`"error`":{`"message`":`"usage limit`"}}"
+            @{ Code = 0; TimedOut = $false; KillFailed = $false }
+        }
+        $run = Invoke-CoopDelegate $coopTask $coopRepo @()
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Exe -eq 'codex.exe' }
+        $run.Receipt | Should -Not -BeNullOrEmpty
+        $run.Receipt.accepted | Should -BeFalse
+        $run.Receipt.error.category | Should -Be 'quota'
+        $run.Receipt.commit | Should -BeNullOrEmpty
+    }
+}
+
 # Tests for Codex's review of pass A (delegation 20261001-145522). Written by Claude because Codex hit
 # its usage limit before it could write them (same-vendor tests: weaker than split authorship).
 Describe 'Pass A review fixes' {
