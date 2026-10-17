@@ -3,6 +3,8 @@
 Date: 2026-10-17. Status: draft for user review; implementation has not started.
 Confirmed user decision: the starting agent chooses delegation and model tiers automatically within
 the existing subscriptions. That decision does not authorize additional API spending.
+Independent critique and the author's dispositions are recorded separately in
+[`2026-10-17-cooperative-coordination-review.md`](2026-10-17-cooperative-coordination-review.md).
 
 ## Intent and acceptance
 
@@ -70,11 +72,20 @@ alone do not prove independence: shared interfaces, generated files, lockfiles a
 also be checked. Dependent work waits for an accepted prerequisite and starts from its integrated
 revision. Parallel branches use the same declared base, followed by verification of their combined
 result. There is one writer per checkout, including native children.
+Checking semantic dependencies is a lead decision recorded in the work breakdown, not a promised
+static detector. Automated tests can check declared dependencies; live evidence checks this judgment.
 
 Only the lead integrates cross-vendor results. A vendor coordinator can use native children within
 its assigned unit, but cannot delegate back across vendors or create a second cross-vendor tree.
 Native workers cannot acquire extra slots or change their own budget. This bounds delegation loops
 without preventing the two vendor teams from doing useful execution.
+Before native implementation starts, choose one output path. With one native writer, the coordinator
+can hand it exclusive writing of the assigned worktree while remaining read-only itself; the task's
+claim remains held and the child identity is recorded. The coordinator resumes writing only after the
+native handle is terminal. Otherwise children use separate worktrees and return scoped patches; the
+coordinator checks and applies those patches into its assigned worktree after the child writers stop.
+The existing host then commits and verifies that assigned worktree. Native child output is never
+accepted merely because it exists in an uncollected worktree, and CLI delegates still do not commit.
 
 ## Model and effort selection
 
@@ -94,6 +105,8 @@ request fails visibly; it is not silently ignored. For automatic routing, an una
 may use an available standard tier, recording the reason and actual selection. Do not claim a
 cheaper worker ran unless the actual model is observed and the cost comparison is established.
 Record requested tier, model and effort separately from observed model and effort; unknown is null.
+Correct routing is independently valuable; it does not by itself prove a saving. Tier substitution
+tests demonstrate honest fallback only. Speed or quota benefit requires an observed comparison.
 
 Use native per-spawn model and effort controls where supported. CLI version checks and tool schemas
 determine support. Do not write global settings to force every child onto one model or override an
@@ -104,6 +117,9 @@ Keep calls on the existing subscription authentication paths. Do not add API key
 usage credits, change billing mode or assume a dollar token estimate is a subscription bill. Verify
 the auth mode through supported status metadata; never inspect credential contents. An unverified
 route is not advertised as verified subscription-only execution.
+The implementation plan must first establish which safe status metadata each installed client exposes.
+Until that evidence exists, the route is ineligible for unattended subscription-only CLI execution;
+use the already verified native session route instead of guessing the billing mode.
 
 ## Team budget and enforcement boundary
 
@@ -111,12 +127,18 @@ Retain the existing budget of two active actors per vendor, including the coordi
 operator's policy, not a claimed vendor hard limit. A waiting coordinator still occupies its slot
 until the task completes. Thus a lead and one native worker fill one vendor's allowance; a foreign
 coordinator and one native worker fill the other vendor's allowance.
+This supports one child per coordinator at the current cap. Useful gains can come from different
+model tiers, tools and isolated contexts without more fan-out. Larger teams require a later explicit
+budget change based on measurements; they are not silently enabled by this design.
 
 Add actor registrations and slot reservations under the existing coordination lock. Register the
 lead before its first managed dispatch. Reserve all slots needed for an assignment atomically before
-launching it. A queued assignment does not hold slots. A reservation carries vendor, task, parent,
+launching it. Pending assignments stay in the lead's work breakdown and hold no slots. A reservation
+carries vendor, task, parent,
 actor id, owning session/process identity, native handle when known, state and timestamps. Record
-launch, failure and terminal transitions. Reject or queue work when its required slots are unavailable.
+launch, failure and terminal transitions. Return `busy` when required slots are unavailable; the lead
+can wait for a terminal event, pick another eligible route, or work inline. There is no durable queue
+or scheduler. Do not retry a busy request before state changes or beyond its assignment deadline.
 Presence registration is distinct from admission: an idle session with no active assignment does not
 hold a slot. A session-start hook for an admitted delegate attaches to its existing reservation using
 the run/actor identity; it must not count the same coordinator twice.
@@ -129,7 +151,8 @@ the lead, and a worker receives only the allowance already reserved for it.
 Enforce admission for aos-managed launches. Native tool spawns must follow the shared skill and use
 supported native caps where available. Some harnesses do not expose enforceable cross-session spawn
 hooks; report those paths as cooperative rather than claiming a universal hard cap. A top-level
-session discovered outside the managed flow reduces the available budget when its state is known.
+session discovered outside the managed flow reduces the available budget only while known to have
+an active assignment; idle session presence alone does not reserve capacity.
 Unknown native activity is reported as unknown; a strict task cannot fan out through an unobservable
 route. Capability checks must establish which routes are eligible before the live demonstration.
 
@@ -139,6 +162,12 @@ process identity, including creation time, to avoid PID reuse. Cancellation is a
 termination is confirmed; a failed kill retains the slot and claim and reports inspection needed.
 Normal completion and exceptions release resources in a finally path, without overwriting a newer
 owner's claim. Failed claim acquisition or required setup stops execution before model work begins.
+Keep the first registry minimal: actor identity, reservation and observed terminal evidence, reusing
+the existing lock and process runner. No heartbeat service or automatic lease-based release is needed.
+If the lead dies, reconciliation inspects each child's own native handle or process tree. Confirmed
+terminal children release slots; unresolved children remain suspect and visible. A reconciliation
+command reports the blocking evidence and allows an operator to record a verified end explicitly.
+The lead cannot silently free unknown live work to obtain a slot.
 
 Capacity observations remain separate from slots. Fresh limited capacity blocks new work on that
 vendor until reset or a fresh observation permits it. Low capacity favors small bounded assignments
@@ -164,6 +193,10 @@ it does not grant a worker arbitrary writes to the coordination store or another
 
 Use native messaging for native children. Across vendors, the lead and worker inspect their addressed
 inbox before consequential decisions and receive targeted messages at supported tool boundaries.
+If a hook cannot positively identify the actor, it leaves addressed messages unread. Use explicit
+inbox commands with the assigned actor identity instead of guessing or replaying a parent's message
+to children. A native tool's observed handle or transcript must establish identity outside the lead's
+own registry assertion.
 Remove blanket delegate suppression only for registered addressed delivery. A PostToolUse hook cannot
 wake an idle model or interrupt a running tool, so do not promise immediate arbitrary steering.
 
@@ -178,6 +211,8 @@ independent tasks, and uses bounded status waits when idle. It surfaces meaningf
 and questions, not repeated unchanged polling. Process cancellation targets the recorded run and
 process identity. Resuming a native session is optional until tested on the installed client; a new
 attempt with explicit prior context remains a valid fallback. Neither route inherits false success.
+Blocked receipt plus re-dispatch is the interim baseline before live exchange is validated. It does
+not complete the requested live-cooperation capability, which remains a later required increment.
 
 ## Acceptance and review decisions
 
@@ -205,15 +240,20 @@ skills together. The shared user policy must explicitly resolve imported process
 otherwise mandate a reviewer per task or the most expensive tier. Leave vendor plugin caches alone.
 If review is skipped, report the chosen verification without adding a ceremony to every small task.
 When independent reviews run, keep verdicts and reviewer failures separate as the current skill requires.
+The small-task live check must also show that the running agent follows this policy precedence and
+does not request a redundant reviewer solely because an imported process skill normally requires one.
 
 ## Delivery boundaries and validation
 
-Deliver in three verifiable increments, with the later implementation plan defining exact edits:
+Deliver in four verifiable increments, with the later implementation plan defining exact edits:
 
-1. Correct routing and resource lifecycle: model/effort forwarding, honest receipts, actor admission,
-   failure cleanup and a shared coordination skill. Keep existing task commands compatible.
-2. Add live run state and addressed progress/clarification; connect both vendors and native handles.
-3. Run the cooperation demonstrations, refine defaults from observed results, then sync approved
+1. Correct model/effort forwarding and receipts; define selective review and the shared coordination
+   skill. This foundation can ship independently, without claiming complete team cooperation.
+2. Add minimal actor admission and failure cleanup; verify native identities and the path from native
+   output into the assigned worktree. Keep existing task commands compatible.
+3. Add live run state and addressed progress/clarification, using blocked/re-dispatch as an interim
+   fallback while the native and cross-vendor live paths are validated.
+4. Run the cooperation demonstrations, refine defaults from observed results, then sync approved
    shared rules/settings with backups and verify that a second sync changes nothing.
 
 No stage is described as complete merely because instructions were written. Runtime behavior changes
@@ -238,9 +278,15 @@ Required scenarios:
   verification runs again on the integrated revision.
 - A low-risk small task runs inline without delegation or an extra reviewer. A consequential task
   receives the relevant independent check. A change in scope reopens the review decision.
-- A live bounded fixture uses both vendors for distinct execution and at least one suitable native
-  worker. Record actual tiers/models, elapsed time, checks, messages and available quota observations.
-  Compare against a single-agent baseline on the same fixture without claiming an unmeasured saving.
+- Before the live fixture, establish eligible native routes from an observed harness handle/status
+  or transcript. Self-authored registry rows and worker prose alone do not establish a native child.
+- A bounded fixture has fixed acceptance checks requiring distinct artifacts from both vendors and
+  at least one suitable native worker. Removing either vendor's contribution must fail a required
+  check or leave a required deliverable absent. All fixed acceptance checks must pass after integration.
+  Record harness evidence for the native child, actual tiers/models, elapsed time, checks, messages
+  and available quota observations. Run the same fixture from the same base with one agent and the
+  same acceptance checks; report both results and elapsed times, including coordination overhead.
+  Do not claim improved quality, speed or quota efficiency unless the measured comparison supports it.
 - Repeat with the other vendor leading. A route without observable native actors is reported as a
   limitation, not counted as a successful enforcement demonstration.
 
