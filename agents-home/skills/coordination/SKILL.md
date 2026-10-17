@@ -21,8 +21,8 @@ Use `light`, `standard` or `deep` for task requirements. Light is narrow and has
 standard is ordinary work; deep is for ambiguity, difficult diagnosis or consequential reasoning.
 The route is resolved from available vendor options. A fallback is recorded. Tiers, priority labels
 and model choice do not prove lower cost or quota savings. Report model or effort as unknown unless
-the runtime observed it. Local tier overrides live in `~/.aos/routing.json` (or `AOS_ROUTING`), as
-`{"claude":{"light":{"model":"<account-supported-id>","effort":"low"}},"codex":{...}}`.
+the runtime observed it. Local tier overrides live in `~/.aos/routing.json` (or `AOS_ROUTING`),
+for example `{"claude":{"light":{"model":"<account-supported-id>","effort":"low"}},"codex":{}}`.
 An unmapped tier uses the standard/default route with cost unknown. Native tools choose their own
 supported model option; do not assume the CLI map configures a native child automatically.
 
@@ -39,6 +39,17 @@ workers separate worktrees and collect scoped patches after they stop. Only the 
 cross-vendor work. A delegated CLI worker cannot launch another CLI delegate or create another
 cross-vendor tree. Keep read-only workers read-only for project files; their assigned coordination
 commands may update their own status and messages.
+
+For a native worker, reserve its actor before launch, then use the harness's spawn/Agent tool with
+an explicit supported model from the local tier map or current account allowlist. A full-context
+fork normally inherits the parent's settings; use a fresh bounded brief when selecting a lighter
+worker. If the tool cannot override the model, report inheritance and choose another eligible route
+when that cost matters. Claude's per-worker effort is version/tool dependent; use it only when the
+installed schema exposes it. Do not replace native tools with a recursive CLI call.
+Record the returned handle with `observe --handle <handle> --evidence <tool-call-or-transcript-ref>`;
+after the harness confirms termination, `finish --evidence <completion-ref>` frees that allowance.
+The coordinator must relay these observations to the host when its own metadata route is read-only.
+Do not finish a coordinator while a launched child remains unconfirmed.
 
 ## Actors, messages and runs
 

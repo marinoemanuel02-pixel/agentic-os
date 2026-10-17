@@ -1,6 +1,6 @@
 # Cooperation between Claude and Codex teams
 
-Date: 2026-10-17. Status: draft for user review; implementation has not started.
+Date: 2026-10-17. Status: user approved; implementation is undergoing final review and rollout checks.
 Confirmed user decision: the starting agent chooses delegation and model tiers automatically within
 the existing subscriptions. That decision does not authorize additional API spending.
 Independent critique and the author's dispositions are recorded separately in

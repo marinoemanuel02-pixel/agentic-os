@@ -1,8 +1,8 @@
 # agentic-os
 
 Claude (Claude Code) and GPT (Codex) set up as one workflow on this Windows machine:
-one contract and one skills folder for both, each agent able to call the other for review
-or to take over, and one command to install, check and update everything.
+one contract and one skills folder for both, each agent able to coordinate execution with the
+other vendor's native workers, choose useful review or hand off, and one command to manage the setup.
 
 Built 2026-09-27 for Claude Pro + ChatGPT Plus, replacing the hand-built `rig` layer with
 vendor-maintained bridges. The reasons for each choice are in [docs/decisions.md](docs/decisions.md).

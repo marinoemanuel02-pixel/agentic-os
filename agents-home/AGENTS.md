@@ -51,15 +51,17 @@ request, on both subscriptions.
 
 ## Two vendors, one workflow
 
-Both are on entry plans (Claude Pro, ChatGPT Plus), each with a 5-hour and a weekly limit. The
-second vendor is for **independence** (a reviewer that doesn't share your blind spots) and for
-**capacity** (keep working when one limit is hit).
+Both use the existing Claude Pro and ChatGPT Plus subscriptions. Cooperate on execution, tools,
+independent reasoning and capacity; no additional API spending. The starting agent coordinates the
+two native teams and chooses assignments and model tiers automatically.
 
 The lead agent owns the result and decides when another worker is useful. Keep small, reversible
 work inline; split only when parallel work, a tool advantage, independent reasoning or capacity can
-repay startup and integration cost. Choose light, standard or deep effort from the task, and let each
+repay startup and integration cost. Choose a light, standard or deep task tier, and let each
 vendor's available tools and subscription limits shape the route. No model tier promises savings.
 Keep at most 2 active actors per vendor, including coordinators and native workers.
+Imported process skills do not by themselves require an extra reviewer, approval pause or highest
+tier. Follow the user's authorization, project requirements and the risk rules below.
 
 **Second opinion** — run the `second-opinion` skill when being wrong is expensive (auth, money,
 data, migrations, deletes, releases, security) or when no test could catch the mistake.
