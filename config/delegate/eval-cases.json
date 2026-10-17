@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "mechanical",
+      "task_class": "mechanical",
+      "checker": "mechanical",
+      "objective": "Change one status label while preserving the other label.",
+      "task": "In labels.txt replace status=pending with status=ready. Preserve the owner line and the final newline. Change only labels.txt.",
+      "allow": ["labels.txt"],
+      "files": { "labels.txt": "status=pending\nowner=team\n" }
+    },
+    {
+      "id": "implementation",
+      "task_class": "implementation",
+      "checker": "implementation",
+      "objective": "Implement a string slug function with a small explicit contract.",
+      "task": "Implement the exported slug(text) function in slug.mjs for string inputs. Trim whitespace, lowercase ASCII letters, replace each run of non-ASCII-alphanumeric characters with one hyphen and remove leading or trailing hyphens. Empty or punctuation-only input returns an empty string. Change only slug.mjs.",
+      "allow": ["slug.mjs"],
+      "files": { "slug.mjs": "export function slug(text) { return text; }\n" }
+    },
+    {
+      "id": "sequential",
+      "task_class": "sequential",
+      "checker": "sequential",
+      "objective": "Update a library contract and then adapt its caller.",
+      "task": "Change formatAmount(cents) in amount.mjs to return {currency: 'EUR', amount: '<two decimal places>'} for integer cents, including negative amounts and zero. Adapt invoice(cents) in invoice.mjs to use that object and return a string such as EUR 12.34 for 1234 cents. Preserve both exports and change only these two files.",
+      "allow": ["amount.mjs", "invoice.mjs"],
+      "files": {
+        "amount.mjs": "export function formatAmount(cents) { return String(cents); }\n",
+        "invoice.mjs": "import { formatAmount } from './amount.mjs';\nexport function invoice(cents) { return formatAmount(cents); }\n"
+      }
+    },
+    {
+      "id": "diagnosis",
+      "task_class": "diagnosis",
+      "checker": "diagnosis",
+      "objective": "Diagnose and repair an inclusive-range off-by-one error.",
+      "task": "Fix inclusiveSum(start, end) in range.mjs so it sums every integer from start through end, including both endpoints. Inputs are integers. Reversed ranges return zero. Keep the export and change only range.mjs. Explain the off-by-one cause in the result summary.",
+      "allow": ["range.mjs"],
+      "files": { "range.mjs": "export function inclusiveSum(start, end) { let total = 0; for (let value = start; value < end; value++) { total += value; } return total; }\n" }
+    },
+    {
+      "id": "research",
+      "task_class": "research",
+      "checker": "research",
+      "objective": "Synthesize two supplied notes into two explicitly cited JSON claims offline.",
+      "task": "Use only source-a.txt and source-b.txt; no internet is needed. Create synthesis.json as {claims: [{text, sources}, ...]}. In source order include the statements 'The Harbor library opens Monday through Friday.' and 'The Harbor library closes at 18:00 on weekdays.' Cite each claim with only its supporting source filename in its sources array. Do not modify the source notes. Change only synthesis.json.",
+      "allow": ["synthesis.json"],
+      "files": {
+        "source-a.txt": "Source A: The Harbor library opens Monday through Friday.\n",
+        "source-b.txt": "Source B: The Harbor library closes at 18:00 on weekdays.\n"
+      }
+    },
+    {
+      "id": "consequential",
+      "task_class": "consequential",
+      "checker": "consequential",
+      "objective": "Repair a synthetic access policy with deny-by-default and least privilege.",
+      "task": "This policy is a synthetic offline fixture, unrelated to any real authentication system. Repair policy.json: default must be deny; reader may only read report; editor may read and write report. Preserve the two rules in reader/editor order and their role/resource identities. Do not add roles or resources. Change only policy.json.",
+      "allow": ["policy.json"],
+      "files": { "policy.json": "{\"default\":\"allow\",\"rules\":[{\"role\":\"reader\",\"resource\":\"report\",\"actions\":[\"read\",\"write\"]},{\"role\":\"editor\",\"resource\":\"report\",\"actions\":[\"read\",\"write\"]}]}\n" }
+    }
+  ]
+}
