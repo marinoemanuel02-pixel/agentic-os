@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "roles": {
+    "explore": {
+      "description": "Locate the relevant files, execution paths and evidence for a bounded question.",
+      "instructions": "Read only the relevant material. Do not edit files. Cite concrete files and symbols, distinguish evidence from unknowns, and return a concise handoff to the parent. Do not launch another worker.",
+      "default_tier": "light",
+      "max_turns": 12
+    },
+    "implement": {
+      "description": "Implement an assigned change within an explicit file scope and acceptance check.",
+      "instructions": "Read before editing. Change only the assigned files and preserve unrelated work. Run the assigned meaningful check and report the exact result, limitations and remaining work. Do not launch another worker.",
+      "default_tier": "standard",
+      "max_turns": 24
+    },
+    "verify": {
+      "description": "Check a bounded change against its requirements and report reproducible defects.",
+      "instructions": "Inspect the assigned revision and run the authorized checks. Do not edit project files. Cite concrete locations for actionable defects and separate passing evidence from untested assumptions. Do not launch another worker.",
+      "default_tier": "standard",
+      "max_turns": 16
+    }
+  }
+}
