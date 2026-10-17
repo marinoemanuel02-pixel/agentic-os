@@ -4212,6 +4212,39 @@ Describe 'cooperative lifecycle' {
     }
 }
 
+Describe 'cooperative launcher transport' {
+    BeforeEach {
+        $env:AOS_COORD=Join-Path $caseRoot 'coord'
+        $transportTask=Join-Path $caseRoot 'task.md'
+        Write-TestFile $transportTask 'Fixture task'
+        Mock Test-AosDelegatePreflight -ModuleName aos { @{Ok=$true;Model='fixture';Reasons=@()} }
+        Mock Invoke-AosProcess -ModuleName aos {
+            Write-TestFile $StdoutFile '{"type":"result","is_error":false,"structured_output":{"status":"done","summary":"done","files_changed":[],"tests_run":[],"unverified":[]}}'
+            @{Code=0;TimedOut=$false;KillFailed=$false;Cancelled=$false}
+        }
+    }
+    It 'uses streaming Claude tool events with a scoped host transport and worker allowance' {
+        $r=InModuleScope aos -Parameters @{T=$transportTask;R=$caseRoot} { param($T,$R) Invoke-AosDelegate -Vendor claude -TaskFile $T -Repo $R -Workers 1 }
+        Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly -ParameterFilter {
+            $Exe -eq 'claude.exe' -and $Arguments -contains 'stream-json' -and $Arguments -contains '--verbose' -and
+            $LiveRunId -and $Environment.AOS_COORD_TRANSPORT -eq 'stdout' -and $Environment.AOS_ACTOR_ID -eq $LiveRunId
+        }
+        $prompt=[IO.File]::ReadAllText((Join-Path $env:AOS_COORD ('delegations\'+$r.id+'\prompt.md')))
+        $prompt | Should -Match 'native-1'
+        $prompt | Should -Match 'coord.ps1'
+        $r.accepted | Should -BeTrue
+    }
+    It 'cannot accept a cancelled process even when it returned a done result' {
+        Mock Invoke-AosProcess -ModuleName aos {
+            Write-TestFile $StdoutFile '{"type":"result","is_error":false,"structured_output":{"status":"done","summary":"done","files_changed":[],"tests_run":[],"unverified":[]}}'
+            @{Code=0;TimedOut=$false;KillFailed=$false;Cancelled=$true}
+        }
+        $r=InModuleScope aos -Parameters @{T=$transportTask;R=$caseRoot} { param($T,$R) Invoke-AosDelegate -Vendor claude -TaskFile $T -Repo $R }
+        $r.accepted | Should -BeFalse
+        $r.outcome | Should -Be cancelled
+    }
+}
+
 Describe 'cooperative routing' {
     BeforeEach {
         $env:AOS_COORD = Join-Path $caseRoot 'coord'
@@ -4285,6 +4318,106 @@ Describe 'cooperative routing' {
         { InModuleScope aos { Resolve-AosTaskRoute -Vendor codex -Effort infinite } } | Should -Throw
         { InModuleScope aos { Resolve-AosTaskRoute -Vendor claude -Effort ultra } } | Should -Throw
         Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
+    }
+}
+
+Describe 'cooperative live transport' {
+    BeforeEach {
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        InModuleScope aos {
+            Reserve-AosActor -Id lead -Vendor codex -Task live | Out-Null
+            Reserve-AosActor -Id worker -Vendor claude -Task live -Parent lead -Kind delegate | Out-Null
+            Set-AosRunState -Id worker -State preparing | Out-Null
+        }
+    }
+    It 'accepts a question only from completed tool output and fixes its sender to the supervised actor' {
+        InModuleScope aos {
+            $marker='AOS_COORD_REQUEST:{"op":"question","from":"spoof","to":"lead","text":"Need fixture value"}'
+            Receive-AosCoordEvent -RunId worker -JsonLine (ConvertTo-Json -Compress -Depth 8 @{type='item.completed';item=@{type='agent_message';text=$marker}})
+            @(Get-AosTaskInbox lead).Count | Should -Be 0
+            Receive-AosCoordEvent -RunId worker -JsonLine (ConvertTo-Json -Compress -Depth 8 @{type='item.completed';item=@{type='command_execution';aggregated_output=$marker}})
+            $inbox=@(Get-AosTaskInbox lead)
+            $inbox.Count | Should -Be 1
+            $inbox[0].from | Should -BeExactly worker
+            (Get-AosRunState worker).state | Should -BeExactly 'waiting-input'
+        }
+    }
+    It 'reads Claude tool results but ignores assistant text and rejects cross-tree targets' {
+        InModuleScope aos {
+            Reserve-AosActor -Id other -Vendor claude -Task separate | Out-Null
+            $marker='AOS_COORD_REQUEST:{"op":"send","to":"lead","text":"progress"}'
+            Receive-AosCoordEvent -RunId worker -JsonLine (ConvertTo-Json -Compress -Depth 8 @{type='assistant';message=@{content=@(@{type='text';text=$marker})}})
+            @(Get-AosTaskInbox lead).Count | Should -Be 0
+            Receive-AosCoordEvent -RunId worker -JsonLine (ConvertTo-Json -Compress -Depth 8 @{type='user';message=@{content=@(@{type='tool_result';content=$marker})}})
+            @(Get-AosTaskInbox lead).Count | Should -Be 1
+            $bad=$marker.Replace('"lead"','"other"')
+            { Receive-AosCoordEvent -RunId worker -JsonLine (ConvertTo-Json -Compress -Depth 8 @{type='item.completed';item=@{type='command_execution';aggregated_output=$bad}}) } | Should -Throw
+            @(Get-AosTaskInbox other).Count | Should -Be 0
+        }
+    }
+    It 'returns the final streamed Claude result and accepts legacy single-object fixtures' {
+        $path=Join-Path $caseRoot 'stream.jsonl'
+        Write-TestFile $path ('{"type":"system"}' + "`n" + '{"type":"result","is_error":false,"structured_output":{"status":"done"}}')
+        (InModuleScope aos -Parameters @{P=$path} { param($P) Read-AosClaudeResult $P }).structured_output.status | Should -Be done
+        Write-TestFile $path '{"is_error":false,"result":"legacy"}'
+        (InModuleScope aos -Parameters @{P=$path} { param($P) Read-AosClaudeResult $P }).result | Should -Be legacy
+    }
+    It 'reads a worker inbox without acquiring a write lock' {
+        Mock Invoke-AosCoordLocked -ModuleName aos { throw 'read-only route tried to write' }
+        InModuleScope aos { @(Get-AosReadonlyInbox worker).Count | Should -Be 0 }
+        Should -Invoke Invoke-AosCoordLocked -ModuleName aos -Times 0 -Exactly
+    }
+    It 'emits worker metadata requests without directly writing the store' {
+        $helper=Join-Path $PSScriptRoot '..\tools\coord.ps1'
+        $r=InModuleScope aos -Parameters @{H=$helper} {
+            param($H) Start-AosProcessCore -Exe powershell.exe -Arguments @('-NoProfile','-File',$H,'question','--to','lead','--text','value?') -TimeoutSeconds 10 `
+                -Environment @{AOS_COORD_TRANSPORT='stdout';AOS_ACTOR_ID='worker';AOS_RUN_ID='worker'}
+        }
+        $r.Code | Should -Be 0
+        $r.Out | Should -Match '(?m)^AOS_COORD_REQUEST:'
+        @(InModuleScope aos { Get-AosTaskInbox lead }).Count | Should -Be 0
+    }
+    It 'publishes its real process identity and stdout while the child is still alive' {
+        $probe=Join-Path $caseRoot 'probe.ps1'; $out=Join-Path $caseRoot 'events.jsonl'
+        Write-TestFile $probe @'
+Import-Module $env:FIXTURE_MODULE -Force -DisableNameChecking
+$m=Get-Module aos
+$deadline=[DateTime]::UtcNow.AddSeconds(5)
+do { $run=& $m { Get-AosRunState worker }; if ($run.process_id -gt 0) { break }; Start-Sleep -Milliseconds 100 } while ([DateTime]::UtcNow -lt $deadline)
+Write-Output 'checkpoint'
+$deadline=[DateTime]::UtcNow.AddSeconds(5)
+do { if ((Test-Path $env:FIXTURE_OUT) -and [IO.File]::ReadAllText($env:FIXTURE_OUT).Contains('checkpoint')) { break }; Start-Sleep -Milliseconds 100 } while ([DateTime]::UtcNow -lt $deadline)
+if ($run.process_id -eq $PID -and [IO.File]::ReadAllText($env:FIXTURE_OUT).Contains('checkpoint')) { Write-Output 'observed-live' } else { exit 9 }
+'@
+        $r=InModuleScope aos -Parameters @{P=$probe;O=$out;M=(Join-Path $PSScriptRoot '..\aos.psm1')} {
+            param($P,$O,$M) Start-AosProcessCore -Exe powershell.exe -Arguments @('-NoProfile','-File',$P) -TimeoutSeconds 12 -LiveRunId worker -StdoutFile $O -Environment @{FIXTURE_MODULE=$M;FIXTURE_OUT=$O}
+        }
+        $r.Code | Should -Be 0
+        $r.Out | Should -Match 'observed-live'
+    }
+    It 'confirms cancellation by stopping the recorded child process' {
+        InModuleScope aos {
+            Set-AosRunState -Id worker -State preparing -Cancel | Out-Null
+            $r=Start-AosProcessCore -Exe powershell.exe -Arguments @('-NoProfile','-Command','Start-Sleep 30') -TimeoutSeconds 12 -LiveRunId worker
+            $r.Cancelled | Should -BeTrue
+            $r.TimedOut | Should -BeFalse
+            $r.KillFailed | Should -BeFalse
+            Get-Process -Id (Get-AosRunState worker).process_id -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+        }
+    }
+    It 'suspends idle cancellation while waiting for input but keeps the hard deadline' {
+        $clock=[Diagnostics.Stopwatch]::StartNew()
+        InModuleScope aos {
+            $marker='AOS_COORD_REQUEST:{"op":"question","to":"lead","text":"need input"}'
+            $event=ConvertTo-Json -Compress -Depth 8 @{type='item.completed';item=@{type='command_execution';aggregated_output=$marker}}
+            $command='[Console]::WriteLine(''' + $event.Replace("'","''") + '''); Start-Sleep 30'
+            $r=Start-AosProcessCore -Exe powershell.exe -Arguments @('-NoProfile','-Command',$command) -TimeoutSeconds 4 -IdleSeconds 1 -LiveRunId worker
+            $r.TimedOut | Should -BeTrue
+            $r.Stalled | Should -BeFalse
+            @(Get-AosTaskInbox lead).Count | Should -Be 1
+        }
+        $clock.Elapsed.TotalSeconds | Should -BeGreaterThan 3
+        $clock.Elapsed.TotalSeconds | Should -BeLessThan 14
     }
 }
 

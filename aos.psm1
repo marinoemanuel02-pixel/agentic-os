@@ -2239,7 +2239,7 @@ function Start-AosProcessCore {
     # the process tree and reports whether the kill worked. IdleSeconds > 0 also kills it when stdout stays
     # silent that long (Stalled): a delegate stuck on a dropped network must not hold its claim for the full timeout.
     param([string]$Exe, [string[]]$Arguments, [string]$ArgumentString, [string]$WorkingDirectory, [string]$StdinFile, [int]$TimeoutSeconds = 60,
-        [hashtable]$Environment, [int]$IdleSeconds = 0)
+        [hashtable]$Environment, [int]$IdleSeconds = 0, [string]$LiveRunId, [string]$StdoutFile)
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = Resolve-AosExe $Exe
     if ($PSBoundParameters.ContainsKey('ArgumentString')) { $psi.Arguments = $ArgumentString } else { $psi.Arguments = ConvertTo-AosArgString $Arguments }
@@ -2255,8 +2255,22 @@ function Start-AosProcessCore {
     $p = New-Object System.Diagnostics.Process
     $p.StartInfo = $psi
     [void]$p.Start()
+    $liveWriter = $null
+    $pending = ''
+    $cancelled = $false
+    $streaming = ($IdleSeconds -gt 0 -or [bool]$LiveRunId)
+    try {
+    if ($LiveRunId) {
+        $identity=$p.StartTime.ToUniversalTime().ToString('o')
+        $null=Set-AosActorState -Id $LiveRunId -State running -Text 'process started' -ProcessId $p.Id -ProcessStarted $identity
+        $null=Set-AosRunState -Id $LiveRunId -State running -Text 'process started' -ProcessId $p.Id -ProcessStarted $identity
+        if ($StdoutFile) {
+            [IO.File]::WriteAllText($StdoutFile,'',$script:Utf8NoBom)
+            $liveWriter=$StdoutFile
+        }
+    }
     $outTask = $null
-    if ($IdleSeconds -le 0) { $outTask = $p.StandardOutput.ReadToEndAsync() }
+    if (-not $streaming) { $outTask = $p.StandardOutput.ReadToEndAsync() }
     $errTask = $p.StandardError.ReadToEndAsync()
     $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(1, $TimeoutSeconds))
     $stdinStuck = $false
@@ -2274,18 +2288,29 @@ function Start-AosProcessCore {
             if ($n -gt 0) {
                 [void]$chunks.Append($buffer, 0, $n)
                 $lastOutput = [DateTime]::UtcNow
+                if ($LiveRunId) {
+                    $chunk=New-Object string($buffer,0,$n)
+                    if ($liveWriter) { [IO.File]::AppendAllText($liveWriter,$chunk,$script:Utf8NoBom) }
+                    $pending+=$chunk
+                    while (($newline=$pending.IndexOf("`n")) -ge 0) {
+                        $line=$pending.Substring(0,$newline).TrimEnd("`r")
+                        $pending=$pending.Substring($newline+1)
+                        try { Receive-AosCoordEvent -RunId $LiveRunId -JsonLine $line }
+                        catch { $null=Set-AosRunState -Id $LiveRunId -State running -Text ('coordination request refused: ' + $_.Exception.Message) }
+                    }
+                }
                 $read = $p.StandardOutput.ReadAsync($buffer, 0, $buffer.Length)
             }
         }
     }
-    if ($IdleSeconds -gt 0) { $read = $p.StandardOutput.ReadAsync($buffer, 0, $buffer.Length) }
+    if ($streaming) { $read = $p.StandardOutput.ReadAsync($buffer, 0, $buffer.Length) }
     try {
         if ($StdinFile) {
             # Raw UTF-8 bytes (Windows PowerShell 5.1 cannot set the stdin encoding), written asynchronously
             # inside the deadline: a child that never reads stdin must not block us past the timeout.
             $bytes = [System.IO.File]::ReadAllBytes($StdinFile)
             $write = $p.StandardInput.BaseStream.WriteAsync($bytes, 0, $bytes.Length)
-            if ($IdleSeconds -gt 0) {
+            if ($streaming) {
                 while (-not $write.IsCompleted -and [DateTime]::UtcNow -lt $deadline) { [void]$write.Wait(200); . $pump }
                 if ($write.IsCompleted) { $write.Wait(); $p.StandardInput.BaseStream.Flush() } else { $stdinStuck = $true }
             }
@@ -2300,31 +2325,27 @@ function Start-AosProcessCore {
     $timedOut = $false
     $killFailed = $false
     $stalled = $false
-    if ($IdleSeconds -gt 0) {
+    if ($streaming) {
         # The deadline is checked on every pass (steady output must not outlive it), and a closed stdout keeps the
         # idle clock running until the process exits (Codex review). A stuck stdin skips the loop; the drain below
         # keeps what was written before the kill.
         while (-not $stdinStuck) {
-            if ($read) {
-                if ($read.Wait(500)) {
-                    $n = $read.Result
-                    $read = $null
-                    if ($n -gt 0) {
-                        [void]$chunks.Append($buffer, 0, $n)
-                        $lastOutput = [DateTime]::UtcNow
-                        $read = $p.StandardOutput.ReadAsync($buffer, 0, $buffer.Length)
-                    }
-                }
+            if ($read) { [void]$read.Wait(200); . $pump }
+            elseif (-not $p.HasExited) { Start-Sleep -Milliseconds 200 }
+            if ($LiveRunId) {
+                $liveState=Get-AosRunState $LiveRunId
+                if ($liveState['cancel_requested']) { $cancelled=$true; break }
+                if ($liveState['state'] -eq 'waiting-input') { $lastOutput=[DateTime]::UtcNow }
             }
-            elseif ($p.WaitForExit(500)) { break }
+            if ($p.HasExited) { break }
             if ([DateTime]::UtcNow -ge $deadline) { break }
-            if (([DateTime]::UtcNow - $lastOutput).TotalSeconds -ge $IdleSeconds) { $stalled = $true; break }
+            if ($IdleSeconds -gt 0 -and ([DateTime]::UtcNow - $lastOutput).TotalSeconds -ge $IdleSeconds) { $stalled = $true; break }
         }
     }
     $remaining = [int][Math]::Max(0, ($deadline - [DateTime]::UtcNow).TotalMilliseconds)
-    if ($stalled) { $remaining = 0 }
+    if ($stalled -or $cancelled) { $remaining = 0 }
     if ($stdinStuck -or -not $p.WaitForExit($remaining)) {
-        $timedOut = $true
+        $timedOut = -not $cancelled
         $null = cmd /c "taskkill /T /F /PID $($p.Id) 2>&1"
         if (-not $p.WaitForExit(10000)) { $killFailed = $true }
     }
@@ -2335,29 +2356,40 @@ function Start-AosProcessCore {
         if ($outTask) { if ($outTask.Wait(5000)) { $out = $outTask.Result } }
         else {
             # Drain what the finished or killed process left in the pipe.
-            while ($read -and $read.Wait(5000) -and $read.Result -gt 0) {
-                [void]$chunks.Append($buffer, 0, $read.Result)
-                $read = $p.StandardOutput.ReadAsync($buffer, 0, $buffer.Length)
-            }
+            while ($read -and $read.Wait(5000)) { . $pump }
             $out = $chunks.ToString()
         }
         if ($errTask.Wait(5000)) { $err = $errTask.Result }
     }
     $code = -1
     if ($p.HasExited) { $code = $p.ExitCode }
-    return [pscustomobject]@{ Code = $code; TimedOut = $timedOut; KillFailed = $killFailed; Stalled = $stalled; Out = $out; Err = $err }
+    return [pscustomobject]@{ Code = $code; TimedOut = $timedOut; KillFailed = $killFailed; Stalled = $stalled; Cancelled = $cancelled; Out = $out; Err = $err }
+    }
+    catch {
+        # A host metadata/stream failure must not abandon an untracked live process.
+        if (-not $p.HasExited) { $null=cmd /c "taskkill /T /F /PID $($p.Id) 2>&1"; [void]$p.WaitForExit(10000) }
+        if (-not $p.HasExited) {
+            if ($LiveRunId) { $null=Set-AosActorState -Id $LiveRunId -State suspect -Text 'supervision failed; process not confirmed stopped' }
+            $failure=New-Object Exception('supervision failed and process termination could not be confirmed')
+            $failure.Data['AosKillFailed']=$true
+            throw $failure
+        }
+        throw
+    }
+    finally { $p.Dispose() }
 }
 
 function Invoke-AosProcess {
     # The one place aos starts a delegate or a verify command; tests mock it.
     param([string]$Exe, [string[]]$Arguments, [string]$ArgumentString, [string]$WorkingDirectory, [string]$StdinFile,
-        [string]$StdoutFile, [string]$StderrFile, [int]$TimeoutSeconds = 60, [hashtable]$Environment, [int]$IdleSeconds = 0)
+        [string]$StdoutFile, [string]$StderrFile, [int]$TimeoutSeconds = 60, [hashtable]$Environment, [int]$IdleSeconds = 0, [string]$LiveRunId)
     $core = @{ Exe = $Exe; WorkingDirectory = $WorkingDirectory; StdinFile = $StdinFile; TimeoutSeconds = $TimeoutSeconds; Environment = $Environment; IdleSeconds = $IdleSeconds }
     if ($PSBoundParameters.ContainsKey('ArgumentString')) { $core['ArgumentString'] = $ArgumentString } else { $core['Arguments'] = $Arguments }
+    if ($LiveRunId) { $core['LiveRunId']=$LiveRunId; $core['StdoutFile']=$StdoutFile }
     $r = Start-AosProcessCore @core
     if ($StdoutFile) { Write-AosText -Path $StdoutFile -Text $r.Out }
     if ($StderrFile) { Write-AosText -Path $StderrFile -Text $r.Err }
-    return [pscustomobject]@{ Code = $r.Code; TimedOut = $r.TimedOut; KillFailed = $r.KillFailed; Stalled = $r.Stalled }
+    return [pscustomobject]@{ Code = $r.Code; TimedOut = $r.TimedOut; KillFailed = $r.KillFailed; Stalled = $r.Stalled; Cancelled = $r.Cancelled }
 }
 
 function Invoke-AosGit([string]$Dir, [string[]]$Arguments, [int]$TimeoutSeconds = 60) {
@@ -2907,7 +2939,8 @@ function Test-AosAllowed([string]$RelPath, [string[]]$Allow) {
     return $false
 }
 
-function Get-AosDelegatePrompt([string]$TaskText, [string]$WorkDir, [string]$Branch, [switch]$Write) {
+function Get-AosDelegatePrompt([string]$TaskText, [string]$WorkDir, [string]$Branch, [switch]$Write,
+    [string]$RunId, [string]$Parent, [int]$Workers=0) {
     $lines = @('', '---', "Working directory: $WorkDir")
     if ($Write) {
         $lines += "Branch: $Branch"
@@ -2916,6 +2949,16 @@ function Get-AosDelegatePrompt([string]$TaskText, [string]$WorkDir, [string]$Bra
     else { $lines += 'Read-only task: do not modify any file.' }
     $lines += 'Your final answer must match the given JSON schema. List every test or check you could not run under "unverified".'
     $lines += 'Never report a test as passed unless you ran it and saw it pass.'
+    if ($RunId) {
+        $helper=Join-Path $script:Root 'tools\coord.ps1'
+        $lines += "Your actor/run id is $RunId; parent actor is '$Parent'. Native-worker allowance: $Workers. No recursive CLI delegation."
+        if ($Workers) { $lines += "The reserved native actor is ${RunId}-native-1. Use native harness tools, record actual handle and completion evidence; registration alone is not proof." }
+        $lines += 'Use one writer per checkout. Hand exclusive writing to one native child while you remain read-only, or collect its scoped patch after it stops. Integrate into the assigned directory before returning.'
+        $lines += "Live coordination helper: powershell -NoProfile -ExecutionPolicy Bypass -File `"$helper`" <command>. Host-scoped metadata travels through tool stdout; project read-only restrictions remain."
+        $lines += "Commands: question --to <parent-id> --text <question>; send --to <actor-id> --text <progress>; inbox; ack --ack <message-id>; status --state running|waiting-input --text <progress>."
+        $lines += 'Emit a question in a separate completed tool call BEFORE waiting; then wait --seconds 30 in another call. Read replies from your inbox, acknowledge explicitly, and mark status running after a reply. Never put the marker in ordinary prose.'
+        $lines += 'If no reply arrives after a bounded wait, return blocked with the exact missing input. Do not invent it. Waiting suspends idle detection but not the hard task deadline.'
+    }
     return ($TaskText.TrimEnd() + "`n" + ($lines -join "`n") + "`n")
 }
 
@@ -3146,6 +3189,7 @@ function Invoke-AosDelegate {
         if ($actorOwned) {
             $actorState = 'failed'
             if ($outcome -eq 'accepted') { $actorState = 'done' }
+            if ($outcome -eq 'cancelled') { $actorState = 'cancelled' }
             if ($outcome -eq 'needs-inspection') { $actorState = 'suspect' }
             try { $null = Set-AosActorState -Id $id -State $actorState -Text $outcome }
             catch {
@@ -3160,8 +3204,7 @@ function Invoke-AosDelegate {
         $receipt.ended = (Get-AosUtcStamp)
         $receipt.seconds = [int]([DateTime]::UtcNow - $started).TotalSeconds
         Write-AosText -Path (Join-Path $dir 'receipt.json') -Text ((ConvertTo-Json -InputObject $receipt -Depth 10) + "`n")
-        $null = Invoke-AosCoordLocked { Write-AosCoordJson -Path (Join-Path $dir 'run.json') -Value ([ordered]@{
-            id=$id; actor=$id; parent=$Parent; state=$outcome; text=''; sequence=2; updated=(Get-AosUtcStamp); cancel_requested=$false }) }
+        $null = Set-AosRunState -Id $id -State $outcome
         Add-AosLedgerEvent ([ordered]@{ type = 'delegate'; id = $id; vendor = $Vendor; model = $receipt.model; outcome = $outcome
             seconds = $receipt.seconds; input = $receipt.usage.input; output = $receipt.usage.output })
     }
@@ -3182,8 +3225,7 @@ function Invoke-AosDelegate {
         return $receipt
     }
     $actorOwned = $true
-    $null = Invoke-AosCoordLocked { Write-AosCoordJson -Path (Join-Path $dir 'run.json') -Value ([ordered]@{
-        id=$id; actor=$id; parent=$Parent; state='preparing'; text=''; sequence=1; updated=(Get-AosUtcStamp); cancel_requested=$false }) }
+    $null = Set-AosRunState -Id $id -State preparing
     if ($Write) {
         $receipt.mode = 'write'
         $top = Invoke-AosGit -Dir $repoDir -Arguments @('rev-parse', '--show-toplevel')
@@ -3224,7 +3266,8 @@ function Invoke-AosDelegate {
     $null = Set-AosActorState -Id $id -State running -Text 'model launch'
     $schemaPath = Join-Path $script:Root 'config\delegate\result.schema.json'
     $promptPath = Join-Path $dir 'prompt.md'
-    Write-AosText -Path $promptPath -Text (Get-AosDelegatePrompt -TaskText $taskText -WorkDir $workdir -Branch $receipt.branch -Write:$Write)
+    Write-AosText -Path $promptPath -Text (Get-AosDelegatePrompt -TaskText $taskText -WorkDir $workdir -Branch $receipt.branch -Write:$Write -RunId $id -Parent $Parent -Workers $Workers)
+    $workerEnvironment=@{ AOS_DELEGATE_ID=$id; AOS_ACTOR_ID=$id; AOS_RUN_ID=$id; AOS_COORD_TRANSPORT='stdout' }
     $result = $null
     if ($Vendor -eq 'codex') {
         $mode = 'read-only'
@@ -3236,7 +3279,7 @@ function Invoke-AosDelegate {
         $codexArgs += '-'
         $run = Invoke-AosProcess -Exe 'codex.exe' -Arguments $codexArgs -WorkingDirectory $workdir -StdinFile $promptPath `
             -StdoutFile (Join-Path $dir 'events.jsonl') -StderrFile (Join-Path $dir 'stderr.log') -TimeoutSeconds ($TimeoutMinutes * 60) `
-            -Environment @{ AOS_DELEGATE_ID = $id } -IdleSeconds ([Math]::Max(0, $IdleMinutes) * 60)
+            -Environment $workerEnvironment -LiveRunId $id -IdleSeconds ([Math]::Max(0, $IdleMinutes) * 60)
         $ev = Read-AosCodexEvents (Join-Path $dir 'events.jsonl')
         $receipt.thread_id = $ev.ThreadId
         $receipt.usage = [ordered]@{ input = $ev.Input; cached = $ev.Cached; output = $ev.Output }
@@ -3253,7 +3296,7 @@ function Invoke-AosDelegate {
         $schemaJson = ([System.IO.File]::ReadAllText($schemaPath) -replace '\s+', ' ').Trim()
         $perm = 'plan'
         if ($Write) { $perm = 'acceptEdits' }
-        $claudeArgs = @('-p', '--output-format', 'json', '--json-schema', $schemaJson, '--permission-mode', $perm)
+        $claudeArgs = @('-p', '--output-format', 'stream-json', '--verbose', '--json-schema', $schemaJson, '--permission-mode', $perm)
         if ($pre.Model) { $claudeArgs += @('--model', $pre.Model) }
         if ($Effort) { $claudeArgs += @('--effort', $Effort) }
         if ($Write) {
@@ -3264,9 +3307,8 @@ function Invoke-AosDelegate {
         $outPath = Join-Path $dir 'claude.json'
         $run = Invoke-AosProcess -Exe 'claude.exe' -Arguments $claudeArgs -WorkingDirectory $workdir -StdinFile $promptPath `
             -StdoutFile $outPath -StderrFile (Join-Path $dir 'stderr.log') -TimeoutSeconds ($TimeoutMinutes * 60) `
-            -Environment @{ AOS_DELEGATE_ID = $id }
-        $cj = $null
-        if (Test-Path -LiteralPath $outPath) { try { $cj = ConvertTo-AosHashtable (ConvertFrom-Json -InputObject ([System.IO.File]::ReadAllText($outPath)) -ErrorAction Stop) } catch { } }
+            -Environment $workerEnvironment -LiveRunId $id
+        $cj = Read-AosClaudeResult $outPath
         if ($cj -is [System.Collections.IDictionary]) {
             if ($cj['modelUsage'] -is [System.Collections.IDictionary]) { $receipt.observed_models = @($cj['modelUsage'].Keys | Sort-Object) }
             if ($cj['model']) { $receipt.observed_model = [string]$cj['model'] }
@@ -3286,6 +3328,8 @@ function Invoke-AosDelegate {
         elseif (-not $run.TimedOut) { $receipt.error = [ordered]@{ category = 'other'; message = "no JSON from claude (exit $($run.Code))" } }
     }
     $receipt.exit_code = $run.Code
+    $receipt['cancelled']=[bool]$run.Cancelled
+    if ($run.Cancelled) { $receipt.error=[ordered]@{category='cancelled';message='cancellation requested; process stop confirmed separately'} }
     if ($null -eq $receipt.error -and -not $run.TimedOut -and $run.Code -ne 0) {
         $receipt.error = [ordered]@{ category = 'other'; message = "delegate process exited with code $($run.Code)" }
     }
@@ -3311,7 +3355,7 @@ function Invoke-AosDelegate {
         $receipt.changed = $changed
         if (@($Allow | Where-Object { $_ }).Count -gt 0) { $receipt.outside_allow = @($changed | Where-Object { -not (Test-AosAllowed $_ $Allow) }) }
         # A timed-out delegate's edits are partial: leave them uncommitted in the worktree for inspection.
-        if ($changed.Count -gt 0 -and -not $run.TimedOut -and -not $receipt.error -and $receipt.delegate -and $receipt.delegate.status -eq 'done') {
+        if ($changed.Count -gt 0 -and -not $run.TimedOut -and -not $run.Cancelled -and -not $receipt.error -and $receipt.delegate -and $receipt.delegate.status -eq 'done') {
             $summary = 'changes'
             if ($receipt.delegate -and $receipt.delegate.summary) { $summary = (($receipt.delegate.summary -split "`r?`n")[0]) }
             if ($summary.Length -gt 72) { $summary = $summary.Substring(0, 72) }
@@ -3320,7 +3364,7 @@ function Invoke-AosDelegate {
             if ($cm.Code -eq 0) { $receipt.commit = (Invoke-AosGit -Dir $workdir -Arguments @('rev-parse', 'HEAD')).Out }
         }
     }
-    if ($Verify -and -not $run.TimedOut) {
+    if ($Verify -and -not $run.TimedOut -and -not $run.Cancelled) {
         # Still under the delegate's claim, so no other session edits what is being verified.
         $vlog = Join-Path $dir 'verify.log'
         $vr = Invoke-AosProcess -Exe 'cmd.exe' -ArgumentString ('/d /s /c "' + $Verify + '"') -WorkingDirectory $workdir -StdoutFile $vlog -StderrFile (Join-Path $dir 'verify.err.log') -TimeoutSeconds 1800
@@ -3334,7 +3378,8 @@ function Invoke-AosDelegate {
         }
     }
     $outcome = 'rejected'
-    if ($run.TimedOut) { $outcome = 'timed-out' }
+    if ($run.Cancelled) { $outcome = 'cancelled' }
+    elseif ($run.TimedOut) { $outcome = 'timed-out' }
     elseif ($null -ne $receipt.error) { $outcome = 'failed' }
     else {
         $ok = ($null -ne $receipt.delegate -and $receipt.delegate.status -eq 'done')
@@ -3355,6 +3400,7 @@ function Invoke-AosDelegate {
     return $receipt
     }
     catch {
+        if ($_.Exception.Data['AosKillFailed']) { $receipt.kill_failed=$true }
         $receipt.accepted=$false
         $receipt.error=[ordered]@{ category='lifecycle'; message=$_.Exception.Message }
         $failure='failed'; if ($receipt.kill_failed) { $failure='needs-inspection' }
@@ -3375,12 +3421,22 @@ function Invoke-AosDelegate {
 }
 
 function Show-AosDelegations([int]$Last = 10) {
+    $active=@(Get-AosActors | Where-Object { $_.kind -eq 'delegate' -and $_.state -in @('reserved','running','waiting-input','suspect') })
+    foreach ($actor in $active) {
+        $run=Get-AosRunState $actor.id
+        Write-Host (ConvertTo-Json -InputObject $run -Depth 10 -Compress)
+    }
     $rows = @(Get-AosLedger -Last 0 | Where-Object { $_['type'] -eq 'delegate' } | Select-Object -Last $Last)
     if ($rows.Count -eq 0) { Write-AosInfo 'no delegations yet'; return }
     foreach ($r in $rows) { Write-Host ('{0}  {1,-16} {2,-8} {3,-12} {4,6} s  {5} in / {6} out' -f $r['ts'], $r['outcome'], $r['vendor'], $r['model'], $r['seconds'], $r['input'], $r['output']); Write-Host "       $($r['id'])" }
 }
 
 function Show-AosDelegation([string]$Id) {
+    Assert-AosCoordId $Id
+    $run=Get-AosRunState $Id
+    if ($run -and $run['state'] -in @('preparing','reserved','running','waiting-input','suspect')) {
+        Write-Host (ConvertTo-Json -InputObject $run -Depth 10); return
+    }
     $path = Join-Path (Join-Path (Join-Path (Get-AosCoordDir) 'delegations') $Id) 'receipt.json'
     if (-not (Test-Path -LiteralPath $path)) { Write-AosWarn "no receipt for $Id"; $global:LASTEXITCODE = 1; return }
     Write-Host ([System.IO.File]::ReadAllText($path))

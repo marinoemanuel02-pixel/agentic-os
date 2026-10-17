@@ -57,6 +57,15 @@ function Write-AosCoordJson([string]$Path, $Value) {
     finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force } }
 }
 
+function Read-AosCoordJsonFile([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { return $null }
+    $share = [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete
+    $stream = New-Object IO.FileStream($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, $share)
+    $reader = New-Object IO.StreamReader($stream, $script:Utf8NoBom)
+    try { return (ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $reader.ReadToEnd() -ErrorAction Stop)) }
+    finally { $reader.Dispose() }
+}
+
 function Test-AosActorActive($Actor) {
     return ($null -ne $Actor -and $Actor['state'] -in @('reserved', 'running', 'waiting-input', 'suspect'))
 }
@@ -64,7 +73,7 @@ function Test-AosActorActive($Actor) {
 function Read-AosActorStore {
     $path = Join-Path (Get-AosCoordDir) 'actors.json'
     if (-not (Test-Path -LiteralPath $path)) { return [ordered]@{ version = 1; actors = [ordered]@{} } }
-    $store = Read-AosJson $path
+    $store = Read-AosCoordJsonFile $path
     if ($store -isnot [Collections.IDictionary] -or $store['version'] -ne 1 -or
         $store['actors'] -isnot [Collections.IDictionary]) { throw 'invalid actor registry; inspect it before admitting work' }
     foreach ($key in @($store['actors'].Keys)) {
@@ -202,10 +211,200 @@ function Resolve-AosActors {
     })
 }
 
+function Get-AosActorTreeRoot($Rows, [string]$Id) {
+    $seen = @{}
+    while ($Id) {
+        if ($seen.ContainsKey($Id) -or -not $Rows[$Id]) { throw 'invalid actor ancestry' }
+        $seen[$Id]=$true
+        $row=$Rows[$Id]
+        if (-not $row['parent']) { return $Id }
+        $Id=[string]$row['parent']
+    }
+}
+
+function Read-AosMessageStore {
+    $path=Join-Path (Get-AosCoordDir) 'messages.json'
+    if (-not (Test-Path -LiteralPath $path)) { return [ordered]@{ version=1; messages=[ordered]@{} } }
+    $store=Read-AosCoordJsonFile $path
+    if ($store -isnot [Collections.IDictionary] -or $store['version'] -ne 1 -or
+        $store['messages'] -isnot [Collections.IDictionary]) { throw 'invalid message store; no messages acknowledged' }
+    return $store
+}
+
+function Send-AosTaskMessage {
+    param([string]$From, [string]$To, [string]$Text, [string]$ReplyTo)
+    Assert-AosCoordId $From; Assert-AosCoordId $To
+    if ([string]::IsNullOrWhiteSpace($Text) -or $Text.Length -gt 8000) { throw 'message text must contain 1-8000 characters' }
+    if ($ReplyTo) { Assert-AosCoordId $ReplyTo }
+    return (Invoke-AosCoordLocked {
+        $actors=(Read-AosActorStore)['actors']
+        if (-not $actors[$From] -or -not $actors[$To] -or $actors[$From]['task'] -ne $actors[$To]['task'] -or
+            (Get-AosActorTreeRoot $actors $From) -ne (Get-AosActorTreeRoot $actors $To)) { throw 'messages must stay within one task tree' }
+        $store=Read-AosMessageStore
+        if ($ReplyTo) {
+            $original=$store['messages'][$ReplyTo]
+            if (-not $original -or $From -notin @($original['from'],$original['to']) -or
+                $To -notin @($original['from'],$original['to'])) { throw 'reply does not refer to this actor pair' }
+        }
+        $id=[guid]::NewGuid().ToString('N')
+        $message=[ordered]@{ id=$id; from=$From; to=$To; task=$actors[$From]['task']; text=$Text;
+            reply_to=$ReplyTo; created=(Get-AosUtcStamp); acknowledged=$false }
+        $store['messages'][$id]=$message
+        Write-AosCoordJson -Path (Join-Path (Get-AosCoordDir) 'messages.json') -Value $store
+        return [pscustomobject]$message
+    })
+}
+
+function Get-AosTaskInbox {
+    param([string]$Actor, [string[]]$AckIds)
+    Assert-AosCoordId $Actor
+    return (Invoke-AosCoordLocked {
+        $actors=(Read-AosActorStore)['actors']
+        if (-not $actors[$Actor]) { throw 'unknown inbox actor' }
+        $store=Read-AosMessageStore
+        $changed=$false
+        foreach ($id in @($AckIds | Where-Object { $_ })) {
+            Assert-AosCoordId $id
+            $message=$store['messages'][$id]
+            if ($message -and $message['to'] -eq $Actor -and -not $message['acknowledged']) {
+                $message['acknowledged']=$true; $changed=$true
+            }
+        }
+        if ($changed) { Write-AosCoordJson -Path (Join-Path (Get-AosCoordDir) 'messages.json') -Value $store }
+        @($store['messages'].Values | Where-Object { $_['to'] -eq $Actor -and -not $_['acknowledged'] } |
+            ForEach-Object { [pscustomobject]$_ })
+    })
+}
+
+function Get-AosRunState([string]$Id) {
+    Assert-AosCoordId $Id
+    $path=Join-Path (Join-Path (Join-Path (Get-AosCoordDir) 'delegations') $Id) 'run.json'
+    $run=Read-AosCoordJsonFile $path
+    if ($null -ne $run -and ($run -isnot [Collections.IDictionary] -or $run['id'] -ne $Id)) { throw 'invalid active run record' }
+    return $run
+}
+
+function Set-AosRunState {
+    param([string]$Id, [string]$State, [string]$Text, [int]$ProcessId=0, [string]$ProcessStarted, [switch]$Cancel)
+    Assert-AosCoordId $Id
+    if ($State -notin @('preparing','reserved','running','waiting-input','suspect','done','failed','cancelled',
+        'accepted','rejected','busy','preflight-failed','timed-out','needs-inspection')) { throw 'invalid run state' }
+    return (Invoke-AosCoordLocked {
+        $run=Get-AosRunState $Id
+        if (-not $run) {
+            $actors=(Read-AosActorStore)['actors']
+            if (-not $actors[$Id] -and $State -in @('running','preparing','waiting-input','reserved')) { throw 'active run needs an admitted actor' }
+            $parent=''; if ($actors[$Id]) { $parent=[string]$actors[$Id]['parent'] }
+            $run=[ordered]@{ id=$Id; actor=$Id; parent=$parent; state=$State; text=''; sequence=0;
+                cancel_requested=$false; process_id=0; process_started=''; updated='' }
+        }
+        $run['state']=$State; $run['text']=$Text; $run['sequence']=[long]$run['sequence']+1; $run['updated']=Get-AosUtcStamp
+        if ($ProcessId -gt 0) { $run['process_id']=$ProcessId; $run['process_started']=$ProcessStarted }
+        if ($Cancel) { $run['cancel_requested']=$true }
+        Write-AosCoordJson -Path (Join-Path (Join-Path (Join-Path (Get-AosCoordDir) 'delegations') $Id) 'run.json') -Value $run
+        return [pscustomobject]$run
+    })
+}
+
+function Get-AosReadonlyInbox([string]$Actor) {
+    Assert-AosCoordId $Actor
+    $actors=(Read-AosActorStore)['actors']
+    if (-not $actors[$Actor]) { throw 'unknown inbox actor' }
+    $store=Read-AosMessageStore
+    @($store['messages'].Values | Where-Object { $_['to'] -eq $Actor -and -not $_['acknowledged'] } |
+        ForEach-Object { [pscustomobject]$_ })
+}
+
+function Receive-AosCoordEvent([string]$RunId, [string]$JsonLine) {
+    # Only completed vendor tool output is a transport. Assistant prose is never a request.
+    $event=$null
+    try { $event=ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $JsonLine -ErrorAction Stop) } catch { return }
+    $outputs=@()
+    if ($event['type'] -eq 'item.completed' -and $event['item']['type'] -eq 'command_execution') {
+        $outputs+= [string]$event['item']['aggregated_output']
+    }
+    elseif ($event['type'] -eq 'user' -and $event['message']) {
+        foreach ($block in @($event['message']['content'])) {
+            if ($block['type'] -ne 'tool_result') { continue }
+            if ($block['content'] -is [string]) { $outputs+=$block['content'] }
+            else { foreach ($part in @($block['content'])) { if ($part['type'] -eq 'text') { $outputs+=[string]$part['text'] } } }
+        }
+    }
+    foreach ($output in $outputs) {
+        foreach ($line in ($output -split '\r?\n')) {
+            if ($line -notmatch '^AOS_COORD_REQUEST:(\{.*\})$') { continue }
+            if ($line.Length -gt 12000) { throw 'coordination request too large' }
+            $request=ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $Matches[1] -ErrorAction Stop)
+            $run=Get-AosRunState $RunId
+            if (-not $run -or $run['actor'] -ne $RunId) { throw 'request has no supervised actor' }
+            switch ([string]$request['op']) {
+                { $_ -in @('send','question') } {
+                    $null=Send-AosTaskMessage -From $RunId -To ([string]$request['to']) -Text ([string]$request['text']) -ReplyTo ([string]$request['reply_to'])
+                    if ($request['op'] -eq 'question') {
+                        $null=Set-AosActorState -Id $RunId -State waiting-input -Text ([string]$request['text'])
+                        $null=Set-AosRunState -Id $RunId -State waiting-input -Text ([string]$request['text'])
+                    }
+                }
+                'ack' { $null=Get-AosTaskInbox -Actor $RunId -AckIds @($request['ack_ids']) }
+                'status' {
+                    if ($request['state'] -notin @('running','waiting-input')) { throw 'worker status must be running or waiting-input' }
+                    $null=Set-AosActorState -Id $RunId -State $request['state'] -Text ([string]$request['text'])
+                    $null=Set-AosRunState -Id $RunId -State $request['state'] -Text ([string]$request['text'])
+                }
+                default { throw 'unsupported worker coordination operation' }
+            }
+        }
+    }
+}
+
+function Read-AosClaudeResult([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { return $null }
+    $text=[IO.File]::ReadAllText($Path)
+    try {
+        $single=ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $text -ErrorAction Stop)
+        if ($single -is [Collections.IDictionary]) { return $single }
+    } catch { }
+    $result=$null
+    foreach ($line in ($text -split '\r?\n')) {
+        try {
+            $item=ConvertTo-AosHashtable (ConvertFrom-Json -InputObject $line -ErrorAction Stop)
+            if ($item['type'] -eq 'result') { $result=$item }
+        } catch { }
+    }
+    return $result
+}
+
+function Invoke-AosWorkerCoord([string[]]$Arguments) {
+    $actor=$env:AOS_ACTOR_ID
+    Assert-AosCoordId $actor
+    if ($env:AOS_RUN_ID -ne $actor) { throw 'worker actor/run identity mismatch' }
+    $sub=@($Arguments)[0]
+    $p=ConvertFrom-AosCliArgs @($Arguments | Select-Object -Skip 1) @() @('to','text','reply-to','state','seconds') @('ack')
+    if (@($p.Pos).Count) { throw 'worker identity is supplied by the host; omit positional actor ids' }
+    if ($sub -in @('inbox','wait')) {
+        $seconds=0; if ($p.Opts['seconds']) { $seconds=[int]$p.Opts['seconds'] }
+        if ($seconds -lt 0 -or $seconds -gt 45) { throw 'wait must be between 0 and 45 seconds' }
+        $deadline=[DateTime]::UtcNow.AddSeconds($seconds)
+        do {
+            $messages=@(Get-AosReadonlyInbox $actor)
+            if ($sub -eq 'inbox' -or $messages.Count -or [DateTime]::UtcNow -ge $deadline) { break }
+            Start-Sleep -Milliseconds 200
+        } while ($true)
+        [Console]::WriteLine((ConvertTo-Json -InputObject $messages -Depth 10 -Compress)); return
+    }
+    if ($sub -eq 'status' -and -not $p.Opts['state']) {
+        [Console]::WriteLine((ConvertTo-Json -InputObject (Get-AosRunState $actor) -Depth 10 -Compress)); return
+    }
+    if ($sub -notin @('send','question','ack','status')) { throw 'worker supports send|question|inbox|wait|ack|status only' }
+    $request=[ordered]@{ op=$sub; id=[guid]::NewGuid().ToString('N'); to=$p.Opts['to']; text=$p.Opts['text'];
+        reply_to=$p.Opts['reply-to']; state=$p.Opts['state']; ack_ids=@($p.Opts['ack']) }
+    [Console]::WriteLine(('AOS_COORD_REQUEST:' + (ConvertTo-Json -InputObject $request -Depth 10 -Compress)))
+}
+
 function Invoke-AosCoordControl([string[]]$Arguments) {
     $sub = @($Arguments)[0]
     $rest = @($Arguments | Select-Object -Skip 1)
-    $p = ConvertFrom-AosCliArgs $rest @() @('as','task','parent','kind','workers','handle','evidence','process','started','state','text') @()
+    $p = ConvertFrom-AosCliArgs $rest @() @('as','task','parent','kind','workers','handle','evidence','process','started','state','text','to','reply-to','seconds') @('ack')
     $id = @($p.Pos)[0]
     switch ($sub) {
         'reserve' {
@@ -218,12 +417,36 @@ function Invoke-AosCoordControl([string[]]$Arguments) {
         }
         'actors' { Write-Host (ConvertTo-Json -InputObject @(Get-AosActors) -Depth 10); $global:LASTEXITCODE=0 }
         'reconcile' { Write-Host (ConvertTo-Json -InputObject @(Resolve-AosActors) -Depth 10); $global:LASTEXITCODE=0 }
+        'send' {
+            $r=Send-AosTaskMessage -From $id -To $p.Opts['to'] -Text $p.Opts['text'] -ReplyTo $p.Opts['reply-to']
+            Write-Host (ConvertTo-Json -InputObject $r -Depth 10); $global:LASTEXITCODE=0
+        }
+        { $_ -in @('inbox','ack','wait') } {
+            $seconds=0; if ($p.Opts['seconds']) { $seconds=[int]$p.Opts['seconds'] }
+            if ($seconds -lt 0 -or $seconds -gt 45) { throw 'wait must be between 0 and 45 seconds' }
+            $deadline=[DateTime]::UtcNow.AddSeconds($seconds)
+            do {
+                $messages=@(Get-AosTaskInbox -Actor $id -AckIds @($p.Opts['ack']))
+                if ($sub -ne 'wait' -or $messages.Count -gt 0 -or [DateTime]::UtcNow -ge $deadline) { break }
+                Start-Sleep -Milliseconds 200
+            } while ($true)
+            Write-Host (ConvertTo-Json -InputObject $messages -Depth 10); $global:LASTEXITCODE=0
+        }
+        { $_ -in @('status','cancel') } {
+            $run=Get-AosRunState $id
+            $state=$p.Opts['state']; if (-not $state -and $run) { $state=[string]$run['state'] }
+            if (-not $state) { $state='running' }
+            if ($p.Opts['state'] -or $sub -eq 'cancel') {
+                $run=Set-AosRunState -Id $id -State $state -Text $p.Opts['text'] -Cancel:($sub -eq 'cancel')
+            }
+            Write-Host (ConvertTo-Json -InputObject $run -Depth 10); $global:LASTEXITCODE=0
+        }
         { $_ -in @('observe','finish') } {
             $state=$p.Opts['state']; if (-not $state) { if ($sub -eq 'finish') { $state='done' } else { $state='running' } }
             $r = Set-AosActorState -Id $id -State $state -Text $p.Opts['text'] -Handle $p.Opts['handle'] `
                 -Evidence $p.Opts['evidence'] -ProcessId ([int]$p.Opts['process']) -ProcessStarted $p.Opts['started']
             Write-Host (ConvertTo-Json -InputObject $r -Depth 10); $global:LASTEXITCODE=0
         }
-        default { throw 'usage: aos coord reserve|observe|finish|actors|reconcile' }
+        default { throw 'usage: aos coord reserve|observe|finish|actors|reconcile|send|inbox|ack|wait|status|cancel' }
     }
 }
