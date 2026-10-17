@@ -4310,7 +4310,7 @@ Describe 'cooperative messages' {
         [string]$sent.id | Should -Not -BeNullOrEmpty
         $inbox = InModuleScope aos { @(Get-AosTaskInbox -Actor child1) }
         @($inbox | Where-Object id -eq $sent.id).Count | Should -Be 1
-        (InModuleScope aos { @(Get-AosTaskInbox -Actor lead2) } | Where-Object id -eq $sent.id).Count | Should -Be 0
+        @((InModuleScope aos { @(Get-AosTaskInbox -Actor lead2) } | Where-Object id -eq $sent.id)).Count | Should -Be 0
     }
 
     It 'does not acknowledge messages when the recipient reads its inbox' {
@@ -4318,8 +4318,8 @@ Describe 'cooperative messages' {
         $available | Should -BeTrue
         if (-not $available) { return }
         $sent = InModuleScope aos { Send-AosTaskMessage -From lead1 -To child1 -Text 'Read twice.' }
-        (InModuleScope aos { @(Get-AosTaskInbox -Actor child1) } | Where-Object id -eq $sent.id).Count | Should -Be 1
-        (InModuleScope aos { @(Get-AosTaskInbox -Actor child1) } | Where-Object id -eq $sent.id).Count | Should -Be 1
+        @((InModuleScope aos { @(Get-AosTaskInbox -Actor child1) } | Where-Object id -eq $sent.id)).Count | Should -Be 1
+        @((InModuleScope aos { @(Get-AosTaskInbox -Actor child1) } | Where-Object id -eq $sent.id)).Count | Should -Be 1
         $sent.acknowledged | Should -BeFalse
     }
 
@@ -4332,7 +4332,7 @@ Describe 'cooperative messages' {
         $second = InModuleScope aos -Parameters @{ Id=$sent.id } { param($Id) @(Get-AosTaskInbox -Actor child1 -AckIds @($Id)) }
         @($first).Count | Should -Be 0
         @($second).Count | Should -Be 0
-        (InModuleScope aos { @(Get-AosTaskInbox -Actor child1) } | Where-Object id -eq $sent.id).Count | Should -Be 0
+        @((InModuleScope aos { @(Get-AosTaskInbox -Actor child1) } | Where-Object id -eq $sent.id)).Count | Should -Be 0
     }
 
     It 'does not let another actor acknowledge the intended recipient message' {
@@ -4341,7 +4341,7 @@ Describe 'cooperative messages' {
         if (-not $available) { return }
         $sent = InModuleScope aos { Send-AosTaskMessage -From lead1 -To child1 -Text 'Only child1 may acknowledge.' }
         InModuleScope aos -Parameters @{ Id=$sent.id } { param($Id) Get-AosTaskInbox -Actor lead1 -AckIds @($Id) | Out-Null }
-        (InModuleScope aos { @(Get-AosTaskInbox -Actor child1) } | Where-Object id -eq $sent.id).Count | Should -Be 1
+        @((InModuleScope aos { @(Get-AosTaskInbox -Actor child1) } | Where-Object id -eq $sent.id)).Count | Should -Be 1
         $sent.acknowledged | Should -BeFalse
     }
 
