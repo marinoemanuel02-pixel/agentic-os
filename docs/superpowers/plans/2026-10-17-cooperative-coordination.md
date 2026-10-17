@@ -219,7 +219,7 @@ docs/routing.md, config/claude/CLAUDE.md, README.md, append-only docs/decisions.
   content. A scripted echo question whose answer cannot change acceptance is insufficient.
 - [x] Integrate and run fixed checks; remove each contribution in disposable copies to prove the checks
   depend on both artifacts. Run the single-agent baseline and reverse-lead fixture with the same checks.
-- [ ] Record actual available settings, actor evidence, wall times and quota observations. Run a small
+- [x] Record actual available settings, actor evidence, wall times and quota observations. Run a small
   inline task showing that no imported skill forces another reviewer. Report unmeasured savings as unknown.
 
 ### Task 8: Independent review, integration and idempotent rollout
@@ -230,11 +230,11 @@ docs/routing.md, config/claude/CLAUDE.md, README.md, append-only docs/decisions.
 - [x] Record the author's findings, then request one blind Claude review of the whole change. Check its
   findings against code/tests, obtain independently authored failing tests for risky fixes, fix, and
   run `aos test`, notes tests, whitespace/ASCII checks and bootstrap dry run.
-- [ ] Fast-forward the approved design branch in the primary checkout after verifying claims and the
+- [x] Fast-forward the approved design branch in the primary checkout after verifying claims and the
   unchanged unrelated untracked file. Preserve both worktree commits and recorded evidence.
-- [ ] After the cross-vendor settings review, sync from the primary source with backups; run a second
+- [x] After the cross-vendor settings review, sync from the primary source with backups; run a second
   sync and compare managed files/links for idempotence. Run the live small-task policy check in a fresh
   agent session loading the synced rules. No cloud publish or push is required.
-- [ ] Mark the spec/ledger with observed completion and remaining capability limits. Report exactly
+- [x] Mark the spec/ledger with observed completion and remaining capability limits. Report exactly
   which checks passed, skipped or failed, and link implementation/evidence. Do not claim the goal
   complete while required cooperative execution, clarification or rollout checks remain unverified.

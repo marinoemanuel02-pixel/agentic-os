@@ -1,8 +1,8 @@
 # Cooperative coordination: validation report
 
-Date: 2026-10-17. Status: **final verification and rollout in progress.**
+Date: 2026-10-17. Status: **implemented, verified and synced.**
 Evidence lives in `.superpowers/sdd/2026-10-17-cooperative-coordination/` and the local delegation
-receipts. Pending checks below are not claimed as passed.
+receipts. Failed attempts and capability limits are recorded separately below.
 
 ## Source revision
 
@@ -50,6 +50,9 @@ The earlier `main..HEAD` review range included unrelated history and was correct
 - Local, untracked routing maps resolve task tiers to current account-supported options. Both CLI
   light routes were exercised successfully. Priority labels and list-price usage estimates were not
   treated as evidence of subscription savings.
+- A fresh native Codex session loaded the synced contract and coordination skill, chose light inline
+  execution for a small label edit, and used no extra workers or reviewers. Its first shell command
+  failed quoting before any write; the corrected command and independent host JSON check passed.
 
 ## Reviews (verdicts kept separate)
 
@@ -75,8 +78,17 @@ The earlier `main..HEAD` review range included unrelated history and was correct
 
 ## Rollout checks
 
-- Pending: fast-forward the original design branch, back up managed targets, run `aos sync`, compare
-  a second sync's content/timestamps/link targets, and check fresh-session small-task behavior.
+- Fast-forwarded the primary `codex/cooperative-coordination` branch through `c381b58`, preserving
+  implementation history. Git-normalized source blobs match the tested implementation worktree;
+  checkout line-ending conversion follows `.gitattributes`. The primary local smoke check passed.
+- Backed up managed targets to `~/.aos-backups/cooperative-coordination-20261017-204719/`, then ran
+  `aos sync` successfully. A second sync left compared contents, timestamps and link targets unchanged.
+  The Claude coordination link resolves to the primary shared skill; the generated Codex contract
+  contains automatic routing and the imported-process-default override.
+- The actual PowerShell profile retained its pre-sync hash and timestamp. The classic Windows
+  PowerShell profile remained absent, as both sync logs reported. The fresh policy check above passed.
+- Preserved ignored validation evidence in the primary checkout and archived both managed development
+  worktrees through the app's recoverable archive. Source branches remain available.
 - The earlier continuation failed on noninteractive tool permissions and then a subscription limit.
   It did not perform rollout; the resumed host completed the remaining work without weakening a
   sandbox or consuming reset credits.

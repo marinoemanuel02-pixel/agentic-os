@@ -1,6 +1,7 @@
 # Cooperation between Claude and Codex teams
 
-Date: 2026-10-17. Status: user approved; implementation is undergoing final review and rollout checks.
+Date: 2026-10-17. Status: implemented, verified and synced; see the
+[`validation report`](2026-10-17-cooperative-coordination-validation.md).
 Confirmed user decision: the starting agent chooses delegation and model tiers automatically within
 the existing subscriptions. That decision does not authorize additional API spending.
 Independent critique and the author's dispositions are recorded separately in
