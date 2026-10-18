@@ -37,8 +37,11 @@ Commands and boundaries are in [coordination tuning](../coordination-tuning.md).
   bounded timeouts, steering, cleanup and bounded lifecycle metadata.
 - Bootstrap preview: `powershell -NoProfile -ExecutionPolicy Bypass -File .\bootstrap.ps1 -DryRun`
   completed with exit zero. This is a preview, not a claim that every optional bootstrap item was installed.
-- `git diff --check` passed for the combined commits and working diff. Primary fast-forward is pending.
-- Managed rollout and second-sync byte/time/link comparison: pending.
+- `git diff --check` passed for the combined commits and working diff. The primary checkout was
+  fast-forwarded to the verified implementation; its unrelated handoff files remained byte-identical.
+- `aos sync -DryRun`, then two actual `aos sync` runs completed successfully. All 37 managed-target
+  records were identical after the second run, including SHA-256, modification time, existence and
+  link targets. No second-run configuration rewrite occurred.
 
 All test fixtures use isolated state, backups and temporary repositories rather than the real
 profile, registry or network. Live subscription checks below are separate from the offline suite.
@@ -119,8 +122,21 @@ The previous Codex release and independently hashed copy remain available; a che
 script is retained with the evidence. Claude's prior binary and settings were backed up before its
 official installer ran. No unrelated session was interrupted.
 
-The primary checkout integration, managed-target backups and idempotence results will be recorded here
-after final verification. An unrelated media handoff is preserved. Source worktrees are retained:
+Before applying the sync, 18 existing managed files had hash-verified backups. They were checked again
+immediately before application; none required refreshing. The first sync updated Claude settings and
+the generated quick profile and created six roles plus two capability records. App-owned Codex
+`config.toml`, existing MCP registrations and user links were unchanged. The second sync changed no
+snapshot record. Evidence includes `sync-preview.log`, both sync logs, `sync-ready.json`,
+`sync-first.json` and `sync-second.json`.
+
+The post-rollout checker confirmed existing vendor settings, permission entries and hook commands
+were preserved; each lifecycle event has exactly one owned hook pointing to the primary checkout.
+All six managed roles and both reviewed version records were present. App Server initialization and
+ChatGPT authentication passed again after rollout without starting a model turn. Both unrelated
+primary handoff files retained their original hashes. The temporary overnight continuation is being
+closed after the completed rollout and bounded audit.
+
+Source worktrees are retained:
 external archive recovery is unverified, so an archive is not treated as a replacement source.
 
 - The shared actor limit is cooperative across clients. Hooks observe after launch and cannot
