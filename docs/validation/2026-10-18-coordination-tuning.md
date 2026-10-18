@@ -141,11 +141,32 @@ external archive recovery is unverified, so an archive is not treated as a repla
 
 - The shared actor limit is cooperative across clients. Hooks observe after launch and cannot
   enforce machine-wide pre-launch admission. Unconfirmed child termination retains its allowance.
-- The real Claude native-child lifecycle route was not exercised: another live Claude session plus
-  this task's coordinator and a child would exceed the two-actor allowance. Protocol fixtures pass;
-  existing user work was left alone. Native Codex continuation was exercised.
+- The real Claude native-child lifecycle route was initially blocked by another live Claude session.
+  It passed in the follow-up below once capacity was available. Native Codex continuation was also
+  exercised. Neither check establishes a machine-wide admission guarantee.
 - CLI probes do not establish an already-running desktop harness's version or model. Unknown native
   settings and unavailable usage stay unknown. Role instructions alone do not create a sandbox.
 - Checkpoints preserve tracked material, not arbitrary ignored or untracked files. Uncertain state
   requires inspection and does not automatically release claims or restart a worker.
 - More representative paired evaluations are needed before claiming an optimal route or quota gain.
+
+## 2026-10-18 follow-up: real Claude child lifecycle
+
+On the user's resume request, the lead rechecked the completed plan, installed roles/settings,
+actor registry and checkout claims. No active actors or claims were recorded. The existing rollout
+checker passed again. A bounded read-only probe then used the ordinary dispatcher with one reserved
+Claude native child, within the two-actor allowance for that vendor.
+
+Receipt `20261018-105926-121f-claude-goal-verify-the-installed-clau` was accepted in 24 seconds.
+The CLI event log contains exactly one `Agent` call, selecting the installed `aos-explore` role.
+The real hooks emitted one start and one stop with the same session and child handle; the host
+correlated both signals and recorded the reserved child as done. No native inspection flag remained.
+The external unchanged-input verifier exited zero, and the fixture's Git status remained clean.
+Per-child model and effort were not exposed by the observed tool metadata and remain unknown.
+
+The external `native-child-live-evidence.json` records these checked identities and outcomes.
+This closes the earlier live Claude hook coverage gap. Runtime code and settings did not change;
+the full 504-test suites were not repeated for this documentation-only follow-up. The newly run
+checks were the live delegate and host verifier, lifecycle/event correlation, clean-fixture check,
+installed-rollout checker and diff whitespace check. Cooperative admission and unverified archive
+recovery remain the previously documented boundaries.
