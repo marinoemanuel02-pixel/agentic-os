@@ -2243,7 +2243,8 @@ function Resolve-AosExe([string]$Exe) {
 function Add-AosLiveOutput {
     param([string]$Path, [string]$Text, [DateTime]$Deadline)
     # A reader can briefly open the live log without write sharing on Windows. Retry only
-    # sharing/lock violations, within both a short local bound and the process deadline.
+    # open-time sharing violations, within a short bound and the process deadline. Do not
+    # retry byte-range lock errors: a write could have partially succeeded before that error.
     $until = [DateTime]::UtcNow.AddSeconds(1)
     if ($Deadline -lt $until) { $until = $Deadline }
     while ($true) {
@@ -2254,7 +2255,7 @@ function Add-AosLiveOutput {
         catch {
             $cause = $_.Exception.GetBaseException()
             $code = $cause.HResult -band 65535
-            if ($cause -isnot [IO.IOException] -or $code -notin @(32, 33) -or [DateTime]::UtcNow -ge $until) { throw }
+            if ($cause -isnot [IO.IOException] -or $code -ne 32 -or [DateTime]::UtcNow -ge $until) { throw }
             $pause = [int][Math]::Max(1, [Math]::Min(10, ($until - [DateTime]::UtcNow).TotalMilliseconds))
             Start-Sleep -Milliseconds $pause
         }
