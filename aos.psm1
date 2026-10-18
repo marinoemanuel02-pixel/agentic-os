@@ -2240,6 +2240,27 @@ function Resolve-AosExe([string]$Exe) {
     return $path
 }
 
+function Add-AosLiveOutput {
+    param([string]$Path, [string]$Text, [DateTime]$Deadline)
+    # A reader can briefly open the live log without write sharing on Windows. Retry only
+    # sharing/lock violations, within both a short local bound and the process deadline.
+    $until = [DateTime]::UtcNow.AddSeconds(1)
+    if ($Deadline -lt $until) { $until = $Deadline }
+    while ($true) {
+        try {
+            [IO.File]::AppendAllText($Path, $Text, $script:Utf8NoBom)
+            return
+        }
+        catch {
+            $cause = $_.Exception.GetBaseException()
+            $code = $cause.HResult -band 65535
+            if ($cause -isnot [IO.IOException] -or $code -notin @(32, 33) -or [DateTime]::UtcNow -ge $until) { throw }
+            $pause = [int][Math]::Max(1, [Math]::Min(10, ($until - [DateTime]::UtcNow).TotalMilliseconds))
+            Start-Sleep -Milliseconds $pause
+        }
+    }
+}
+
 function Start-AosProcessCore {
     # Native exe, UTF-8 output captured to strings, optional UTF-8 stdin, a hard timeout that kills
     # the process tree and reports whether the kill worked. IdleSeconds > 0 also kills it when stdout stays
@@ -2296,7 +2317,7 @@ function Start-AosProcessCore {
                 $lastOutput = [DateTime]::UtcNow
                 if ($LiveRunId) {
                     $chunk=New-Object string($buffer,0,$n)
-                    if ($liveWriter) { [IO.File]::AppendAllText($liveWriter,$chunk,$script:Utf8NoBom) }
+                    if ($liveWriter) { Add-AosLiveOutput -Path $liveWriter -Text $chunk -Deadline $deadline }
                     $pending+=$chunk
                     while (($newline=$pending.IndexOf("`n")) -ge 0) {
                         $line=$pending.Substring(0,$newline).TrimEnd("`r")
