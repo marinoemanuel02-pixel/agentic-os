@@ -71,6 +71,8 @@ these small cases cannot establish a general model ranking or quota saving.
 --dry-run` previews managed `aos-explore`, `aos-implement` and `aos-verify` role files. `aos sync`
 merges them into the vendor homes, backing up changes and preserving unmanaged files. Local routing
 data supplies model ids; no cloud model name is pinned in this repository.
+These probes describe the selected CLI. A running desktop or inherited native harness can differ;
+use its actual tool schema and observations before applying an override.
 
 Claude's installed capability record gates per-child effort and newer controls. Unsupported options
 are omitted. Codex native turn budgets are advisory; role instructions do not create a sandbox.

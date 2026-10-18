@@ -34,51 +34,52 @@ post-crash recovery. All five receive explicit tests below. Required settings re
 
 ### Task 1: Contracts and compact inputs
 
-- [ ] Have Claude author additive failing safety tests for missing/failed/stale dependencies, cycles,
+- [x] Have Claude author additive failing safety tests for missing/failed/stale dependencies, cycles,
   duplicate active/accepted attempts, forged receipts and removed-checkout release ownership.
-- [ ] Observe RED before implementation in both shells. Implement strict path/field/limit checks,
+- [x] Observe RED before implementation in both shells. Implement strict path/field/limit checks,
   canonical contract identity, locked attempt ownership, receipt-backed artifact acceptance and packets.
-- [ ] Wire optional `--contract` into the existing delegate; retain prose compatibility and host checks.
-- [ ] Run focused `aos test` in both shells and commit.
+- [x] Wire optional `--contract` into the existing delegate; retain prose compatibility and host checks.
+- [x] Run focused `aos test` in both shells and commit.
 
 ### Task 2: Measurements, reporting and evaluations
 
-- [ ] Write failing tests for unavailable-versus-zero usage, comparable route grouping, failures,
+- [x] Write failing tests for unavailable-versus-zero usage, comparable route grouping, failures,
   correction metadata and six evaluation case classes with fixed outcome checks.
-- [ ] Extend receipts with phase timing/observation, class and route/review rationale. Add reporting
+- [x] Extend receipts with phase timing/observation, class and route/review rationale. Add reporting
   and a bounded repeated-evaluation runner over clean fixtures using the existing delegation path.
-- [ ] Check deterministic reporting/manifest fixtures with no models; run focused `aos test`; commit.
+- [x] Check deterministic reporting/manifest fixtures with no models; run focused `aos test`; commit.
 
 ### Task 3: Native controls and signals
 
-- [ ] Test version gates, role rendering from local model maps, unsupported settings, duplicate
+- [x] Test version gates, role rendering from local model maps, unsupported settings, duplicate
   start/stop/resume events, unknown native identity, partial results and unchanged second sync.
-- [ ] Implement capability probes and managed roles, native allowance correlation and lifecycle hook.
+- [x] Implement capability probes and managed roles, native allowance correlation and lifecycle hook.
   Keep native sandbox inheritance explicit. Never infer observed model from requested settings.
-- [ ] Run PowerShell/Node fixtures and a bounded live native route; commit.
+- [x] Run PowerShell/Node fixtures and a bounded live native route; commit.
 
 ### Task 4: Optional App Server transport
 
-- [ ] Isolated native worker writes failing Node tests before its adapter, using installed schemas.
-- [ ] Cover auth refusal, exact main-turn result, split/duplicate streams, failed/partial completion,
+- [x] Isolated native worker writes failing Node tests before its adapter, using installed schemas.
+- [x] Cover auth refusal, exact main-turn result, split/duplicate streams, failed/partial completion,
   steering after turn end, cancellation acknowledgement and early EOF cleanup.
-- [ ] Integrate `--transport exec|app-server`, preserving current parser, result schema, scope checks
+- [x] Integrate `--transport exec|app-server`, preserving current parser, result schema, scope checks
   and receipts. Run fake-server tests and a live ChatGPT-authenticated read-only check; commit.
 
 ### Task 5: Recovery and verified procedures
 
-- [ ] Write failing tests for cold checkpoint continuation, changed revision/artifacts, active unknown
+- [x] Write failing tests for cold checkpoint continuation, changed revision/artifacts, active unknown
   workers, preservation manifest checks, evidence promotion and stale procedure exclusion.
-- [ ] Implement repository-scoped checkpoint/procedure commands, bounded retrieval into task packets,
+- [x] Implement repository-scoped checkpoint/procedure commands, bounded retrieval into task packets,
   retained failure evidence and claim release after removal with exact owner checks.
-- [ ] Run focused tests and a cold native continuation; commit.
+- [x] Run focused tests and a cold native continuation; commit.
 
 ### Task 6: Review, integration and rollout
 
-- [ ] Update shared coordination/handoff/catalog guidance and append the decision; document commands,
+- [x] Update shared coordination/handoff/catalog guidance and append the decision; document commands,
   capability limits and actual measurements without claiming unmeasured subscription savings.
-- [ ] Record author findings; obtain one blind cross-vendor final review before settings writes.
-  Reproduce material findings with independently authored tests, then fix and verify.
+- [x] Record author findings; obtain blind cross-vendor implementation review before settings writes.
+  Reproduce material findings with independently authored tests, then fix and verify. Record the
+  actual partial review scopes in the validation report; do not infer a complete independent audit.
 - [ ] Full `aos test`, Node tests, ASCII/parse, `git diff --check`, bootstrap dry run and live checks.
 - [ ] Fast-forward primary, preserve evidence, back up managed targets, sync twice and compare state.
   Keep source worktrees until recoverability is verified; report actual unsupported routes.

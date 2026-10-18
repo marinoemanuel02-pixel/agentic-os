@@ -1,7 +1,8 @@
 # Further coordination tuning: evidence and implementation backlog
 
 Checked: 2026-10-17. Local baseline: `f7f42f6`.
-Status: research completed; the additions below are proposals, not installed runtime features.
+Status at research time: proposals. All six were subsequently implemented; see the
+[validation record](../validation/2026-10-18-coordination-tuning.md) for checks and rollout status.
 
 The strongest next investment is a measured feedback loop around the existing coordinator, followed
 by enforceable dependencies and smaller handoff packets. Native lifecycle integration can then reduce

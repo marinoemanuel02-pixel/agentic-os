@@ -3,6 +3,19 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-18 - Adopt checked CLI maintenance releases and retain recovery sources
+
+- **Decision.** Adopt the recent first-party CLI maintenance releases after staging, integrity,
+  schema, authentication and live host checks. Keep the prior binaries and a checked rollback path.
+  The source-linked release selection is in `docs/research/2026-10-18-coordination-refinement.md`.
+- **Selection.** Claude uses its official exact-version installer. Codex uses the complete verified
+  native package and the official installer's atomic junction helper, with copied-file hashes and
+  relocated-release checks. The full installer was not run: its deferred-selection path was
+  incompatible with this standalone install and it also pruned staging directories.
+- **Limits.** CLI capabilities do not describe an already-running desktop harness. Unknown future
+  native schemas remain unsupported until checked. No additional framework or MCP service closed an
+  observed gap. Retain source worktrees because their external archive recovery is still unverified.
+
 ## 2026-10-18 - Measured coordination, checked inputs and recoverable continuation
 
 - **Decision.** Extend the existing dispatcher with optional checked contracts, bounded context,
