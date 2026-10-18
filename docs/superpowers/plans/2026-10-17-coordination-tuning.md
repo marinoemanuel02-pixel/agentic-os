@@ -80,6 +80,6 @@ post-crash recovery. All five receive explicit tests below. Required settings re
 - [x] Record author findings; obtain blind cross-vendor implementation review before settings writes.
   Reproduce material findings with independently authored tests, then fix and verify. Record the
   actual partial review scopes in the validation report; do not infer a complete independent audit.
-- [ ] Full `aos test`, Node tests, ASCII/parse, `git diff --check`, bootstrap dry run and live checks.
+- [x] Full `aos test`, Node tests, ASCII/parse, `git diff --check`, bootstrap dry run and live checks.
 - [ ] Fast-forward primary, preserve evidence, back up managed targets, sync twice and compare state.
   Keep source worktrees until recoverability is verified; report actual unsupported routes.

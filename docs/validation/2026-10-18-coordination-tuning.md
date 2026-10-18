@@ -28,14 +28,16 @@ Commands and boundaries are in [coordination tuning](../coordination-tuning.md).
 
 ## Final checks
 
-- Final complete `aos test`: pending final combined run. This also checks PowerShell parsing and
-  ASCII compatibility and runs the Node protocol tests through Pester in each shell.
-- Node protocol checks: 31 passing tests in the adapter and lifecycle suites before the final
-  PowerShell-only log fix. They cover protocol identity, authentication refusal, partial completion,
+- Final complete `aos test`: 504 passed, zero failed and zero skipped in each of Windows PowerShell
+  5.1 and PowerShell 7 on the final runtime. Parsing and ASCII checks passed. The complete evidence
+  is `full-release-504.log`; the runtime was frozen during this run.
+- Separate `node --test tools/codex-app-server.test.mjs tools/coordination-hook.test.mjs`: 31 passed,
+  zero failed or skipped. The same suites also pass through Pester in each shell.
+  They cover protocol identity, authentication refusal, partial completion,
   bounded timeouts, steering, cleanup and bounded lifecycle metadata.
 - Bootstrap preview: `powershell -NoProfile -ExecutionPolicy Bypass -File .\bootstrap.ps1 -DryRun`
   completed with exit zero. This is a preview, not a claim that every optional bootstrap item was installed.
-- Whitespace and source integration: pending final diff check and fast-forward.
+- `git diff --check` passed for the combined commits and working diff. Primary fast-forward is pending.
 - Managed rollout and second-sync byte/time/link comparison: pending.
 
 All test fixtures use isolated state, backups and temporary repositories rather than the real
@@ -44,7 +46,7 @@ profile, registry or network. Live subscription checks below are separate from t
 ## Independently authored regressions and failures retained
 
 Claude authored the initial contract and recovery safety tests and follow-up regressions. The lead
-observed their failures before fixes and checked their passes. Existing measured outcome assertions
+observed failures for material regressions before their fixes and checked their passes. Existing measured outcome assertions
 were not weakened. Two additional defects surfaced during integration:
 
 - Git's collapsed untracked-directory status rejected an otherwise valid scoped result. Two real
@@ -54,7 +56,7 @@ were not weakened. Two additional defects surfaced during integration:
   passed 499 tests in Windows PowerShell but failed one of 499 in PowerShell 7 on that sharing
   violation. Three separately authored regressions failed in both shells before the helper existed,
   then passed with the fix. The original live-process test also passed unchanged in both shells.
-  Retries apply only to sharing/lock violations and stop at a short local bound or process deadline;
+  Retries apply only to open-time sharing violations and stop at a short bound or process deadline;
   permanent errors fail promptly and a chunk is appended once.
 
 Earlier combined runs passed 498 tests per shell before the later additions. They are not the final
