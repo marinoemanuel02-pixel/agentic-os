@@ -24,6 +24,12 @@ For editing existing footage from transcripts, use local `tools/footage/footage.
 local model, searches timestamped words, drafts cuts and renders an inspected plan. It preserves
 source bytes and refuses stale inputs. Remotion below remains for authored motion design.
 
+For timestamped visual evidence, use the shared `watch` skill through `tools/stack.py watch`;
+this route forces local extraction and no cloud speech fallback. Optional Kdenlive project control,
+OpenMontage board/tools, OpenDesign exports and the VoiceStudio app are documented in
+`docs/stack-additions.md` in the setup repo. Consult its actual tested limits before promising a render
+or an installed speech engine. Existing FFmpeg/Whisper/Remotion remain available.
+
 | Tool | Typical use |
 |---|---|
 | `ffmpeg` / `ffprobe` (full build, NVENC present) | `ffprobe -v error -show_format -show_streams -of json in.mp4`; fast cut `ffmpeg -ss 10 -to 20 -i in.mp4 -c copy out.mp4` snaps to keyframes (10 s asked, 10.07 s got); exact cut re-encodes: `ffmpeg -ss 10 -i in.mp4 -t 10 -c:v libx264 -crf 20 -c:a aac out.mp4`. YouTube loudness: `-af loudnorm=I=-14:TP=-1.5:LRA=11 -ar 48000` (one pass landed at -14.0 LUFS, -1.5 dBFS); measure with `-af ebur128=peak=true -f null -` |

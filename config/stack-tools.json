@@ -1,0 +1,67 @@
+{
+  "tools": {
+    "anydoc": {
+      "purpose": "Local document-to-Markdown conversion; hosted OCR disabled",
+      "command": ["{node}", "{home}/.aos/tools/stack-node/node_modules/@firecrawl/anydoc/cli.js"]
+    },
+    "repomix": {
+      "purpose": "Explicitly selected repository exports",
+      "command": ["{node}", "{home}/.aos/tools/stack-node/node_modules/repomix/bin/repomix.cjs"]
+    },
+    "rtk": {
+      "purpose": "OSS command-output filters; no automatic rewrite hook",
+      "command": ["{home}/.aos/tools/stack/rtk-oss/rtk.exe"]
+    },
+    "watch": {
+      "purpose": "Bounded local video frames and native captions; reuse footage for offline ASR",
+      "command": ["{python}", "{home}/.aos/tools/stack/watch/source/skills/watch/scripts/watch.py"],
+      "fixed_args": ["--engine", "local", "--no-whisper", "--max-frames", "30"]
+    },
+    "ui-ux": {
+      "purpose": "Offline design and UX reference search",
+      "command": ["{python}", "{repo}/agents-home/skills/ui-ux-pro-max/scripts/search.py"]
+    },
+    "open-design": {
+      "purpose": "OpenDesign Agent Kit exports and artifact checks",
+      "command": ["{node}", "{home}/.aos/tools/stack-node/node_modules/@feimacode/open-design-agent-kit/out/index.js"]
+    },
+    "graphify": {
+      "purpose": "On-demand code graph CLI; no global hooks or MCP",
+      "command": ["{home}/.aos/uv/tools/graphifyy/Scripts/graphify.exe"],
+      "env": {"GRAPHIFY_BACKEND": "none"}
+    },
+    "serena": {
+      "purpose": "On-demand semantic navigation; use tools interface and a scoped project",
+      "command": ["{home}/.aos/uv/tools/serena-agent/Scripts/serena.exe"],
+      "env": {"SERENA_HOME": "{home}/.aos/tools/stack/serena", "UV_CACHE_DIR": "{home}/.aos/uv/cache", "npm_config_cache": "{home}/.aos/npm/cache"}
+    },
+    "kdenlive": {
+      "purpose": "CLI-Anything Kdenlive project harness",
+      "command": ["{home}/.aos/uv/tools/cli-anything-kdenlive/Scripts/cli-anything-kdenlive.exe"],
+      "env": {"PATH": "{home}/AppData/Local/Programs/Kdenlive/bin;{path}"}
+    },
+    "openmontage": {
+      "purpose": "OpenMontage local storyboard and production tools",
+      "command": ["{home}/.aos/venvs/openmontage/Scripts/python.exe", "-m", "backlot"],
+      "cwd": "{home}/.aos/tools/stack/openmontage/source"
+    },
+    "composio": {
+      "purpose": "Python with the Composio SDK; a specific connector still needs account setup",
+      "command": ["{home}/.aos/venvs/composio/Scripts/python.exe"]
+    },
+    "voicestudio": {
+      "purpose": "Installed desktop app; select a home-folder runtime before engine setup",
+      "command": ["{home}/.aos/tools/stack/voicestudio/app/VoiceStudio.exe"],
+      "env": {"OMNIVOICE_DATA_DIR": "{home}/.aos/tools/stack/voicestudio/data"}
+    },
+    "omniroute": {
+      "purpose": "Isolated router CLI; provider activation and server startup require reviewed setup",
+      "command": ["{node}", "{home}/.aos/tools/omniroute-3.8.51/node_modules/omniroute/bin/omniroute.mjs"],
+      "env": {"DATA_DIR": "{home}/.aos/tools/stack/omniroute/data", "OMNIROUTE_SERVER_HOST": "127.0.0.1", "NO_UPDATE_NOTIFIER": "1"}
+    },
+    "omniroute-worker": {
+      "purpose": "Staged text-only additional-provider candidate; reviewed activation and scoped key required",
+      "command": ["{python}", "{repo}/tools/omniroute_worker.py"]
+    }
+  }
+}

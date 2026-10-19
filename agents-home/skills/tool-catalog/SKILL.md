@@ -18,6 +18,9 @@ subscriptions (Claude and ChatGPT).
 | `second-opinion` | independent review by the other vendor before risky changes |
 | `inbox` | saving a note or link to the global Inbox, filing Inbox items into vaults (with confirmation) |
 | `media-tools` | ffmpeg, ImageMagick, pandoc, yt-dlp, Whisper, DuckDB, Playwright, Blender, Inkscape, Kdenlive, GIMP, OBS from the command line |
+| `watch` | bounded local video frames with source-relative timestamps; view frames before visual claims |
+| `frontend-design` | brief-grounded frontend design direction, implementation and visual critique |
+| `ui-ux-pro-max` | offline searchable UX, accessibility, style and design-system reference data |
 | `penpot-local` | Penpot design work through its local MCP server, started only when needed |
 | `research` | cited web research with the agents' own free web search and fetch |
 | `caveman` | opt-in terse replies, only on an explicit `/caveman` (about a quarter fewer visible tokens in a 3-prompt Haiku test; total tokens did not fall); not for reports or prose |
@@ -55,6 +58,20 @@ export; use the `media-tools` skill's footage reference. Never downloads a model
 Claude's optional native `aos-status` mod lives in `plugins/aos-status`. Its `/aos-status` command
 shows bounded local coordination records and measured context without model calls or writes.
 Persistent installation requires the project's independent review; see that directory's README.
+
+Optional stack additions use `python tools/stack.py <tool> ...` from this repo; `list` shows routes.
+AnyDoc converts local documents (hosted OCR refused); Repomix exports selected files; RTK OSS
+filters explicit commands while preserving their failures. Graphify uses code-only extraction with
+LLM backends disabled. Serena is on demand: use the single-project, navigation-only context in
+`config/serena-readonly.yml`, tools interface, stdio transport and disabled web dashboard. No global
+MCP registration is needed. See `docs/stack-additions.md` for exact commands and verification limits.
+
+The same launcher reaches the CLI-Anything Kdenlive harness, OpenMontage local board, OpenDesign
+Agent Kit exports, VoiceStudio app and isolated Composio Python environment. Paid/cloud examples
+in upstream documentation are not permission to use them. VoiceStudio still needs a chosen engine;
+Composio still needs a specific connector/account. OmniRoute is installed separately for additional
+provider workers; the launcher enables help/version pending the required activation review. It does
+not add quota until an eligible provider is connected. Native subscription clients remain the normal routes.
 
 ## Other agents
 

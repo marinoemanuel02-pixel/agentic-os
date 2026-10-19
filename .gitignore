@@ -7,3 +7,4 @@ agents-home/skills/synced/
 .env
 *.aos-bak
 HANDOFF.md
+__pycache__/

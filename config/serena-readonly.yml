@@ -1,0 +1,11 @@
+description: On-demand navigation in one explicitly selected project
+prompt: Use symbol evidence from the selected project; report missing or stale results.
+fixed_tools:
+  - get_symbols_overview
+  - find_symbol
+  - find_referencing_symbols
+  - search_for_pattern
+  - read_file
+  - list_dir
+single_project: true
+structured_tool_output: true

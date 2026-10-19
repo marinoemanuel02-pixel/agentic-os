@@ -5212,6 +5212,10 @@ Describe 'selected stack additions' {
         & python -m unittest discover -s (Join-Path $PSScriptRoot '..\tools\footage') -p 'test_*.py' -v
         $LASTEXITCODE | Should -Be 0
     }
+    It 'runs the optional tool launcher controls without installed services' {
+        & python -m unittest discover -s $PSScriptRoot -p 'test_stack_launcher.py' -v
+        $LASTEXITCODE | Should -Be 0
+    }
 }
 
 }
