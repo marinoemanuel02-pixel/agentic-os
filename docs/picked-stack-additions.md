@@ -38,6 +38,11 @@ Claude's observed weekly quota currently blocks that review. Source, tests and n
 are ready; persistent activation awaits that review or an explicit operator exception. No credentials,
 authentication settings or global permission changes are needed for the mod.
 
+The selected pilot is delivered as a local plugin directory. From the setup repository, start a
+session with `claude --plugin-dir ./plugins/aos-status`, then enter `/aos-status`. Persistent
+autoloading is optional and remains staged; no exception to the configuration-review rule is
+assumed from approval to add the pilot.
+
 ## Continuation after a quota failure
 
 1. Preserve the failed receipt and observed limit/reset. Inspect partial changes and in-flight
@@ -62,3 +67,23 @@ vendor continuation was not run while Claude remains quota-limited.
 
 Logs and generated fixtures are retained under `~/.aos/research/picked-stack-20261019`. The
 implementation plan records ownership, acceptance checks and deployment boundaries.
+
+## Verification and limits
+
+- Complete `aos test`: 526 passed, zero failures/skips under Windows PowerShell 5.1 (447.9 seconds)
+  and PowerShell 7 (508.37 seconds), overall exit 0. Static parsing and ASCII checks passed.
+  Runtime/test/plugin files matched `4eadb08` throughout; later changes are documentation only.
+- New continuation controls were observed failing first; all 11 then passed. Two Pester integration
+  checks also execute the five status-parser controls and 16 offline footage unittests. The native
+  mod kit separately passed four UI/command tests; strict plugin/marketplace validation passed.
+- Four edited skill frontmatter validators and `git diff --check` passed. No existing measured
+  assertion was changed or removed.
+- Full bootstrap previews in both shells stalled at the pre-existing local agent-model check and
+  were interrupted. Native output capture reproduced it. They are incomplete, not successful
+  previews. Ollama's API and direct list/show commands answered bounded probes; the cause remains
+  unresolved. No unrelated bootstrap/model code was changed. The narrower native plugin installation
+  preflight passed in its isolated configuration fixture.
+- The worker's duplicate baseline test run was stopped to avoid concurrent full suites; its partial
+  output is not credited. Only the combined complete run above establishes full-suite coverage.
+- Live Desktop rendering, normal-profile mod installation and live cross-vendor quota continuation
+  remain unverified. The code does not claim those outcomes from fixtures or version support.
