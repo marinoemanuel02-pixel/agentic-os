@@ -5096,4 +5096,113 @@ Describe 'research evaluation regressions' {
 
 }
 
+Describe 'selected stack additions' {
+    BeforeEach {
+        $beforeContinuationCoord=$env:AOS_COORD
+        $env:AOS_COORD=Join-Path $caseRoot 'coord'
+        $continuationRepo=New-TestFolder (Join-Path $caseRoot 'repo')
+        Write-TestFile (Join-Path $continuationRepo 'input.txt') 'stable'
+        & git -C $continuationRepo init -q
+        & git -C $continuationRepo add -- input.txt
+        & git -C $continuationRepo -c user.name=fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false -c core.hooksPath=.no-hooks commit -qm base
+        InModuleScope aos -Parameters @{Repo=$continuationRepo} {
+            param($Repo)
+            $null=Save-AosCheckpoint -Id quota-handoff -Repo $Repo -NextCheck 'Run the original verifier before further edits'
+            Mock Get-AosCapacity {
+                return [ordered]@{
+                    claude=[pscustomobject]@{state='limited';remaining=0;resets=[datetime]::UtcNow.AddHours(1);reported=[datetime]::UtcNow;source='fixture'}
+                    codex=[pscustomobject]@{state='ok';remaining=47;resets=[datetime]::UtcNow.AddHours(2);reported=[datetime]::UtcNow;source='fixture'}
+                }
+            }
+        }
+    }
+    AfterEach { $env:AOS_COORD=$beforeContinuationCoord }
+
+    It 'checks a cold quota handoff without altering coordination state or launching a model' {
+        $beforeState=Get-TestTreeState $env:AOS_COORD
+        $result=InModuleScope aos -Parameters @{Repo=$continuationRepo} {
+            param($Repo)
+            Mock Invoke-AosDelegate { throw 'A readiness check must never dispatch' }
+            Test-AosQuotaContinuation -CheckpointId quota-handoff -Repo $Repo -FromVendor claude -ToVendor codex
+        }
+        $result.Ready | Should -BeTrue
+        $result.NextCheck | Should -Be 'Run the original verifier before further edits'
+        $result.TargetCapacity.remaining | Should -Be 47
+        (Get-TestTreeState $env:AOS_COORD) | Should -Be $beforeState
+    }
+    It 'exposes the check through the public CLI and returns a successful exit code' {
+        $result=aos coord continuation check quota-handoff --repo $continuationRepo --from claude --to codex 6>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0
+        ($result | ConvertFrom-Json).Ready | Should -BeTrue
+    }
+    It 'blocks unresolved live work without releasing the actor' {
+        InModuleScope aos -Parameters @{Repo=$continuationRepo} {
+            param($Repo)
+            $null=Reserve-AosActor -Id still-running -Vendor claude -Task quota-work -Kind lead
+            $result=Test-AosQuotaContinuation -CheckpointId quota-handoff -Repo $Repo -FromVendor claude -ToVendor codex
+            $result.Ready | Should -BeFalse
+            ($result.Reasons -join ';') | Should -Match 'active actors'
+            @((Get-AosActors) | Where-Object {$_.id -eq 'still-running'})[0].state | Should -Be 'reserved'
+        }
+    }
+    It 'blocks changed source bytes and a damaged checkpoint snapshot' {
+        Write-TestFile (Join-Path $continuationRepo 'input.txt') 'changed'
+        InModuleScope aos -Parameters @{Repo=$continuationRepo} {
+            param($Repo)
+            $result=Test-AosQuotaContinuation -CheckpointId quota-handoff -Repo $Repo -FromVendor claude -ToVendor codex
+            $result.Ready | Should -BeFalse
+            ($result.Reasons -join ';') | Should -Match 'manifest changed'
+        }
+        Write-TestFile (Join-Path $continuationRepo 'input.txt') 'stable'
+        $blob=Get-ChildItem -LiteralPath (Join-Path $env:AOS_COORD 'checkpoints\quota-handoff.files') -File | Select-Object -First 1
+        Write-TestFile $blob.FullName 'damaged'
+        InModuleScope aos -Parameters @{Repo=$continuationRepo} {
+            param($Repo)
+            (Test-AosQuotaContinuation -CheckpointId quota-handoff -Repo $Repo -FromVendor claude -ToVendor codex).Ready | Should -BeFalse
+        }
+    }
+    It 'blocks limited stale reset or unknown target capacity' -ForEach @('limited','stale','reset','unknown') {
+        InModuleScope aos -Parameters @{Repo=$continuationRepo;State=$_} {
+            param($Repo,$State)
+            $script:continuationTargetFixture=$State
+            Mock Get-AosCapacity {
+                return [ordered]@{
+                    claude=[pscustomobject]@{state='limited';remaining=0}
+                    codex=[pscustomobject]@{state=$script:continuationTargetFixture;remaining=0}
+                }
+            }
+            $result=Test-AosQuotaContinuation -CheckpointId quota-handoff -Repo $Repo -FromVendor claude -ToVendor codex
+            $result.Ready | Should -BeFalse
+            ($result.Reasons -join ';') | Should -Match 'target capacity'
+        }
+    }
+    It 'does not turn a previously expired source limit into a current quota failure' {
+        InModuleScope aos -Parameters @{Repo=$continuationRepo} {
+            param($Repo)
+            Mock Get-AosCapacity { return [ordered]@{claude=[pscustomobject]@{state='reset';remaining=0};codex=[pscustomobject]@{state='ok';remaining=47}} }
+            $result=Test-AosQuotaContinuation -CheckpointId quota-handoff -Repo $Repo -FromVendor claude -ToVendor codex
+            $result.Ready | Should -BeFalse
+            ($result.Reasons -join ';') | Should -Match 'source quota'
+        }
+    }
+    It 'allows a measured low but nonzero target allowance without claiming unlimited capacity' {
+        InModuleScope aos -Parameters @{Repo=$continuationRepo} {
+            param($Repo)
+            Mock Get-AosCapacity { return [ordered]@{claude=[pscustomobject]@{state='limited';remaining=0};codex=[pscustomobject]@{state='low';remaining=12}} }
+            $result=Test-AosQuotaContinuation -CheckpointId quota-handoff -Repo $Repo -FromVendor claude -ToVendor codex
+            $result.Ready | Should -BeTrue
+            $result.TargetCapacity.remaining | Should -Be 12
+        }
+    }
+    It 'rejects identical or unsupported vendors and exposes a blocked CLI exit' {
+        InModuleScope aos -Parameters @{Repo=$continuationRepo} {
+            param($Repo)
+            { Test-AosQuotaContinuation -CheckpointId quota-handoff -Repo $Repo -FromVendor codex -ToVendor codex } | Should -Throw
+            { Test-AosQuotaContinuation -CheckpointId quota-handoff -Repo $Repo -FromVendor other -ToVendor codex } | Should -Throw
+        }
+        $null=aos coord continuation check quota-handoff --repo $continuationRepo --from codex --to claude 6>&1
+        $LASTEXITCODE | Should -Be 1
+    }
+}
+
 }
