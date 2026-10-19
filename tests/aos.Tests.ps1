@@ -4951,4 +4951,149 @@ Describe 'coordination tuning events' {
         }
     }
 }
+
+Describe 'research evaluation regressions' {
+    BeforeAll {
+        $researchRoot = Split-Path -Parent $PSScriptRoot
+        $compareTool = Join-Path $researchRoot 'tools\coordination-compare.mjs'
+        function New-ComparisonReport {
+            param([string]$Root,[string]$Id,[string]$Vendor,[double]$Seconds,$Integration,$Review,$Corrections)
+            $receiptPath = Join-Path $Root ($Id + '\receipt.json')
+            $receipt = [ordered]@{id=$Id;task_id=('eval-'+$Id);task_class='implementation';vendor=$Vendor;tier='light';transport='exec';
+                accepted=$true;outcome='accepted';seconds=$Seconds;corrections=$Corrections;verify=@{exit_code=0};
+                phase_seconds=@{integration=$Integration;review=$Review;waiting=2};observed_model=$null;observed_effort=$null}
+            Write-TestFile $receiptPath (ConvertTo-Json $receipt -Depth 12)
+            $report = [ordered]@{version=1;mode='execute';trials=@([ordered]@{id=('eval-'+$Id);case_id='implementation';task_class='implementation';
+                accepted=$true;outcome='accepted';receipt_ref=$receiptPath;
+                input_identity=@{baseline_tree=('a'*40);task_sha256=('b'*64);grader_sha256=('c'*64)};
+                requested_route=@{vendor=$Vendor;tier='light';workers=0;transport='exec'};
+                measurements=@{elapsed_seconds=1;corrections=0;phase_seconds=@{integration=0;review=0}}})}
+            $path = Join-Path $Root ($Id+'.json')
+            Write-TestFile $path (ConvertTo-Json $report -Depth 15)
+            return $path
+        }
+        function Invoke-Comparison([string[]]$Paths) {
+            $previousPreference=$ErrorActionPreference
+            try { $ErrorActionPreference='Continue'; $text = & node $compareTool @Paths 2>&1; $comparisonExit=$LASTEXITCODE }
+            finally { $ErrorActionPreference=$previousPreference }
+            $comparisonExit | Should -Be 0
+            return (($text | Out-String) | ConvertFrom-Json)
+        }
+    }
+    It 'records stable fixture task and external grader identity in prepared trials' {
+        . (Join-Path $researchRoot 'tools\coordination-eval.ps1') -OutputRoot $caseRoot
+        $first = Invoke-AosCoordinationEval -OutputRoot (Join-Path $TestDrive ('rf'+[guid]::NewGuid().ToString('N').Substring(0,4))) -Case mechanical
+        $second = Invoke-AosCoordinationEval -OutputRoot (Join-Path $TestDrive ('rs'+[guid]::NewGuid().ToString('N').Substring(0,4))) -Case mechanical
+        $a=$first.trials[0];$b=$second.trials[0]
+        $a.input_identity.baseline_tree | Should -Match '^[a-fA-F0-9]{40,64}$'
+        $a.input_identity.task_sha256 | Should -Match '^[a-fA-F0-9]{64}$'
+        $a.input_identity.grader_sha256 | Should -Match '^[a-fA-F0-9]{64}$'
+        ($a.input_identity | ConvertTo-Json -Compress) | Should -BeExactly ($b.input_identity | ConvertTo-Json -Compress)
+        $a.requested_route.vendor | Should -Be 'codex'
+        $a.requested_route.workers | Should -Be 0
+    }
+    It 'compares known repair effort from live host receipts without double-counting waiting' {
+        $fast=New-ComparisonReport $caseRoot fast codex 10 100 5 2
+        $slow=New-ComparisonReport $caseRoot slow claude 25 0 0 0
+        $result=Invoke-Comparison @($fast,$slow)
+        $pair=$result.comparisons[0]
+        $pair.comparable_inputs | Should -BeTrue
+        $pair.complete_effort | Should -BeTrue
+        $pair.attempts[0].known_total_seconds | Should -Be 115
+        $pair.attempts[1].known_total_seconds | Should -Be 25
+        $pair.attempts[0].corrections | Should -Be 2
+        $pair.attempts[0].observed_model | Should -BeNullOrEmpty
+        $result.subscription_savings | Should -BeNullOrEmpty
+        $result.routing_change | Should -BeNullOrEmpty
+    }
+    It 'retains unknown repair measurements instead of turning them into zero' {
+        $a=New-ComparisonReport $caseRoot first codex 10 $null $null $null
+        $b=New-ComparisonReport $caseRoot second claude 25 0 0 0
+        $pair=(Invoke-Comparison @($a,$b)).comparisons[0]
+        $pair.comparable_inputs | Should -BeTrue
+        $pair.complete_effort | Should -BeFalse
+        $pair.attempts[0].known_total_seconds | Should -BeNullOrEmpty
+        $pair.attempts[0].corrections | Should -BeNullOrEmpty
+    }
+    It 'refuses comparison when a grader fingerprint changed' {
+        $a=New-ComparisonReport $caseRoot first codex 10 0 0 0
+        $b=New-ComparisonReport $caseRoot second claude 25 0 0 0
+        $report=Get-Content -LiteralPath $b -Raw | ConvertFrom-Json
+        $report.trials[0].input_identity.grader_sha256='d'*64
+        Write-TestFile $b (ConvertTo-Json $report -Depth 15)
+        $pair=(Invoke-Comparison @($a,$b)).comparisons[0]
+        $pair.comparable_inputs | Should -BeFalse
+        $pair.complete_effort | Should -BeFalse
+        ($pair.reasons -join ' ') | Should -Match 'different input'
+    }
+    It 'retains a rejected attempt and does not trust a passing worker or stale report snapshot' {
+        $a=New-ComparisonReport $caseRoot first codex 10 0 0 0
+        $b=New-ComparisonReport $caseRoot second claude 25 0 0 0
+        $receiptPath=Join-Path $caseRoot 'first\receipt.json'
+        $receipt=Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+        $receipt.accepted=$false;$receipt.outcome='rejected';$receipt.verify.exit_code=9
+        Write-TestFile $receiptPath (ConvertTo-Json $receipt -Depth 12)
+        $pair=(Invoke-Comparison @($a,$b)).comparisons[0]
+        $pair.attempts.Count | Should -Be 2
+        $pair.attempts[0].accepted | Should -BeFalse
+        $pair.attempts[0].outcome | Should -Be 'rejected'
+        $pair.complete_effort | Should -BeFalse
+        ($pair.reasons -join ' ') | Should -Match 'snapshot'
+    }
+    It 'reports a missing host receipt as incomplete evidence' {
+        $a=New-ComparisonReport $caseRoot first codex 10 0 0 0
+        $b=New-ComparisonReport $caseRoot second claude 25 0 0 0
+        Remove-Item -LiteralPath (Join-Path $caseRoot 'first\receipt.json')
+        $pair=(Invoke-Comparison @($a,$b)).comparisons[0]
+        $pair.comparable_inputs | Should -BeFalse
+        $pair.complete_effort | Should -BeFalse
+        ($pair.reasons -join ' ') | Should -Match 'receipt'
+    }
+    It 'saves a checkpoint through the public CLI with the optional task list omitted' {
+        $repo=New-TestFolder (Join-Path $caseRoot 'repo')
+        Write-TestFile (Join-Path $repo 'input.txt') 'stable'
+        & git -C $repo init -q
+        & git -C $repo add -- input.txt
+        & git -C $repo -c user.name=fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false -c core.hooksPath=.no-hooks commit -qm base
+        $savedCoord=$env:AOS_COORD
+        try {
+            $env:AOS_COORD=Join-Path $caseRoot 'checkpoint-state'
+            $json=(aos coord checkpoint save optional-tasks --repo $repo --next-check 'Read input.txt' 6>&1 | Out-String)
+            $LASTEXITCODE | Should -Be 0
+            $checkpoint=$json | ConvertFrom-Json
+            @($checkpoint.tasks).Count | Should -Be 0
+            @($checkpoint.artifacts).Count | Should -Be 1
+            Test-Path -LiteralPath (Join-Path $env:AOS_COORD 'checkpoints\optional-tasks.json') | Should -BeTrue
+        }
+        finally { $env:AOS_COORD=$savedCoord }
+    }
+    It 'still rejects an explicitly empty task identifier in a checkpoint request' {
+        $repo=New-TestFolder (Join-Path $caseRoot 'repo')
+        Write-TestFile (Join-Path $repo 'input.txt') 'stable'
+        & git -C $repo init -q
+        & git -C $repo add -- input.txt
+        & git -C $repo -c user.name=fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false -c core.hooksPath=.no-hooks commit -qm base
+        InModuleScope aos -Parameters @{Repo=$repo;Coord=(Join-Path $caseRoot 'coord')} {
+            param($Repo,$Coord)
+            $env:AOS_COORD=$Coord
+            { Save-AosCheckpoint -Id explicit -Repo $Repo -TaskIds @('') -NextCheck 'check' } | Should -Throw
+        }
+    }
+    It 'saves an unassociated checkpoint when the helper task argument is omitted' {
+        $repo=New-TestFolder (Join-Path $caseRoot 'repo')
+        Write-TestFile (Join-Path $repo 'input.txt') 'stable'
+        & git -C $repo init -q
+        & git -C $repo add -- input.txt
+        & git -C $repo -c user.name=fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false -c core.hooksPath=.no-hooks commit -qm base
+        InModuleScope aos -Parameters @{Repo=$repo;Coord=(Join-Path $caseRoot 'coord')} {
+            param($Repo,$Coord)
+            $env:AOS_COORD=$Coord
+            $saved=Save-AosCheckpoint -Id unattached -Repo $Repo -NextCheck 'Read input.txt'
+            @($saved.tasks).Count | Should -Be 0
+            (Test-AosCheckpoint -Id unattached -Repo $Repo).Valid | Should -BeTrue
+        }
+    }
+
+}
+
 }
