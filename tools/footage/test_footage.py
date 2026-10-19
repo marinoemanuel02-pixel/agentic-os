@@ -213,6 +213,45 @@ class RenderIntegrationTests(unittest.TestCase):
             footage.render(self.roots, plan, "stale.mp4")
         self.assertEqual(list(self.roots.output.iterdir()), [])
 
+    def test_cli_pipeline_inventory_transcribe_search_review_render(self):
+        model = self.base / "local-model"
+        model.mkdir()
+        for name in ("model.bin", "config.json", "tokenizer.json"):
+            (model / name).write_text("{}", encoding="utf-8")
+        fixture = self.base / "fixture"
+        fixture.mkdir()
+        (fixture / "faster_whisper.py").write_text("from types import SimpleNamespace as N\nclass WhisperModel:\n def __init__(self, path, **kwargs):\n  assert kwargs['local_files_only'] is True\n def transcribe(self, path, **kwargs):\n  return iter([N(words=[N(start=0.5, end=0.9, word=' Hello'), N(start=2.0, end=2.4, word=' again')])]), N(language='en')\n", encoding="utf-8")
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(fixture)
+        cli = [sys.executable, str(Path(footage.__file__)), "--source-root", str(self.roots.source), "--cache-root", str(self.roots.cache), "--output-root", str(self.roots.output)]
+        def call(*args, expected=0):
+            result = subprocess.run([*cli, *args], capture_output=True, encoding="utf-8", errors="replace", env=env, timeout=30)
+            self.assertEqual(result.returncode, expected, result.stderr)
+            return json.loads(result.stdout) if expected == 0 else result.stderr
+        listing = call("inventory", "--out", "inventory.json")
+        self.assertEqual(listing["sources"][0]["sha256"], self.digest)
+        transcript = call("transcribe", "generated.mp4", "--model-dir", str(model), "--whisper-python", sys.executable, "--out", "words.json")
+        self.assertEqual(transcript["words"][0]["start"], 0.5)
+        hits = call("search", "Hello", "words.json")
+        self.assertEqual(hits, [{"source": "generated.mp4", "start": 0.5, "end": 0.9, "text": "Hello"}])
+        plan = call("draft", "words.json", "--pad", "0.1", "--min-gap", "0.2", "--out", "draft.json")
+        self.assertFalse(plan["reviewed"])
+        self.assertIn("review", call("render", "draft.json", "--out", "unreviewed.mp4", expected=2))
+        self.assertEqual(list(self.roots.output.iterdir()), [])
+        plan["reviewed"] = True
+        (self.roots.cache / "reviewed.json").write_text(json.dumps(plan), encoding="utf-8")
+        call("render", "reviewed.json", "--out", "pipeline.mp4")
+        self.assertAlmostEqual(footage.probe_media(self.roots.output / "pipeline.mp4")["duration"], 1.2, delta=0.1)
+        self.assertEqual(hashlib.sha256(self.media.read_bytes()).hexdigest(), self.digest)
+
+    def test_no_audio_video_refuses_export(self):
+        silent = self.roots.source / "silent.mp4"
+        subprocess.run(["ffmpeg", "-v", "error", "-nostdin", "-f", "lavfi", "-i", "testsrc2=size=96x64:rate=15:duration=1", "-c:v", "libx264", str(silent)], check=True, capture_output=True, encoding="utf-8", errors="replace", timeout=30)
+        plan = {"schema": 1, "kind": "cut-plan", "reviewed": True, "sources": [footage.source_identity(self.roots, "silent.mp4")], "cuts": [{"source": "silent.mp4", "start": 0, "end": 0.5}]}
+        with self.assertRaisesRegex(footage.FootageError, "audio"):
+            footage.render(self.roots, plan, "silent.mp4")
+        self.assertEqual(list(self.roots.output.iterdir()), [])
+
     def test_audio_only_media_refuses_video_export(self):
         audio = self.roots.source / "audio.wav"
         subprocess.run(["ffmpeg", "-v", "error", "-nostdin", "-f", "lavfi", "-i", "sine=duration=1", str(audio)], check=True, capture_output=True, encoding="utf-8", errors="replace", timeout=30)
