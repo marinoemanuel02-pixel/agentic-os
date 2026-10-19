@@ -3,6 +3,22 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-19 - Evaluate research against existing behavior before extending the stack
+
+- **Decision.** Retain current routing and coordination policy. Add fixed-input provenance and a
+  small read-only evaluation comparison tool; reuse existing correction/integration/review fields.
+  Fix checkpoint saving when its optional task list is omitted, retaining invalid-id checks.
+- **Evidence.** Local receipts mostly lack correction and integration observations, despite already
+  supporting them. A bounded retrieval diagnostic favored the installed dense route over a new
+  lexical index, but lacks user-labelled holdout and Italian-source coverage. A synthetic declared
+  preservation set restored under both shells; it does not prove general disaster recovery.
+- **Limits.** A Claude weekly limit stopped the live routing comparison. Keep the failed evidence,
+  unknown measurements and source worktrees; do not infer route rankings or subscription savings.
+  The existing video approval gates, official installer and optional programmatic transport are
+  not missing layers. No new service, paid API, vendor setting or download was required.
+- **Source.** See the [local evaluation](research/2026-10-19-stack-evaluation.md) for report corrections,
+  experimental controls, package preflight, exact implementation scope and verification evidence.
+
 ## 2026-10-18 - Adopt checked CLI maintenance releases and retain recovery sources
 
 - **Decision.** Adopt the recent first-party CLI maintenance releases after staging, integrity,
