@@ -206,5 +206,19 @@
     "external_review": "not run, explicitly waived by operator on 2026-10-20",
     "operator_instruction": "work all on your own, without any external review",
     "provider_setup": "deferred by operator until later"
+  },
+  "activation": {
+    "primary_checkout_integrated": true,
+    "codex_shared_junction_existing": true,
+    "claude_skill_links": [
+      "watch",
+      "frontend-design",
+      "ui-ux-pro-max"
+    ],
+    "targeted_skill_sync_second_run_unchanged": true,
+    "global_mcp_added": false,
+    "user_path_changed": false,
+    "router_secrets": "Windows-encrypted aos secret store; process-only injection",
+    "provider_connection": "deferred by operator; zero connections"
   }
 }

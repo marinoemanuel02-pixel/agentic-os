@@ -134,10 +134,11 @@ anonymous requests; it does not establish provider login, usable quota or produc
 
 ## Activation and maintenance
 
-Shared skill sources become visible to Codex through the existing `~/.agents` junction after integration.
-Claude still needs three new per-skill junctions: `watch`, `frontend-design`, `ui-ux-pro-max`. The proposed
-change is only those links into the canonical primary checkout, with the existing backup/merge machinery.
-No global MCP, native login, model selection, automatic hook or PATH change is proposed.
+The integration is in the primary checkout. Shared skill sources are visible to Codex through its
+existing `~/.agents` junction. Claude's three new per-skill junctions (`watch`, `frontend-design`,
+`ui-ux-pro-max`) were applied after a dry-run showed exactly those additions. A second targeted
+sync left their targets and creation times unchanged. No global MCP, native login, automatic hook
+or user PATH change was made. Restart a session if its skill list was already cached.
 
 The project's `AGENTS.md` normally requires the other vendor's review before writing Claude/Codex
 configuration or user PATH. On 20 October the operator explicitly instructed **"work all on your own,
