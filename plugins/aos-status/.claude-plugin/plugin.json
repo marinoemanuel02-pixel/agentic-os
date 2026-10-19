@@ -1,0 +1,6 @@
+{
+  "name": "aos-status",
+  "version": "0.1.0",
+  "description": "Read-only view of local agent coordination and measured context",
+  "author": { "name": "agentic-os" }
+}
