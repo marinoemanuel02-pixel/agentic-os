@@ -30,6 +30,16 @@ Exact source revisions, installed versions and release hashes are in the
 are under `~/.aos/research/stack-add-20261019`. Earlier failed smoke attempts are retained;
 help/version success is not counted as an end-to-end media or provider result.
 
+The real home-folder router setup also passed: health 200, anonymous inference access 401,
+administrator login 200 with a session cookie, loopback-only listener, no key in arguments/logs
+and no plaintext `.env`. Reloading its Windows-encrypted secrets preserved both ciphertexts
+and decrypted values. It has zero provider connections and was stopped after checking.
+
+Verification: `aos test` passed **527 tests under each of Windows PowerShell 5.1 and PowerShell 7**,
+with no failures or skips. After the final Python-only setup changes, all **16 launcher/router/worker
+controls** passed again from both shells. The three shared skills passed the skill validator.
+These controls use mocked transport and disposable files; installed-tool smoke checks are separate.
+
 ## Use the tools
 
 Resolve the setup repo from the loaded `aos` module when working elsewhere. From that repo:

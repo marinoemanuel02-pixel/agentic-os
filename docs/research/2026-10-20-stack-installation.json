@@ -125,7 +125,7 @@
   ],
   "installer_lifecycle_scripts": "disabled for npm installs; no generic postinstall was run",
   "local_checks": {
-    "launcher_and_worker_unittests": 11,
+    "launcher_and_worker_unittests": 16,
     "skills_validated": 3,
     "anydoc_csv_docx": true,
     "anydoc_scan_exit": 3,
@@ -157,17 +157,54 @@
       "plaintext_env_created": false,
       "okay": true,
       "inference_requests_submitted_by_test": 0
-    }
+    },
+    "unit_test_transport": "mocked; no network or real profile access",
+    "aos_test": {
+      "powershell_5_1": {
+        "passed": 527,
+        "failed": 0,
+        "skipped": 0
+      },
+      "powershell_7": {
+        "passed": 527,
+        "failed": 0,
+        "skipped": 0
+      },
+      "note": "Full suite passed before final Python-only wrapper additions; focused controls cover those changes."
+    },
+    "router_setup": {
+      "healthy": true,
+      "unauthenticated_status": 401,
+      "port": 58862,
+      "key_in_arguments": false,
+      "health_status": 200,
+      "admin_login_status": 200,
+      "admin_cookie_issued": true,
+      "listeners": [
+        "127.0.0.1"
+      ],
+      "owned_tree_stop_exit": 0,
+      "key_printed_by_upstream": false,
+      "plaintext_env_created": false,
+      "secret_ciphertexts_stable": true,
+      "same_decrypted_values": true,
+      "provider_connections": 0,
+      "okay": true
+    },
+    "gimp_fallback": "isolated trial uninstalled: upstream GIMP 2 backend does not match installed GIMP 3"
   },
   "pending": [
-    "cross-vendor activation review or explicit user exception",
     "provider/account selection and verified no-extra-spend allowance",
-    "production OmniRoute credentials and worker activation",
     "managed AOS third-provider admission",
     "VoiceStudio engine/model choice",
     "specific hosted Composio connector",
     "Kdenlive native render diagnosis",
     "real-workload quality comparisons"
   ],
-  "evidence_directory": "~/.aos/research/stack-add-20261019"
+  "evidence_directory": "~/.aos/research/stack-add-20261019",
+  "review": {
+    "external_review": "not run, explicitly waived by operator on 2026-10-20",
+    "operator_instruction": "work all on your own, without any external review",
+    "provider_setup": "deferred by operator until later"
+  }
 }
