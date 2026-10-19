@@ -70,8 +70,9 @@ The same launcher reaches the CLI-Anything Kdenlive harness, OpenMontage local b
 Agent Kit exports, VoiceStudio app and isolated Composio Python environment. Paid/cloud examples
 in upstream documentation are not permission to use them. VoiceStudio still needs a chosen engine;
 Composio still needs a specific connector/account. OmniRoute is installed separately for additional
-provider workers; the launcher enables help/version pending the required activation review. It does
-not add quota until an eligible provider is connected. Native subscription clients remain the normal routes.
+provider workers; its foreground launcher injects encrypted-store keys, binds loopback and requires
+API keys. The operator explicitly waived external review for this installation. Provider connection
+is deferred at the operator's request; no additional quota exists yet. Native clients remain normal routes.
 
 ## Other agents
 

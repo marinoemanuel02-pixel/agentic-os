@@ -11,12 +11,6 @@ import sys
 def plan(name, arguments, registry, *, home=None):
     if name not in registry:
         raise ValueError('Unknown tool: ' + name)
-    if name == 'omniroute':
-        help_only = arguments in (['--help'], ['-h'], ['--version'], ['-v'])
-        command_help = (len(arguments) == 2 and arguments[0].replace('-', '').isalnum()
-                        and arguments[1] == '--help')
-        if not (help_only or command_help):
-            raise ValueError('OmniRoute activation needs the required independent review; only help/version are enabled')
     if name == 'watch' and any(a.split('=', 1)[0] in ('--engine', '--whisper') for a in arguments):
         raise ValueError('watch uses the local engine and existing captions; use footage for offline ASR')
     if name == 'anydoc':

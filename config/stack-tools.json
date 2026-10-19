@@ -55,12 +55,11 @@
       "env": {"OMNIVOICE_DATA_DIR": "{home}/.aos/tools/stack/voicestudio/data"}
     },
     "omniroute": {
-      "purpose": "Isolated router CLI; provider activation and server startup require reviewed setup",
-      "command": ["{node}", "{home}/.aos/tools/omniroute-3.8.51/node_modules/omniroute/bin/omniroute.mjs"],
-      "env": {"DATA_DIR": "{home}/.aos/tools/stack/omniroute/data", "OMNIROUTE_SERVER_HOST": "127.0.0.1", "NO_UPDATE_NOTIFIER": "1"}
+      "purpose": "Isolated loopback router; encrypted aos secrets and process-only keys; provider setup later",
+      "command": ["{python}", "{repo}/tools/omniroute_env.py"]
     },
     "omniroute-worker": {
-      "purpose": "Staged text-only additional-provider candidate; reviewed activation and scoped key required",
+      "purpose": "Text-only additional-provider candidate; provider connection and scoped key required",
       "command": ["{python}", "{repo}/tools/omniroute_worker.py"]
     }
   }

@@ -3,6 +3,26 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-20 - Install the approved optional shortlist in isolated environments
+
+- **Decision.** Add the fourteen approved narrow routes and shared skill sources from the candidate
+  audit. Keep heavy dependencies under the home folder, launch on demand, and retain source/version
+  provenance. Use local-only Watch and AnyDoc routes, explicit RTK commands and code-only Graphify;
+  expose Serena's navigation tools for one selected project without a global MCP registration.
+- **Conditional tools.** Install OpenMontage, OpenDesign Agent Kit, VoiceStudio, the CLI-Anything
+  Kdenlive harness and Composio without silently connecting accounts, downloading speech models or
+  replacing the existing media workflow. A Kdenlive project export passed, but native MLT consumer
+  initialization/render attempts timed out. Do not count that render as working.
+- **OmniRoute.** Reconsider it as a separate source of provider workers and allowance, preserving
+  native subscription clients. Its isolated Windows server passed loopback/auth-rejection checks.
+  Stage a text-only, single-request candidate helper with no tools/retries or accepted-result claim.
+  No provider is connected; additional quota and managed third-provider admission remain unverified.
+- **Activation.** For this installation the operator explicitly instructed "work all on your own,
+  without any external review" and deferred provider/account setup until later. Apply the three
+  shared-skill links and prepare the secure foreground router path under that exception. The normal
+  independent-review policy remains; no other-vendor review is claimed. See
+  [the installation guide](stack-additions.md) for actual checks and remaining limits.
+
 ## 2026-10-19 - Add local footage editing and checked quota continuation; prepare a read-only mod
 
 - **Decision.** Extend existing media tooling with offline word-timestamp transcription, search,

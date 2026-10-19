@@ -1,0 +1,173 @@
+{
+  "retrieval_dates": [
+    "2026-10-19",
+    "2026-10-20"
+  ],
+  "scope": "recommended and conditional shortlist plus OmniRoute; 14 additions",
+  "source_revisions": [
+    {
+      "name": "watch",
+      "repository": "bradautomates/claude-video",
+      "revision": "03ceb42f7fa2c4439aca01752118044baabffb8f",
+      "sparse_paths": [
+        "skills/watch"
+      ]
+    },
+    {
+      "name": "ui-ux-pro-max",
+      "repository": "nextlevelbuilder/ui-ux-pro-max-skill",
+      "revision": "56ea9cf174ed86786187daa9de0e6247cb0747e4",
+      "sparse_paths": [
+        ".claude/skills/ui-ux-pro-max"
+      ]
+    },
+    {
+      "name": "cli-anything",
+      "repository": "HKUDS/CLI-Anything",
+      "revision": "34f519533bc175d2fe287ab8316b0dd99bb9cc43",
+      "sparse_paths": [
+        "cli-anything-plugin",
+        "codex-skill",
+        "kdenlive",
+        "gimp"
+      ]
+    },
+    {
+      "name": "openmontage",
+      "repository": "calesthio/OpenMontage",
+      "revision": "c8066452325cb57c8fc1ba8c2a71b6e8842e6b65",
+      "sparse_paths": [
+        "tools",
+        "lib",
+        "schemas",
+        "pipeline_defs",
+        "styles",
+        "backlot"
+      ]
+    },
+    {
+      "name": "voicestudio",
+      "repository": "debpalash/VoiceStudio",
+      "revision": "41b71eaf211af373be334fd4fe90aaa45f37246c",
+      "sparse_paths": [
+        "electron",
+        "scripts",
+        "docs/install",
+        "backend",
+        "src",
+        "apps"
+      ]
+    }
+  ],
+  "frontend_design": {
+    "repository": "anthropics/skills",
+    "revision": "dbd4588f9e1033efb41dad4bef2f7947c8993d44",
+    "subdirectory": "skills/frontend-design",
+    "normalized_content_match": true
+  },
+  "node_packages": [
+    {
+      "name": "@firecrawl/anydoc",
+      "version": "0.2.4",
+      "resolved": "https://registry.npmjs.org/@firecrawl/anydoc/-/anydoc-0.2.4.tgz",
+      "integrity": "sha512-rfJxa5L+nhoqR5yodcRZoGDLaSfxMTpBuhVj1gSacfW4ZGjBt4cjfErXwaKjPYrpWRTPIBye2sh36UhqgOP1Og=="
+    },
+    {
+      "name": "repomix",
+      "version": "1.18.1",
+      "resolved": "https://registry.npmjs.org/repomix/-/repomix-1.18.1.tgz",
+      "integrity": "sha512-XtV1qD6akJSigQ3fBRex5v+rWcGa4i9cm2FL/M/PEtzO3u1uDiso3CtNbhlZiMIqJstAdy8mj2m1ynOzNnNB3g=="
+    },
+    {
+      "name": "@feimacode/open-design-agent-kit",
+      "version": "0.2.0",
+      "resolved": "https://registry.npmjs.org/@feimacode/open-design-agent-kit/-/open-design-agent-kit-0.2.0.tgz",
+      "integrity": "sha512-+ghRoM0LzFrx2Mq4IhZftXegANkrj/tSCI5Xc3rQ+RxGiM74fGvCBpM7nLWNCI4JapKQkGvAZAVgxZY+vteW8Q=="
+    },
+    {
+      "name": "omniroute",
+      "version": "3.8.51",
+      "resolved": "https://registry.npmjs.org/omniroute/-/omniroute-3.8.51.tgz",
+      "integrity": "sha512-VwwSt+bP9lJiPJXFJMz0nNGGuoewPZU3nFe1SLuO11ADgdSwTegGCxhg8Ov75+31m/cocPxHiO63zygn1XQ0MQ=="
+    }
+  ],
+  "python_packages": [
+    {
+      "name": "graphifyy",
+      "version": "0.9.92"
+    },
+    {
+      "name": "serena-agent",
+      "version": "2.1.0"
+    },
+    {
+      "name": "cli-anything-kdenlive",
+      "version": "1.0.0"
+    },
+    {
+      "name": "composio",
+      "version": "0.28.0"
+    }
+  ],
+  "release_assets": [
+    {
+      "name": "rtk-oss",
+      "source": "https://github.com/rtk-ai/rtk/releases/download/v1.0.1/rtk-oss-x86_64-pc-windows-msvc.zip",
+      "sha256": "0e53e2eca471e15fbd3636e64e6bc0b182cbc278ed0339c80450a2dd03f4cd6b",
+      "bytes": 5708680
+    },
+    {
+      "name": "voicestudio",
+      "source": "https://github.com/debpalash/VoiceStudio/releases/download/v0.5.6/VoiceStudio-Electron-0.5.6-win-x64.exe",
+      "sha256": "3d7ac1d6b54e7854ca7fff4dda838e402d1c5d31acc9656b1838432e29a97624",
+      "bytes": 214447484
+    }
+  ],
+  "installer_lifecycle_scripts": "disabled for npm installs; no generic postinstall was run",
+  "local_checks": {
+    "launcher_and_worker_unittests": 11,
+    "skills_validated": 3,
+    "anydoc_csv_docx": true,
+    "anydoc_scan_exit": 3,
+    "repomix_selected_export": true,
+    "rtk_git_failure_exit": 129,
+    "watch_frames": 2,
+    "watch_first_frame_viewed": true,
+    "ui_ux_lookup": true,
+    "graphify_nodes": 3,
+    "graphify_edges": 3,
+    "serena_symbol_and_six_tools": true,
+    "open_design_embedded_css_export": true,
+    "openmontage_local_trim_and_board": true,
+    "composio_offline_custom_tool": true,
+    "kdenlive_project_xml": true,
+    "kdenlive_native_render": "timed out, including engine-only consumer query",
+    "voicestudio_installer_exit": 0,
+    "voicestudio_executable_version": "0.5.6.0",
+    "omniroute_fixture": {
+      "ready": true,
+      "unauthenticated_status": 401,
+      "port": 65515,
+      "health_status": 200,
+      "listeners": [
+        "127.0.0.1"
+      ],
+      "exit_before_stop": null,
+      "owned_tree_stop_exit": 0,
+      "plaintext_env_created": false,
+      "okay": true,
+      "inference_requests_submitted_by_test": 0
+    }
+  },
+  "pending": [
+    "cross-vendor activation review or explicit user exception",
+    "provider/account selection and verified no-extra-spend allowance",
+    "production OmniRoute credentials and worker activation",
+    "managed AOS third-provider admission",
+    "VoiceStudio engine/model choice",
+    "specific hosted Composio connector",
+    "Kdenlive native render diagnosis",
+    "real-workload quality comparisons"
+  ],
+  "evidence_directory": "~/.aos/research/stack-add-20261019"
+}

@@ -25,11 +25,11 @@ def validate_endpoint(endpoint):
 
 
 def activation_key(environment):
-    if environment.get('OMNIROUTE_WORKER_ENABLED') != '1':
-        raise ValueError('Worker activation requires the independent review described in docs/stack-additions.md')
     key = environment.get('OMNIROUTE_WORKER_KEY', '').strip()
     if not key:
         raise ValueError('A scoped router key must be supplied to this process from aos secret')
+    if any(ord(char) < 33 or ord(char) > 126 for char in key):
+        raise ValueError('Router credential must be one printable ASCII token')
     return key
 
 
@@ -39,10 +39,14 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def parse_response(payload):
+    if not isinstance(payload, dict):
+        raise ValueError('Expected a completion object')
     choices = payload.get('choices', [])
-    if not isinstance(choices, list) or len(choices) != 1:
+    if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
         raise ValueError('Expected one completion; no automatic retry or fallback was attempted')
     message = choices[0].get('message', {})
+    if not isinstance(message, dict):
+        raise ValueError('Expected a text message object')
     text = message.get('content')
     if message.get('tool_calls') or message.get('function_call') or not isinstance(text, str) or not text.strip():
         raise ValueError('Expected text without tool calls; candidate rejected')
