@@ -81,8 +81,8 @@ offline word timestamps, transcript search, reviewed cuts and FFmpeg export. For
 and observed capacity; see [selected additions](docs/picked-stack-additions.md).
 
 The optional [read-only Claude status mod](plugins/aos-status/README.md) adds `/aos-status` using the
-native mod system. Persistent activation requires the project's other-vendor review before changing
-Claude user configuration; source delivery and isolated tests do not establish that activation.
+native mod system. It is installed and enabled under the operator's explicit review exception of
+20 October; native tests passed, while rendering in a live Desktop session remains unverified.
 
 The approved optional [stack additions](docs/stack-additions.md) add local video frames, document
 conversion, selected repository exports, design references and on-demand code navigation. The guide

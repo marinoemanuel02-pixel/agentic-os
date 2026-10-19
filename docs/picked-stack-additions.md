@@ -33,15 +33,17 @@ installation also passed with `CLAUDE_CONFIG_DIR` redirected to an isolated fixt
 does not enable the mod in the normal Claude configuration. Live Desktop rendering remains
 unverified; the app's embedded version is independent of the CLI.
 
-The project requires an independent other-vendor review before writes to Claude user configuration.
-Claude's observed weekly quota currently blocks that review. Source, tests and native install commands
-are ready; persistent activation awaits that review or an explicit operator exception. No credentials,
-authentication settings or global permission changes are needed for the mod.
+The project normally requires an independent other-vendor review before writes to Claude user
+configuration. On 20 October the operator explicitly instructed work without any external review.
+Under that exception, the local marketplace and `aos-status@aos-local` version 0.1.0 were installed
+from the stable primary checkout. Claude's native listing reports user scope and enabled. Existing
+settings/marketplace/plugin records were backed up first. No model request or permission change
+was needed; the live Desktop surface remains unverified.
 
 The selected pilot is delivered as a local plugin directory. From the setup repository, start a
-session with `claude --plugin-dir ./plugins/aos-status`, then enter `/aos-status`. Persistent
-autoloading is optional and remains staged; no exception to the configuration-review rule is
-assumed from approval to add the pilot.
+session with `claude --plugin-dir ./plugins/aos-status`, then enter `/aos-status`. The persistent
+installation now loads from its cache; use `/reload-plugins` in a supported open session or start
+a new one. The operator's explicit exception, rather than the earlier pilot approval, authorized it.
 
 ## Continuation after a quota failure
 

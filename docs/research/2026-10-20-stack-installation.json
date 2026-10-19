@@ -219,6 +219,14 @@
     "global_mcp_added": false,
     "user_path_changed": false,
     "router_secrets": "Windows-encrypted aos secret store; process-only injection",
-    "provider_connection": "deferred by operator; zero connections"
+    "provider_connection": "deferred by operator; zero connections",
+    "earlier_status_mod": {
+      "id": "aos-status@aos-local",
+      "version": "0.1.0",
+      "scope": "user",
+      "enabled": true,
+      "existing_configuration_backed_up": true,
+      "live_desktop_rendering_verified": false
+    }
   }
 }

@@ -20,7 +20,10 @@ don't rewrite the old one: the record of what was rejected is the part that ages
 - **Activation.** For this installation the operator explicitly instructed "work all on your own,
   without any external review" and deferred provider/account setup until later. Apply the three
   shared-skill links and prepare the secure foreground router path under that exception. The normal
-  independent-review policy remains; no other-vendor review is claimed. See
+  independent-review policy remains; no other-vendor review is claimed. Also finish the earlier
+  selected read-only status mod's persistent installation from the local primary marketplace,
+  with existing configuration backups. Native listing confirms it is enabled; live Desktop
+  rendering remains unverified. See
   [the installation guide](stack-additions.md) for actual checks and remaining limits.
 
 ## 2026-10-19 - Add local footage editing and checked quota continuation; prepare a read-only mod

@@ -140,6 +140,12 @@ existing `~/.agents` junction. Claude's three new per-skill junctions (`watch`, 
 sync left their targets and creation times unchanged. No global MCP, native login, automatic hook
 or user PATH change was made. Restart a session if its skill list was already cached.
 
+The earlier selected `aos-status` native mod was also installed from the primary checkout's local
+marketplace under the same explicit exception. Claude lists version 0.1.0, user scope, enabled.
+Existing settings/marketplace/plugin records were backed up first. Use `/reload-plugins` in a
+supported open Claude session or start a new session, then `/aos-status`. Live Desktop rendering
+is still unverified; the completed native fixture tests are separate evidence.
+
 The project's `AGENTS.md` normally requires the other vendor's review before writing Claude/Codex
 configuration or user PATH. On 20 October the operator explicitly instructed **"work all on your own,
 without any external review"** for this installation and said provider/account setup will happen

@@ -36,6 +36,11 @@ installed plugins by version; source edits need a version increase and update/re
 turns the installed mod off. Installation writes Claude user configuration and is separate from
 the tests below.
 
+Installed on this machine on 20 October 2026 under the operator's explicit instruction to proceed
+without external review. Native listing reports `aos-status@aos-local` 0.1.0, user scope, enabled.
+The existing configuration records were backed up first. This does not establish rendering in a
+live Desktop session; the fixture checks below remain separate.
+
 ## Verification
 
 ```powershell
