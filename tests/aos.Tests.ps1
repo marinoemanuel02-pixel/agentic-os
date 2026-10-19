@@ -5208,6 +5208,10 @@ Describe 'selected stack additions' {
         & node --test $script
         $LASTEXITCODE | Should -Be 0
     }
+    It 'runs the offline footage workflow controls in disposable folders' {
+        & python -m unittest discover -s (Join-Path $PSScriptRoot '..\tools\footage') -p 'test_*.py' -v
+        $LASTEXITCODE | Should -Be 0
+    }
 }
 
 }

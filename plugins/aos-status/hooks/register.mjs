@@ -35,10 +35,9 @@ export function register(on) {
         const text = await readRecord($, root + '/ledger.jsonl');
         for (const line of text.split(/\r?\n/)) {
           if (!line.trim()) continue;
-          try { ledger.push(JSON.parse(line)); }
-          catch { notices.push('Some capacity records unreadable'); }
+          ledger.push(JSON.parse(line));
         }
-      } catch { notices.push('Capacity records unavailable'); }
+      } catch { ledger = []; notices.push('Capacity records unavailable'); }
       try {
         const entries = await $.fs.list(root + '/claims');
         if (!Array.isArray(entries) || entries.length > 100) throw Error('too many claims');

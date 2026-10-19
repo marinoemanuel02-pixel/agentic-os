@@ -38,3 +38,8 @@ test('reports only valid measured context and expired claim exclusion', () => {
   assert.equal(result.claims, 0);
   assert.doesNotMatch(JSON.stringify(result), /dollars|private/);
 });
+test('malformed actor or claim records do not imply an empty registry', () => {
+  const result = summarize({ now, actors: { actors: { broken: null } }, claims: [{ expires: 'invalid' }] });
+  assert.equal(result.actors, null);
+  assert.equal(result.claims, null);
+});

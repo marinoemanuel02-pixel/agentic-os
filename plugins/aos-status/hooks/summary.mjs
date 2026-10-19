@@ -4,7 +4,9 @@ const label = value => String(value ?? '').replace(/[\x00-\x1f\x7f]/g, '').slice
 
 export function summarize({ now, actors, claims, ledger = [], usage, notices = [] } = {}) {
   const rows = actors?.actors;
-  const active = rows && typeof rows === 'object' && !Array.isArray(rows)
+  const active = rows && typeof rows === 'object' && !Array.isArray(rows) && Object.values(rows).every(row =>
+    row && typeof row.id === 'string' && ['claude', 'codex'].includes(row.vendor) &&
+    ['reserved', 'running', 'waiting-input', 'suspect', 'done', 'failed', 'cancelled'].includes(row.state))
     ? Object.values(rows).filter(row => row && ['reserved', 'running', 'waiting-input', 'suspect'].includes(row.state))
       .slice(0, 20).map(row => ({ id: label(row.id), vendor: label(row.vendor), state: label(row.state) }))
     : null;
@@ -24,7 +26,8 @@ export function summarize({ now, actors, claims, ledger = [], usage, notices = [
   });
   return {
     actors: active,
-    claims: Array.isArray(claims) ? claims.filter(row => stamp(row?.expires) > now).length : null,
+    claims: Array.isArray(claims) && claims.every(row => Number.isFinite(stamp(row?.expires)))
+      ? claims.filter(row => stamp(row.expires) > now).length : null,
     capacity, context: percentage(usage?.context?.percent) ? usage.context.percent : null,
     notices: notices.map(label).slice(0, 8),
   };
