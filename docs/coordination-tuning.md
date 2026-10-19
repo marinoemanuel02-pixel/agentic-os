@@ -65,6 +65,23 @@ run selected cases through the ordinary delegation path, with `-Vendor`, `-Tier`
 their grade says nothing about production security. Compare quality and corrections before timing;
 these small cases cannot establish a general model ranking or quota saving.
 
+Each new trial records the initial Git tree, task-file hash, external-grader hash and requested
+route. Compare executed reports without running another model:
+
+```powershell
+node tools/coordination-compare.mjs <first-report.json> <second-report.json>
+```
+
+The read-only tool requires matching input fingerprints and reads current host receipts, so later
+correction/integration/review annotations are included. Old reports without fingerprints, missing
+receipts and stale outcome snapshots remain visibly incomplete. Failed and repeated attempts stay
+separate. Known effort sums delegate elapsed time plus explicitly measured integration and review;
+waiting is already inside execution and is never added again. Unknown effort stays null. The tool
+does not choose a winning route or infer subscription savings. Record review measurement scope:
+an elapsed inspection window is not a measurement of active human effort.
+Matching source/task/grader hashes do not establish identical contract budgets, write scopes or
+runtime environments; check those separately before interpreting a difference as a route effect.
+
 ## Native roles, signals and optional transport
 
 `aos coord capabilities` probes installed versions without starting a model turn. `aos coord roles

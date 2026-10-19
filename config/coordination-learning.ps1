@@ -64,7 +64,7 @@ function Get-AosTrackedManifest([string]$Repo) {
     }
 }
 
-function Save-AosCheckpoint([string]$Id,[string]$Repo,[string[]]$TaskIds,[string]$NextCheck) {
+function Save-AosCheckpoint([string]$Id,[string]$Repo,[string[]]$TaskIds=@(),[string]$NextCheck) {
     Assert-AosCoordId $Id
     if (-not $NextCheck -or $NextCheck.Length -gt 4000) { throw 'checkpoint needs a bounded next check' }
     $repoPath=Get-AosCheckout $Repo
@@ -200,7 +200,10 @@ function Invoke-AosTuningControl([string[]]$Arguments) {
             $result=Set-AosReceiptAnnotation @values
         }
         'checkpoint' {
-            if ($first -eq 'save') {$result=Save-AosCheckpoint -Id $second -Repo $repo -TaskIds @($p.Opts['task']) -NextCheck $p.Opts['next-check']}
+            if ($first -eq 'save') {
+                $taskIds=@();if ($p.Opts.Contains('task')) {$taskIds=@($p.Opts['task'])}
+                $result=Save-AosCheckpoint -Id $second -Repo $repo -TaskIds $taskIds -NextCheck $p.Opts['next-check']
+            }
             elseif ($first -eq 'check') {$result=Test-AosCheckpoint $second $repo;$ok=$result.Valid}
             else {throw 'usage: aos coord checkpoint save|check <id> --repo <path> [--task <id>] [--next-check <text>]'}
         }

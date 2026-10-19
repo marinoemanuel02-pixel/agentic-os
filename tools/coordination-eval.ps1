@@ -161,7 +161,11 @@ function Invoke-AosCoordinationEval {
             [IO.File]::WriteAllText($taskPath, ($entry.objective + "`n`n" + $entry.task + "`n`n" +
                 'The host grader is outside this repo and must not be changed. Report the actual checks and any incomplete work.' + "`n"), (New-Object Text.UTF8Encoding($false)))
             [IO.File]::WriteAllText($contractPath, ((ConvertTo-Json $contract -Depth 12) + "`n"), (New-Object Text.UTF8Encoding($false)))
+            $identity = [ordered]@{ baseline_tree=(Invoke-AosEvalGit $module $repo @('rev-parse','HEAD^{tree}')).Trim();
+                task_sha256=(Get-FileHash -LiteralPath $taskPath -Algorithm SHA256).Hash;
+                grader_sha256=(Get-FileHash -LiteralPath $grader -Algorithm SHA256).Hash }
             $row = [ordered]@{ case_id=$entry.id; task_class=$entry.task_class; trial=$trial; id=$id; repo=$repo;
+                input_identity=$identity;requested_route=[ordered]@{vendor=$Vendor;tier=$Tier;workers=$Workers;transport=$Transport};
                 task=$taskPath; contract=$contractPath; receipt_ref=$null; accepted=$null; outcome='prepared';
                 measurements=[ordered]@{elapsed_seconds=$null;phase_seconds=$null;observed_model=$null;observed_effort=$null;
                     input_tokens=$null;cached_input_tokens=$null;output_tokens=$null;corrections=$null} }
