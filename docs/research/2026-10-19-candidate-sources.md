@@ -159,6 +159,7 @@ Moving-branch content can change during research. A later pilot must select and 
 - Two directory-tree views for official frontend/setup skills failed in web retrieval; their exact raw skill/README files opened successfully and were used instead.
 - Guessed `gufranco/claude-code` and directory-advertised `gtbauke/skills` returned 404. The actual Gustavo Franco repository was found and read; the other referent remains unknown.
 - API Anything under ThomasRohde uses `master`; the guessed `main` README URL failed. The `master` README was opened successfully.
+- The npm package metadata page failed in the web reader. Public `npm view` and direct HTTPS metadata retrieval succeeded; `anydoc-npm.json` records the Windows package entry without a package download.
 - Hosted landing pages do not establish a local installation or all free-tier/account details. Unverified details remain conditional in the audit.
 - Additional official product pages, raw skill files, advisories and platform guides are linked beside the claims in the audit; this table inventories repository metadata only.
 

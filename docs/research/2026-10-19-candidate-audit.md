@@ -201,3 +201,10 @@ with no failures or skips. Their full bootstrap dry-run stalled in the existing 
 and was interrupted; it is not a successful preview. Candidate-audit changes are documentation only,
 so the runtime suite is not being repeated for this report. See the implementation guide for exact
 verification evidence and remaining activation/live-UI limits.
+
+Documentation verification passed: the 57-row coverage map, all 60 local file/section links,
+GitHub-flavored Markdown parsing of both reports (10 tables), and `git diff b6fa825 HEAD --check`.
+The changed-path check contains only this audit and its source snapshot. The npm registry page
+failed in the web reader; both public `npm view` metadata and a direct HTTPS read established the
+AnyDoc Windows package entry, without downloading or executing a package. External API/README
+records and their SHA-256 inventory were retained; no live candidate compatibility test is claimed.
