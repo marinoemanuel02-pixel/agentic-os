@@ -75,6 +75,15 @@ settings are merged, never replaced, and backups go to `~/.aos-backups/`.
 
 Which agent to use for what, and how to stretch two entry plans: [docs/routing.md](docs/routing.md).
 
+For existing-footage editing, the [local footage workflow](tools/footage/README.md) provides inventory,
+offline word timestamps, transcript search, reviewed cuts and FFmpeg export. For a quota handoff,
+`aos coord continuation check <checkpoint-id> --repo . --from claude --to codex` checks cold state
+and observed capacity; see [selected additions](docs/picked-stack-additions.md).
+
+The optional [read-only Claude status mod](plugins/aos-status/README.md) adds `/aos-status` using the
+native mod system. Persistent activation requires the project's other-vendor review before changing
+Claude user configuration; source delivery and isolated tests do not establish that activation.
+
 Tools, clones and keys live under your home folder, not AppData: both desktop apps are MSIX
 packages, and a folder they (or the agents in them) create under AppData can stay private to that app.
 

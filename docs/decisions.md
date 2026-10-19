@@ -3,6 +3,22 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-19 - Add local footage editing and checked quota continuation; prepare a read-only mod
+
+- **Decision.** Extend existing media tooling with offline word-timestamp transcription, search,
+  inspected cut plans and FFmpeg exports. Bind source identities and refuse overwrite/drift. Add a
+  read-only quota-continuation check around existing checkpoints and capacity observations, without
+  automatic replay or dispatch. Make both workflows discoverable through existing shared skills.
+- **Status mod.** Package a native Claude pane that reads bounded coordination metadata and measured
+  session context. It has no model, process, network, file-write or permission hooks. Native validation,
+  test-kit rendering and isolated installation are separate from a live Desktop check and persistent
+  activation. The repository requires other-vendor review before writing Claude user configuration;
+  the currently observed weekly quota prevents that review. Do not treat staging as activation.
+- **Scope.** No new service, external transcription account, model download, provider router or editor.
+  Speech-derived gaps require editorial inspection. Remotion stays available for authored motion
+  design. Keep recovery sources and failed evidence.
+- **Usage.** See [selected additions](picked-stack-additions.md) and the [footage guide](../tools/footage/README.md).
+
 ## 2026-10-19 - Evaluate research against existing behavior before extending the stack
 
 - **Decision.** Retain current routing and coordination policy. Add fixed-input provenance and a

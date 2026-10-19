@@ -131,3 +131,7 @@ necessary ignored/untracked material separately. Never archive the only recovery
 strength of an untested snapshot. `aos coord procedure save|list` promotes scoped reusable guidance
 only with two distinct host-verified successes; stale or contradicted guidance is not retrieved.
 See `docs/coordination-tuning.md` in agentic-os for contract fields and exact command examples.
+
+After a quota interruption, follow `handoff` and use `aos coord continuation check <checkpoint-id>
+--repo . --from <vendor> --to <other-vendor>` before reserving the receiver. This checks cold state
+and observed capacity without dispatching, changing receipts or releasing unresolved work.

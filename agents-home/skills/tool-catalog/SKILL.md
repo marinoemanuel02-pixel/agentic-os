@@ -44,8 +44,17 @@ Servers cost context on every request: add one only when a command line cannot d
 Coordination tuning: optional `delegate --contract` and Codex `--transport app-server`; `coord task`
 for checked dependencies and compact packets, `report`/`annotate` for routing evidence,
 `capabilities`/`roles`/`native`/`steer` for supported native controls and lifecycle, and
-`checkpoint`/`procedure` for verified continuation and scoped guidance. The six-case
+`checkpoint`/`procedure` for verified continuation and scoped guidance. `continuation check` tests
+a cold quota handoff to the other existing vendor without replaying work. The six-case
 `tools/coordination-eval.ps1` defaults to model-free preparation. See `docs/coordination-tuning.md`.
+
+Existing-footage editing: `tools/footage/footage.py` in the setup repo, reached through the `aos`
+module's directory. Offline inventory/transcription, timestamp search, draft cuts and checked FFmpeg
+export; use the `media-tools` skill's footage reference. Never downloads a model implicitly.
+
+Claude's optional native `aos-status` mod lives in `plugins/aos-status`. Its `/aos-status` command
+shows bounded local coordination records and measured context without model calls or writes.
+Persistent installation requires the project's independent review; see that directory's README.
 
 ## Other agents
 

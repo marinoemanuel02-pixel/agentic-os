@@ -123,6 +123,20 @@ acknowledgement must match its request and turn. The host forwards its timeout t
 
 ## Recovery and procedures
 
+After a quota interruption and inspection of stopped work, check an existing checkpoint for
+continuation to the other vendor:
+
+```powershell
+aos coord continuation check continuation --repo . --from claude --to codex
+```
+
+This read-only report requires a confirmed source limit, known positive target allowance, unchanged
+checkpoint inputs/task state, intact snapshots and no unresolved active actors. Unknown, stale or
+reset capacity requires a new observation. A low positive allowance is reported honestly. Inspect
+preserved ignored/untracked files separately. The receiver runs the preserved next check before
+further edits. No model is launched, no actor/claim released and no failed receipt rewritten. See
+`handoff` and [selected additions](picked-stack-additions.md).
+
 ```powershell
 aos coord checkpoint save continuation --repo . --task implement-parser --next-check "Run parser tests"
 aos coord checkpoint check continuation --repo .

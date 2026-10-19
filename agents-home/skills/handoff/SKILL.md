@@ -40,6 +40,28 @@ Goal: the next agent resumes from `HANDOFF.md` alone, with no chat history.
    - From Claude Code, the user can also type `/codex:transfer` (a user-only command) to move the
      session into Codex. Write HANDOFF.md anyway, so the state survives whichever route is taken.
 
+## A vendor quota interrupted the work
+
+Preserve the original failure receipt and record only the observed limit/reset in `aos capacity`.
+Inspect in-flight workers and partial changes first. Do not mark actors stopped or release their
+claims merely because a model returned a quota error. Finish them only with actual termination
+evidence. Preserve required ignored/untracked material separately and retain the source checkout.
+
+After inspection, save the checkpoint and `HANDOFF.md` as above. Before reserving the receiving
+vendor's new lead, run:
+
+```powershell
+aos coord continuation check <checkpoint-id> --repo . --from <limited-vendor> --to <other-vendor>
+```
+
+The read-only check requires a current source quota limit, known positive target capacity, valid
+checkpoint inputs/task state and no unresolved active actors. Unknown or expired observations block
+it; inspect account usage and record a current observation instead of assuming quota is available.
+It does not dispatch, release claims, replay writes or prove preserved ignored files are complete.
+The receiver reads `HANDOFF.md`, verifies explicitly preserved material, runs the returned
+`NextCheck`, and then continues from the actual files. An interrupted or partial contribution never
+becomes accepted by handoff alone.
+
 ## Failure modes
 
 - Not a git repo: skip the git commands, list changed files by hand, and say so under **Not verified**.
