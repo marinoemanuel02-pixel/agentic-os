@@ -5203,6 +5203,11 @@ Describe 'selected stack additions' {
         $null=aos coord continuation check quota-handoff --repo $continuationRepo --from codex --to claude 6>&1
         $LASTEXITCODE | Should -Be 1
     }
+    It 'runs the read-only status summary regression controls' {
+        $script=Join-Path $PSScriptRoot '..\plugins\aos-status\tests\summary.test.mjs'
+        & node --test $script
+        $LASTEXITCODE | Should -Be 0
+    }
 }
 
 }

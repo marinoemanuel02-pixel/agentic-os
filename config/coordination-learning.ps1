@@ -125,6 +125,36 @@ function Test-AosCheckpoint([string]$Id,[string]$Repo) {
     return [pscustomobject]@{Valid=($reasons.Count -eq 0);Reasons=$reasons;Checkpoint=$row;ActiveActors=$live}
 }
 
+function Test-AosQuotaContinuation([string]$CheckpointId,[string]$Repo,[string]$FromVendor,[string]$ToVendor) {
+    Assert-AosCoordId $CheckpointId
+    if ($FromVendor -notin @('claude','codex') -or $ToVendor -notin @('claude','codex') -or $FromVendor -eq $ToVendor) {
+        throw 'quota continuation needs two distinct supported vendors'
+    }
+    $reasons=@();$checkpoint=$null;$capacity=$null;$source=$null;$target=$null
+    try {
+        $checkpoint=Test-AosCheckpoint -Id $CheckpointId -Repo $Repo
+        $reasons+=@($checkpoint.Reasons)
+    } catch { $reasons+='checkpoint unavailable: '+$_.Exception.Message }
+    try { $capacity=Get-AosCapacity -Now ([datetime]::UtcNow) }
+    catch { $reasons+='capacity observations unavailable' }
+    if ($capacity -and $capacity.Contains($FromVendor)) { $source=$capacity[$FromVendor] }
+    if ($capacity -and $capacity.Contains($ToVendor)) { $target=$capacity[$ToVendor] }
+    if (-not $source -or $source.state -ne 'limited') { $reasons+='source quota limit is not currently confirmed' }
+    if (-not $target -or $target.state -notin @('ok','low') -or $null -eq $target.remaining -or
+        $target.remaining -le 0 -or $target.remaining -gt 100) {
+        $reasons+='target capacity is limited or unconfirmed; inspect usage and record a current observation'
+    }
+    $nextCheck=$null
+    if ($checkpoint -and $checkpoint.Checkpoint) { $nextCheck=$checkpoint.Checkpoint.next_check }
+    return [pscustomobject]@{
+        Ready=($reasons.Count -eq 0);Reasons=$reasons;CheckpointId=$CheckpointId;FromVendor=$FromVendor;ToVendor=$ToVendor
+        NextCheck=$nextCheck
+        SourceCapacity=($source | Select-Object state,remaining,resets,reported,source)
+        TargetCapacity=($target | Select-Object state,remaining,resets,reported,source)
+        Action='Inspect HANDOFF.md and preserved material, then run NextCheck before further edits. No model was launched.'
+    }
+}
+
 function Get-AosProcedureRoot([string]$Repo) {
     return (Join-Path (Join-Path (Get-AosCoordDir) 'procedures') (Get-AosClaimKey (Get-AosCheckout $Repo)))
 }
@@ -176,9 +206,9 @@ function Get-AosProcedures([string]$Repo,[string]$TaskClass,[switch]$IncludeStal
 
 function Invoke-AosTuningControl([string[]]$Arguments) {
     $sub=@($Arguments)[0]
-    if ($sub -notin @('task','report','annotate','checkpoint','procedure','capabilities','roles','native','steer')) { return $false }
+    if ($sub -notin @('task','report','annotate','checkpoint','continuation','procedure','capabilities','roles','native','steer')) { return $false }
     $rest=@($Arguments | Select-Object -Skip 1)
-    $p=ConvertFrom-AosCliArgs $rest @('include-stale','dry-run') @('repo','next-check','class','text','corrections','integration-seconds','review-seconds','turn') @('task','evidence','file')
+    $p=ConvertFrom-AosCliArgs $rest @('include-stale','dry-run') @('repo','next-check','class','text','corrections','integration-seconds','review-seconds','turn','from','to') @('task','evidence','file')
     $first=@($p.Pos)[0];$second=@($p.Pos)[1];$repo=$p.Opts['repo'];if (-not $repo) {$repo=(Get-Location).ProviderPath}
     $result=$null;$ok=$true
     switch ($sub) {
@@ -206,6 +236,11 @@ function Invoke-AosTuningControl([string[]]$Arguments) {
             }
             elseif ($first -eq 'check') {$result=Test-AosCheckpoint $second $repo;$ok=$result.Valid}
             else {throw 'usage: aos coord checkpoint save|check <id> --repo <path> [--task <id>] [--next-check <text>]'}
+        }
+        'continuation' {
+            if ($first -ne 'check') { throw 'usage: aos coord continuation check <checkpoint-id> --repo <path> --from <vendor> --to <vendor>' }
+            $result=Test-AosQuotaContinuation -CheckpointId $second -Repo $repo -FromVendor $p.Opts['from'] -ToVendor $p.Opts['to']
+            $ok=$result.Ready
         }
         'procedure' {
             if ($first -eq 'save') {$result=Save-AosProcedure -Id $second -Repo $repo -TaskClass $p.Opts['class'] -Text $p.Opts['text'] -EvidenceIds @($p.Opts['evidence']) -Files @($p.Opts['file'])}

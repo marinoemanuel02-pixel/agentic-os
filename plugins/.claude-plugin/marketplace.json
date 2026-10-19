@@ -1,0 +1,12 @@
+{
+  "name": "aos-local",
+  "owner": { "name": "agentic-os" },
+  "metadata": { "description": "Locally maintained agentic-os additions" },
+  "plugins": [
+    {
+      "name": "aos-status",
+      "source": "./aos-status",
+      "description": "Read-only local coordination status pane"
+    }
+  ]
+}
