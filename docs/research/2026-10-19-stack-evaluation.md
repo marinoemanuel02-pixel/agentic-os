@@ -19,10 +19,17 @@ outside the repository under `~/.aos/research/stack-evaluation-20261019`. No cre
 | Local dense retrieval | The installed embedding route works and improved this small cross-language diagnostic set. It does not expose sparse/multi-vector outputs in the observed response. | Retain the experiment. A persistent sidecar needs a representative labelled corpus and freshness/deletion controls first. No new model/server. |
 | Earlier creative approval | Existing video rule R01 requires reviewed style and animated hero before production; R30 requires early visual evidence. | Do not add another approval stage. A future video can test adherence and whether the preview is representative. |
 | Native observability / OpenTelemetry | No current outcome decision requires a new collector. Vendor observations would not establish host acceptance, integration effort or cross-vendor admission. | Do not enable/export telemetry or remove lifecycle guarantees. Reconsider only a specific missing observation. |
+| Native context audit / skill pruning | No source-by-source context diagnostic was captured from the actual running harness. Total input usage from one tiny fixture does not attribute overhead to a particular skill. Claude's observed limit blocks further native probes this run. | Keep the shared source and discoverability. Measure the active surface before disabling skills, duplicating metadata or trimming rules. |
 | GPU transcription | A working CPU path exists; this task has no active transcription job or measured transcription bottleneck. | Keep the environment and compatibility pin. No CUDA installation or ASR migration from benchmark claims. |
 | Native TUI steering replacing App Server | The adapter is an optional transport in programmatic delegation. There is no human-interactive TUI branch in that path to delete. | The two surfaces serve different callers. Do not remove the automation adapter. |
 | Native Codex installation | `Invoke-AosCodexInstaller` already invokes the official installer. The 18 October release adoption and rollback evidence are documented separately. | Do not build a second installer or delete compatibility handling on secondary release-tracker claims. |
 | Xberg extraction | The cited release's primary licence and PyPI metadata say MIT, contradicting Perplexity's ELv2 claim. Current CLI docs describe Windows installation, but the checked Python release lists no Windows wheel. | Keep as a conditional CLI candidate. Do not install, assume a source-build fallback, or add an MCP. Actual OCR demand and a bounded Windows distribution/dependency preflight are still needed. |
+
+Other Perplexity leads remain unadopted: there is no current OAuth problem that would justify an
+MCP-login change, and independent read batching is already available to this harness. Marker and
+Docling were not benchmarked here; the report's broad hardware exclusions based on isolated issues
+are not treated as proof that those tools cannot work. All extraction alternatives still need an
+actual uncovered document workflow before an installation comparison is useful.
 
 ## Retrieval experiment
 
@@ -150,5 +157,16 @@ representative paired benchmark, an engine ranking or a reason to tune routing.
   and loaded the wrong utility module. Those failures were not treated as production failures or
   valid coverage. The launcher now starts the older shell through PowerShell's native compatibility
   path. Temporary test scaffolding was removed; no existing measured assertion was weakened.
-- Final combined-suite output is retained in `full-final-pwsh.log`; final counts are recorded after
-  that frozen-runtime run completes.
+- The final combined `aos test` capture reached its 1,500-second capture limit after PowerShell 5.1
+  completed 513 tests with zero failures/skips. PowerShell 7 had no final summary, so that part was
+  incomplete, regardless of its observed process exit. The unfiltered PowerShell 7 suite was rerun
+  alone and passed all 513 tests with zero failures/skips (773.33 seconds, exit 0).
+- A subsequent focused `aos test` invocation passed all parsing/ASCII checks and all nine new
+  regressions in both shells (exit 0). Its 504 unselected tests per shell are not counted as coverage;
+  the unfiltered runs above establish that coverage. Logs are `full-final-pwsh.log`,
+  `full-pwsh-retry.log` and `aos-wrapper-focused.log` in the external evidence directory.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File ./bootstrap.ps1 -DryRun`,
+  `node --check tools/coordination-compare.mjs` and `git diff --check` passed. Runtime and test files
+  remained identical to implementation commit `d917023` throughout final verification; subsequent
+  changes only complete this documentation. The test diff adds assertions without changing or
+  deleting existing assertions.
