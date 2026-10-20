@@ -68,11 +68,13 @@ MCP registration is needed. See `docs/stack-additions.md` for exact commands and
 
 The same launcher reaches the CLI-Anything Kdenlive harness, OpenMontage local board, OpenDesign
 Agent Kit exports, VoiceStudio app and isolated Composio Python environment. Paid/cloud examples
-in upstream documentation are not permission to use them. VoiceStudio still needs a chosen engine;
-Composio still needs a specific connector/account. OmniRoute is installed separately for additional
-provider workers; its foreground launcher injects encrypted-store keys, binds loopback and requires
-API keys. The operator explicitly waived external review for this installation. Provider connection
-is deferred at the operator's request; no additional quota exists yet. Native clients remain normal routes.
+in upstream documentation are not permission to use them. VoiceStudio's local Supertonic preset
+speech passed bilingual generation and cold reopen. Composio's saved key returned 401 before account
+inventory, so hosted connector testing needs a valid key. OmniRoute's saved OpenRouter connection
+and restricted free text worker passed; its foreground launcher injects encrypted-store keys and binds
+loopback. Native clients remain normal routes; this is an unaccepted text candidate, not a managed
+third-provider writer. The operator waived external review. See the dated trial report in
+`docs/research/2026-10-20-stack-trial-results.md` for failures and screened-only candidates.
 
 ## Other agents
 

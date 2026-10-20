@@ -322,12 +322,16 @@
     {
       "name": "Graphify content initial",
       "status": "failed",
-      "scope": "Same-basename files in three languages; retained location evidence"
+      "scope": "Same-basename files in three languages; retained location evidence",
+      "result_kind": "superseded_harness_check",
+      "superseded_by": "Graphify normalized symbols initial"
     },
     {
       "name": "Graphify content edited",
       "status": "failed",
-      "scope": "Same-basename files in three languages; retained location evidence"
+      "scope": "Same-basename files in three languages; retained location evidence",
+      "result_kind": "superseded_harness_check",
+      "superseded_by": "Graphify normalized symbols edited"
     },
     {
       "name": "Graphify content deleted",
@@ -551,5 +555,15 @@
     "Duplicate worker refusal is an overwrite-protection result; original successful candidate retained.",
     "Peak memory and subscription-wide quota savings unknown.",
     "No managed third-provider writer, publishing, continuous memory hooks or bulk pack installation."
-  ]
+  ],
+  "verification": {
+    "retained_outcomes_checked": 34,
+    "document_cell_associations": true,
+    "document_marker_order": true,
+    "standalone_exports_reopened": true,
+    "worker_original_candidate_verified": true,
+    "local_document_links": "passed",
+    "markdown_parse": "passed",
+    "unrelated_handoff_sha256": "2F0FDEAA76AA0EDB3595D86E5896039B1C355E4BAC1A3134AF4AD092998628C5"
+  }
 }
