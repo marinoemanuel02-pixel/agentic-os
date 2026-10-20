@@ -14,7 +14,7 @@
     },
     "watch": {
       "purpose": "Bounded local video frames and native captions; reuse footage for offline ASR",
-      "command": ["{python}", "{home}/.aos/tools/stack/watch/source/skills/watch/scripts/watch.py"],
+      "command": ["{python}", "{repo}/tools/watch_local.py"],
       "fixed_args": ["--engine", "local", "--no-whisper", "--max-frames", "30"]
     },
     "ui-ux": {
@@ -40,14 +40,18 @@
       "command": ["{home}/.aos/uv/tools/cli-anything-kdenlive/Scripts/cli-anything-kdenlive.exe"],
       "env": {"PATH": "{home}/AppData/Local/Programs/Kdenlive/bin;{path}"}
     },
+    "kdenlive-render": {
+      "purpose": "Checked H.264/AAC export of local MLT timelines with isolated Windows plugins",
+      "command": ["{python}", "{repo}/tools/kdenlive_render.py"]
+    },
     "openmontage": {
       "purpose": "OpenMontage local storyboard and production tools",
       "command": ["{home}/.aos/venvs/openmontage/Scripts/python.exe", "-m", "backlot"],
       "cwd": "{home}/.aos/tools/stack/openmontage/source"
     },
     "composio": {
-      "purpose": "Python with the Composio SDK; a specific connector still needs account setup",
-      "command": ["{home}/.aos/venvs/composio/Scripts/python.exe"]
+      "purpose": "On-demand Composio Connect MCP calls with the encrypted consumer key",
+      "command": ["{python}", "{repo}/tools/composio_connect.py"]
     },
     "voicestudio": {
       "purpose": "Local speech app with home-folder profile, runtime and model storage",

@@ -10,19 +10,19 @@ under the home folder outside OneDrive; the repository contains shared procedure
 
 | Addition | Delivered route | Verified here / remaining limit |
 | --- | --- | --- |
-| Watch | Shared `watch` skill and local frame extractor | Timestamped visual-only event inspected at five seconds. Embedded MP4 captions were not extracted; separate cached Whisper worked. Local engine, 30-frame cap, cloud speech fallback disabled. |
+| Watch | Shared `watch` skill, pinned frame extractor and owned caption adapter | Timestamped visual event inspected at five seconds. Embedded MP4 text captions, source-relative focus and quiet intervals now pass. Local engine, 30-frame cap and disabled speech fallback remain. |
 | AnyDoc | Local CLI 0.2.4 | DOCX/text-PDF table markers preserved; scan exited 3 locally. Hosted OCR refused. Isolated Xberg separately passed the selected local scan trial; complex office fidelity remains unmeasured. |
 | frontend-design | Official shared skill, pinned source and Apache-2.0 licence | Skill validation passed; no claim of better aesthetics without a real brief and visual comparison. |
 | UI UX Pro Max | Shared skill, offline Python search and MIT licence | Local UX query and design-system generation worked. Advice and contrast claims still need checking in the actual interface. |
 | Repomix | CLI 1.18.1 | Selected Python export contained the source and omitted the fixture `.env`; no global hook or remote-config trust enabled. Inspect exports before sharing them. |
 | RTK OSS | Windows CLI 1.0.1 | Invalid Git option preserved exit 129 and the original diagnostic. No automatic command rewrite or measured quota-saving claim. |
 | Graphify | Isolated code-only CLI | Fixture graph contained both functions and the expected caller edge, with zero reported model tokens. Global hooks/MCP and LLM backends are disabled in this route. Large-repo accuracy and freshness still need task-specific checks. |
-| Serena | Isolated on-demand CLI; six-tool navigation context | TS/PowerShell symbols and Python edit freshness passed with explicit languages; first Python query timed out. Six navigation tools only; dashboard and log GUI disabled. See trial limits. |
+| Serena | Isolated on-demand CLI; six-tool navigation context | Fresh-server Python/TypeScript/PowerShell lookups passed with explicit languages and cached dependencies. Allow startup time beyond the earlier short client deadline. Six navigation tools only; dashboard/log GUI disabled. |
 | OpenMontage | Isolated Python environment and source | Local audio/video trim, Backlot health, a saved-key Pixabay search with source/creator metadata and a short stock export passed. CLIP models, broad provenance quality and cloud generation remain untested. |
 | OpenDesign Agent Kit | CLI 0.2.0 | Two responsive fixtures exported to standalone HTML and reopened with working filters. Real product design quality remains unmeasured. No global MCP/initializer installed. |
 | VoiceStudio | Native Windows app 0.5.6 under the home folder | Supertonic-3 preset voice selected on CPU; analytics off. Runtime imports and localhost health passed. Actual Italian (8.43 s) and English (7.73 s) WAVs decoded and were non-silent. Main studio opened after custom setup. Dubbing/cloning and subjective voice quality are untested. |
-| CLI-Anything | Kdenlive harness 1.0.0, isolated | Created project, imported media, added a track/clip and exported native XML. Existing MLT executable reports its version; consumer initialization and render attempts timed out, including an engine-only test. End-to-end render and opening the project in the editor are unverified. |
-| Composio | Isolated Python SDK | Offline custom tool passed. Saved key returned HTTP 401 on both account-inventory endpoints; account scope and connector execution remain blocked. |
+| CLI-Anything | Kdenlive harness 1.0.0 plus checked native render helper | Project creation/import/track/clip/XML passed. Isolated plugin rendering now exports the original project; decoding and video similarity passed. Unsupported active services are refused. Full plugin startup and opening the editor remain unverified. |
+| Composio | On-demand consumer Connect MCP client; SDK environment retained | Saved consumer key authenticates with the correct header/endpoint. Tool listing/discovery and a connected GitHub read passed. Other apps/actions require their own scoped verification. |
 | OmniRoute | Isolated CLI/server 3.8.51 plus text worker | Saved OpenRouter account connected; restricted free-route worker returned a candidate. Anonymous access rejected with 401 and disallowed model with 403. Server stopped after tests; no managed third-provider writer. |
 
 Exact source revisions, installed versions and release hashes are in the
@@ -41,6 +41,8 @@ Verification: `aos test` passed **527 tests under each of Windows PowerShell 5.1
 with no failures or skips. After the final Python-only setup changes, all **16 launcher/router/worker
 controls** passed again from both shells. The three shared skills passed the skill validator.
 These controls use mocked transport and disposable files; installed-tool smoke checks are separate.
+Those figures describe the earlier installation. The later [repair report](research/2026-10-20-stack-repairs.md)
+records the corrected routes and adds ten offline regression controls.
 
 ## Use the tools
 
@@ -65,20 +67,35 @@ For Serena, start one selected project with this context; an MCP client can laun
 over stdio without global registration:
 
 ```powershell
-python tools/stack.py serena start-mcp-server --project path/to/project --context config/serena-readonly.yml --agent-interface tools --transport stdio --enable-web-dashboard false --enable-gui-log-window false --open-web-dashboard false
+python tools/stack.py serena start-mcp-server --project path/to/project --context config/serena-readonly.yml --agent-interface tools --transport stdio --enable-web-dashboard false --enable-gui-log-window false --open-web-dashboard false --tool-timeout 120
 ```
 
 Its context exposes symbol overview, symbol lookup, references, pattern search, file read and directory
 listing. Index/cache writes by the language server can still occur; this is a navigation-only tool set,
 not a filesystem sandbox. Check that a language is supported before promising semantic results.
+For a mixed-language project, explicitly configure its actual languages in `.serena/project.yml`
+instead of assuming detection includes all of them. The checked fixture used:
+
+```yaml
+language_servers:
+  - python
+  - typescript
+  - powershell
+```
+
+Merge this into an existing project config; keep its other fields. A fresh server with cached
+dependencies took 21.77 seconds for its first Python lookup. The test client allowed 150 seconds;
+a 40-second whole startup budget is not a reliable readiness check. The installed tool's default
+timeout is 240 seconds; the example's explicit 120-second setting is the bounded tested profile.
 
 For the conditional media/design tools:
 
 ```powershell
 python tools/stack.py kdenlive --help
+python tools/stack.py kdenlive-render path/to/exported-project.kdenlive --output path/to/new-render.mp4
 python tools/stack.py openmontage serve --port 7800
 python tools/stack.py open-design export path/to/artifact.html --format standalone --workspace path/to/workspace
-python tools/stack.py composio -c "import composio; print('SDK available')"
+python tools/stack.py composio tools
 python tools/stack.py voicestudio
 ```
 
@@ -86,6 +103,35 @@ OpenMontage's foreground server binds localhost; stop it when done. Its cloud-pr
 are installed, but no credentials were configured or generation requested. OpenDesign expects a registered
 `.artifact.json` sidecar; use absolute entry paths or run from the workspace, because relative entries are
 resolved from the current directory. Do not run its initializer against real vendor configuration blindly.
+
+The Kdenlive project harness still edits/exports the project; `kdenlive-render` is its separate
+checked H.264/AAC MP4 renderer. It copies six existing plugins into a hash-keyed home-folder cache
+and passes `-repository` explicitly, before initialization. It refuses unsupported active services
+and existing output files, preserves the original project and selects the harness's exported
+timeline instead of its media bin. Other effects/formats require their own verification.
+
+Composio uses the **consumer** key already saved as `composio-api-key`. Its Connect endpoint is
+`https://connect.composio.dev/mcp`, with the `x-consumer-api-key` header. The developer SDK's
+`x-api-key` route is a separate interface: its rejection of this consumer key was not an invalid-key
+diagnosis. No developer project or further key rotation is needed for the checked route.
+`composio tools` returns live tool schemas. To make an authorized call, put its non-secret JSON
+arguments in a UTF-8 file, then run:
+
+```powershell
+python tools/stack.py composio call COMPOSIO_SEARCH_TOOLS --input path/to/search.json
+```
+
+Example search input:
+
+```json
+{"queries":[{"use_case":"Read the currently authenticated GitHub user's own profile"}],"session":{"generate_id":true},"search_strategy":"tool_search"}
+```
+
+Inspect the returned connection status and complete tool schema before any later call; reuse the
+returned session ID. App connections and action permissions remain task-specific. No remote shell,
+workbench, message or write action was used in verification. This local route needs no manual
+custom-MCP registration. Making Composio appear as a native app connector is a separate optional
+client connection; the launcher does not claim to have installed it into ChatGPT or Claude.
 
 VoiceStudio's launcher now passes an explicit `--user-data-dir` under
 `~/.aos/tools/stack/voicestudio/profile`; its managed runtime consequently lives there too.
@@ -216,7 +262,8 @@ checks, failures, blockers and candidates that did not advance beyond screening.
 On 20 October the encrypted store listed `openrouter-api-key`, `composio-api-key` and
 `pixabay-api-key`; values were not displayed. Key presence does not prove authentication or a working
 connector. Live OpenRouter and Pixabay checks subsequently passed. Composio's saved key returned
-HTTP 401 on both inventory endpoints, so its connector check remains blocked before account scope
-could be determined. Replace/re-save a valid key for the intended project to continue it.
+HTTP 401 on the developer inventory endpoints because it is a consumer key. After the operator's
+screenshot clarified the interface, Connect authentication and a connected GitHub read passed.
+Keep the existing saved consumer key; there is no pending key replacement.
 The operator has no Pexels key,
 so Pexels is optional and unconfigured; no replacement account/signup is required for the local setup.

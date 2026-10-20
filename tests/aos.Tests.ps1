@@ -5216,6 +5216,10 @@ Describe 'selected stack additions' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_stack_launcher.py' -v
         $LASTEXITCODE | Should -Be 0
     }
+    It 'runs optional stack repair controls without credentials or installed services' {
+        & python -m unittest discover -s $PSScriptRoot -p 'test_stack_repairs.py' -v
+        $LASTEXITCODE | Should -Be 0
+    }
 }
 
 }

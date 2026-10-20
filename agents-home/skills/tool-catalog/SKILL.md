@@ -66,15 +66,20 @@ LLM backends disabled. Serena is on demand: use the single-project, navigation-o
 `config/serena-readonly.yml`, tools interface, stdio transport and disabled web dashboard. No global
 MCP registration is needed. See `docs/stack-additions.md` for exact commands and verification limits.
 
-The same launcher reaches the CLI-Anything Kdenlive harness, OpenMontage local board, OpenDesign
-Agent Kit exports, VoiceStudio app and isolated Composio Python environment. Paid/cloud examples
+The same launcher reaches the CLI-Anything Kdenlive harness, its separate `kdenlive-render` command,
+OpenMontage local board, OpenDesign Agent Kit exports, VoiceStudio app and Composio Connect.
+The checked renderer uses isolated plugins and refuses unsupported active services. Watch adds local
+embedded text captions while retaining the pinned frame extractor. Paid/cloud examples
 in upstream documentation are not permission to use them. VoiceStudio's local Supertonic preset
-speech passed bilingual generation and cold reopen. Composio's saved key returned 401 before account
-inventory, so hosted connector testing needs a valid key. OmniRoute's saved OpenRouter connection
+speech passed bilingual generation and cold reopen. Composio's consumer key now passes Connect
+authentication, discovery and a connected GitHub read. Use `composio tools` or an explicitly
+authorized `composio call <tool> --input <json>`; the key comes from `aos secret` in memory.
+Do not use the consumer key as developer SDK auth. OmniRoute's saved OpenRouter connection
 and restricted free text worker passed; its foreground launcher injects encrypted-store keys and binds
 loopback. Native clients remain normal routes; this is an unaccepted text candidate, not a managed
 third-provider writer. The operator waived external review. See the dated trial report in
 `docs/research/2026-10-20-stack-trial-results.md` for failures and screened-only candidates.
+The later `docs/research/2026-10-20-stack-repairs.md` records repaired routes and remaining limits.
 
 ## Other agents
 

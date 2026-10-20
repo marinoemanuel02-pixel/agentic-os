@@ -3,6 +3,21 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-20 - Repair the optional routes at their actual integration boundaries
+
+- **Composio.** The operator's screenshot established a consumer Connect key, not a developer
+  Platform key. Replace the incorrect SDK authentication route with on-demand MCP calls using
+  the encrypted consumer key and its documented header. Tool discovery and a connected GitHub
+  read passed; do not request another key or infer every app/action works.
+- **Media.** Preserve pinned upstream sources. Add embedded local text captions around Watch's
+  frame report and a separate checked Kdenlive/MLT render command. Use an explicit Windows plugin
+  repository and refuse unsupported active services. Keep source files and existing outputs intact.
+- **Other failures.** Explicit Serena project languages and a fresh-server check passed. Claude
+  HUD's remaining test failure is a Windows URL expectation; the product's standard URL conversion
+  passed. Do not change the measured upstream test or remove useful tools based on these results.
+- **Evidence.** See the [repair report](research/2026-10-20-stack-repairs.md). No Claude review,
+  paid fallback, global MCP registration, native credential export or tool uninstall was required.
+
 ## 2026-10-20 - Keep trial evidence separate from adoption and activate the free worker route
 
 - **Evidence.** Execute bounded trials across the six saved workflow groups without Claude or
