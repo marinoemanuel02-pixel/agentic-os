@@ -1,5 +1,9 @@
 {
   "tools": {
+    "verify": {
+      "purpose": "Repeatable checks of the fourteen approved products; fresh output and explicit live calls",
+      "command": ["{python}", "{repo}/tools/stack_verify.py"]
+    },
     "anydoc": {
       "purpose": "Local document-to-Markdown conversion; hosted OCR disabled",
       "command": ["{node}", "{home}/.aos/tools/stack-node/node_modules/@firecrawl/anydoc/cli.js"]

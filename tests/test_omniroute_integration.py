@@ -44,6 +44,7 @@ class RouterPolicyTests(unittest.TestCase):
             row = db.execute('SELECT key,key_hash,allow_auto_combos,no_log,auto_resolve FROM api_keys').fetchone()
         self.assertNotIn('new-fixture', row)
         self.assertNotIn('old-fixture', row)
+        self.assertEqual(row[0], '')  # A readable hash label would itself match legacy plaintext auth.
         self.assertEqual(row[1], hashlib.sha256(b'new-fixture').hexdigest())
         self.assertEqual(row[2:], (0, 1, 0))
         self.assertEqual(policy.allowed_routes(self.database, 'new-fixture'), ['openrouter/fixture/route:free'])
@@ -75,6 +76,20 @@ class RouterPolicyTests(unittest.TestCase):
             db.execute('UPDATE api_keys SET no_log=0')
         with self.assertRaises(ValueError):
             policy.allowed_routes(self.database, 'new-fixture')
+
+    def test_legacy_auth_alias_is_refused_even_when_not_the_encrypted_key(self):
+        policy = load('omniroute_policy')
+        policy.harden_key(self.database, 'old-fixture', 'new-fixture', lambda s: None, lambda v: None)
+        with closing(sqlite3.connect(self.database)) as db, db:
+            db.execute("UPDATE api_keys SET key='readable-alternate-fixture'")
+        with self.assertRaises(ValueError):
+            policy.allowed_routes(self.database, 'new-fixture')
+
+    def test_empty_credential_cannot_match_the_cleared_legacy_column(self):
+        policy = load('omniroute_policy')
+        policy.harden_key(self.database, 'old-fixture', 'new-fixture', lambda s: None, lambda v: None)
+        with self.assertRaises(ValueError):
+            policy.allowed_routes(self.database, '')
 
     def test_empty_wildcard_combo_paid_and_unrestricted_policies_are_refused(self):
         policy = load('omniroute_policy')

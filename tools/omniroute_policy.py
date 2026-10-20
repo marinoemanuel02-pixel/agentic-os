@@ -89,8 +89,10 @@ def policy_routes(row):
 
 
 def key_row(db, key):
-    rows = db.execute('SELECT * FROM api_keys WHERE key_hash=? OR key=?',
-                      (hashlib.sha256(key.encode()).hexdigest(), key)).fetchall()
+    if not key:
+        raise ValueError('A nonempty encrypted worker key is required')
+    rows = db.execute('SELECT * FROM api_keys WHERE key_hash=?',
+                      (hashlib.sha256(key.encode()).hexdigest(),)).fetchall()
     if len(rows) != 1:
         raise ValueError('Saved worker key does not match one local policy')
     return rows[0]
@@ -102,7 +104,7 @@ def allowed_routes(database, key):
         row = key_row(db, key)
         routes = policy_routes(row)
         if (row['allow_auto_combos'] or json.loads(row['allowed_combos'] or '[]') or row['auto_resolve']
-                or row['key'] == key or not row['no_log']):
+                or row['key'] != '' or not row['no_log']):
             raise ValueError('Harden the worker policy before running tasks')
         return routes
 
@@ -121,7 +123,7 @@ def harden_key(database, old_key, new_key, backup, store):
         try:
             db.execute('UPDATE api_keys SET key=?, key_hash=?, key_prefix=?, allow_auto_combos=0, '
                        'allowed_combos=?, no_log=1, auto_resolve=0 WHERE id=?',
-                       ('sha256:' + digest, digest, new_key[:6], '[]', row['id']))
+                       ('', digest, new_key[:6], '[]', row['id']))
             store(new_key)
             db.commit()
         except BaseException:

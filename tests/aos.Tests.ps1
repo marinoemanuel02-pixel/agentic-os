@@ -5220,6 +5220,14 @@ Describe 'selected stack additions' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_stack_repairs.py' -v
         $LASTEXITCODE | Should -Be 0
     }
+    It 'runs repeatable optional stack verification controls in disposable folders' {
+        & python -m unittest discover -s $PSScriptRoot -p 'test_stack_verify.py' -v
+        $LASTEXITCODE | Should -Be 0
+    }
+    It 'runs additional-worker policy and lifecycle controls without credentials or services' {
+        & python -m unittest discover -s $PSScriptRoot -p 'test_omniroute_integration.py' -v
+        $LASTEXITCODE | Should -Be 0
+    }
 }
 
 }
