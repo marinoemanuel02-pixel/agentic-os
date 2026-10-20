@@ -1,0 +1,122 @@
+{
+  "date": "2026-10-20",
+  "scope": "Five failed optional-stack checks; operator waived external review",
+  "implementation_commit": "4a6a91d",
+  "code_sha256": {
+    "tools/composio_connect.py": "e7a1992eb2888d412e4fde56862448fb00f9673b80b59a8386cb532317aebb08",
+    "tools/watch_local.py": "20cb542f8ba565f26904071aae93fbad31abb37ee75e8314baad83bf80189eb1",
+    "tools/kdenlive_render.py": "441a98eb77cfb70c1b647d854c7c3076cb1307bf47d5bf84f6323d49f1182d18",
+    "config/stack-tools.json": "171d3f883bb29579355dc801e1ffaf5c0075c1e57de875ef4a9694d04d29efdf",
+    "tests/test_stack_repairs.py": "472069a4c7fe7ffaa2b6eb836bb9a07015a2279a7c5f7c3f52df099eb1f8fb9c"
+  },
+  "composio": {
+    "status": "passed",
+    "surface": "consumer Connect MCP",
+    "secret_name": "composio-api-key",
+    "header": "x-consumer-api-key",
+    "endpoint": "https://connect.composio.dev/mcp",
+    "tool_count": 11,
+    "verified": [
+      "initialize",
+      "tools/list",
+      "GitHub tool discovery",
+      "connected GitHub authenticated-user read"
+    ],
+    "global_registration": false,
+    "other_apps_verified": false
+  },
+  "watch": {
+    "status": "passed",
+    "verified": [
+      "original embedded MP4 text",
+      "frames and cue paths preserved",
+      "source-relative focus",
+      "quiet interval"
+    ],
+    "cloud_engine": false,
+    "speech_fallback": false,
+    "frame_cap": 30,
+    "upstream_modified": false
+  },
+  "kdenlive": {
+    "status": "passed for checked subset",
+    "duration_seconds": 2.005,
+    "video_ssim": 0.989062,
+    "streams": [
+      "video",
+      "audio"
+    ],
+    "verified": [
+      "native export of original harness project",
+      "full decode",
+      "relative media roots",
+      "existing-output refusal"
+    ],
+    "plugins": [
+      "core",
+      "avformat",
+      "xml",
+      "resample",
+      "qt6",
+      "kdenlive"
+    ],
+    "full_plugin_initialization": "still unsuitable",
+    "editor_open_verified": false
+  },
+  "serena": {
+    "status": "passed with explicit project languages",
+    "language_servers": [
+      "python",
+      "typescript",
+      "powershell"
+    ],
+    "fresh_server": true,
+    "dependencies_cached": true,
+    "tool_timeout_seconds": 120,
+    "first_query_seconds": {
+      "python": 21.77,
+      "typescript": 0.52,
+      "powershell": 0.21
+    }
+  },
+  "claude_hud": {
+    "status": "product URL behavior passed; upstream Windows assertion remains failed",
+    "original_tests": {
+      "passed": 48,
+      "failed": 1
+    },
+    "measured_test_modified": false,
+    "globally_activated": false
+  },
+  "removals": [],
+  "operator_action_pending_for_verified_local_routes": false,
+  "verification": {
+    "targeted_controls_passed": 26,
+    "full_aos_test": {
+      "exit_code": 0,
+      "shells": {
+        "Windows PowerShell 5.1": {
+          "passed": 528,
+          "failed": 0,
+          "skipped": 0
+        },
+        "PowerShell 7": {
+          "passed": 528,
+          "failed": 0,
+          "skipped": 0
+        }
+      }
+    },
+    "python_compilation": "passed",
+    "git_diff_check": "passed"
+  },
+  "evidence_root": "~/.aos/research/stack-repairs-20261020",
+  "retained_probe_failures": [
+    "developer API rejected a consumer key",
+    "SDK MCP client probe failed",
+    "original upstream Watch omitted embedded text",
+    "full MLT plugin initialization timed out",
+    "invalid unknown-route caption probe",
+    "identity probe selected zero files from wrong manifest; corrected frozen-media comparison passed"
+  ]
+}

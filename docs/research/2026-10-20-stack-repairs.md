@@ -71,6 +71,17 @@ and use the checked subset for supported renders.
   and [melt initialization](https://github.com/mltframework/mlt/blob/master/src/melt/melt.c)
   — Windows directory selection and argument order, corroborated against the installed executable.
 
+## Final verification
+
+`aos test` exited 0: **528 passed, zero failed/skipped** under each of Windows PowerShell 5.1
+and PowerShell 7. This includes the new ten-control Python repair suite. The sixteen existing
+launcher/router/worker controls also passed separately. Python compilation and `git diff --check`
+passed. No Claude inference or external review ran. Live native editor/HUD activation and broader
+connector/effect coverage were skipped because they are outside the bounded routes repaired here.
+
+The [machine receipt](2026-10-20-stack-repairs.json) records source hashes and exact verification scope.
+Implementation: `4a6a91d` on `codex/stack-repairs`; no push or merge was requested.
+
 Read the [setup guide](../stack-additions.md) for current commands. No operator action is pending
 for the local routes verified here. Broader connector permissions, new apps, cloning/dictation and
 native UI integrations remain task-specific choices.

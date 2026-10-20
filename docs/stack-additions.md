@@ -43,6 +43,8 @@ controls** passed again from both shells. The three shared skills passed the ski
 These controls use mocked transport and disposable files; installed-tool smoke checks are separate.
 Those figures describe the earlier installation. The later [repair report](research/2026-10-20-stack-repairs.md)
 records the corrected routes and adds ten offline regression controls.
+After the repairs, `aos test` passed **528 tests per shell**, with zero failures or skips.
+The ten repair controls and sixteen existing launcher controls passed separately as well.
 
 ## Use the tools
 

@@ -17,3 +17,10 @@ and identify non-fixable additions for removal. Prior no-external-review instruc
 Done means every reported failure has a verified fix, a clearly identified operator prerequisite,
 or an evidence-based retain/disable/remove decision. Heavy evidence stays under
 `~/.aos/research/stack-repairs-20261020`.
+
+Completed on 20 October. The operator's screenshot corrected the authentication assumption:
+Composio's existing consumer key works on Connect, so no further replacement is needed.
+Owned adapters repaired local captions and bounded native rendering. Explicit Serena languages
+passed; HUD's product URL behavior passed while its original Windows-incompatible assertion is
+preserved. No removal is justified. Live fixtures and 528 tests per Windows shell passed; see
+the [repair report](../../research/2026-10-20-stack-repairs.md) for scope and retained limits.
