@@ -71,8 +71,16 @@
       "command": ["{python}", "{repo}/tools/omniroute_env.py"]
     },
     "omniroute-worker": {
-      "purpose": "Text-only candidate; inject omniroute-worker-key from aos secret and use its allowed free route",
+      "purpose": "Low-level text candidate client; use omniroute-task for secure one-command operation",
       "command": ["{python}", "{repo}/tools/omniroute_worker.py"]
+    },
+    "omniroute-task": {
+      "purpose": "One verified-free text task; encrypted key, restricted route, owned gateway startup/shutdown",
+      "command": ["{python}", "{repo}/tools/omniroute_run.py"]
+    },
+    "omniroute-policy": {
+      "purpose": "Check or harden the local restricted worker key; encrypted recovery and hash-only database auth",
+      "command": ["{python}", "{repo}/tools/omniroute_policy.py"]
     }
   }
 }

@@ -63,7 +63,9 @@ def request(endpoint, model, prompt, key, timeout=45):
     if not model.strip() or len(model) > 200 or len(prompt.encode('utf-8')) > MAX_PROMPT or not prompt.strip():
         raise ValueError('Supply one explicit route and a nonempty task packet of at most 32 KiB')
     body = json.dumps({'model': model, 'messages': [{'role': 'user', 'content': prompt}],
-                       'stream': False, 'max_tokens': 2048}).encode('utf-8')
+                       'stream': False, 'max_tokens': 2048,
+                       'provider': {'allow_fallbacks': False,
+                                    'max_price': {'prompt': 0, 'completion': 0, 'request': 0}}}).encode('utf-8')
     req = urllib.request.Request(endpoint + '/chat/completions', data=body,
                                  headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key})
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
