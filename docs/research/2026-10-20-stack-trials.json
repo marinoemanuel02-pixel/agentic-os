@@ -1,0 +1,555 @@
+{
+  "date": "2026-10-20",
+  "evidence_root_relative_to_home": ".aos/research/remaining-stack-trials-20261020",
+  "external_review": false,
+  "claude_inference": false,
+  "paid_route_selected": false,
+  "fixture_manifest_sha256": "81b2cf45018a09ec59c73a0539d2c038e7c6a1bc26a947aaf7598411563aa09f",
+  "evidence_manifest_sha256": "61ecb7e41dd38eed3082eea24d0f441c037efe4eb168245fd71cb8dd2515fca5",
+  "source_receipts": [
+    "candidate-sources.json",
+    "release-preflights.json",
+    "node/package-lock.json"
+  ],
+  "python_versions": {
+    "headroom-ai": "0.41.0",
+    "chromadb": "1.5.9",
+    "numpy": "2.5.4"
+  },
+  "openrouter_account_usage": {
+    "is_free_tier": false,
+    "usage": 0,
+    "usage_daily": 0,
+    "free_model_daily_requests": {
+      "used": 2,
+      "limit": 1000,
+      "remaining": 998
+    }
+  },
+  "regression_suite": {
+    "command": "aos test",
+    "powershell_51": {
+      "passed": 527,
+      "failed": 0,
+      "skipped": 0
+    },
+    "powershell_7": {
+      "passed": 527,
+      "failed": 0,
+      "skipped": 0
+    },
+    "launcher_controls": 16
+  },
+  "candidate_results": [
+    {
+      "name": "fixture-freeze",
+      "status": "passed"
+    },
+    {
+      "name": "AnyDoc docx",
+      "status": "passed",
+      "missing": [],
+      "seconds": 2.84
+    },
+    {
+      "name": "AnyDoc pdf",
+      "status": "passed",
+      "missing": [],
+      "seconds": 0.541
+    },
+    {
+      "name": "AnyDoc scan refusal",
+      "status": "passed",
+      "scope": "Local refusal only; scanned content not extracted",
+      "seconds": 0.475
+    },
+    {
+      "name": "Watch extraction",
+      "status": "passed",
+      "scope": "Frame and caption extraction; visual check separate",
+      "seconds": 3.607
+    },
+    {
+      "name": "OpenMontage audio-video trim",
+      "status": "passed",
+      "seconds": 1.032
+    },
+    {
+      "name": "VoiceStudio continuing health",
+      "status": "blocked"
+    },
+    {
+      "name": "rg maths.py",
+      "status": "passed",
+      "seconds": 0.037
+    },
+    {
+      "name": "rg main.py",
+      "status": "passed",
+      "seconds": 0.032
+    },
+    {
+      "name": "rg calc.ts",
+      "status": "passed",
+      "seconds": 0.034
+    },
+    {
+      "name": "rg index.ts",
+      "status": "passed",
+      "seconds": 0.031
+    },
+    {
+      "name": "rg Maths.ps1",
+      "status": "passed",
+      "seconds": 0.03
+    },
+    {
+      "name": "rg Main.ps1",
+      "status": "passed",
+      "seconds": 0.029
+    },
+    {
+      "name": "OpenRouter account authentication",
+      "status": "passed"
+    },
+    {
+      "name": "OpenRouter free route preflight",
+      "status": "passed",
+      "scope": "No inference yet; gateway route must be confirmed separately"
+    },
+    {
+      "name": "Composio connection inventory",
+      "status": "blocked",
+      "http_status": 401
+    },
+    {
+      "name": "OmniRoute provider inventory",
+      "status": "passed"
+    },
+    {
+      "name": "Repomix selected multilingual export",
+      "status": "passed",
+      "missing": [],
+      "seconds": 1.617
+    },
+    {
+      "name": "Whisper cached English ASR",
+      "status": "passed",
+      "missing": [],
+      "seconds": 38.681
+    },
+    {
+      "name": "RTK failure preservation",
+      "status": "passed",
+      "seconds": 0.41
+    },
+    {
+      "name": "Graphify initial",
+      "status": "passed",
+      "scope": "Update exit only; graph contents inspected separately",
+      "seconds": 2.402
+    },
+    {
+      "name": "Graphify edited",
+      "status": "passed",
+      "scope": "Update exit only; graph contents inspected separately",
+      "seconds": 2.268
+    },
+    {
+      "name": "Graphify deleted",
+      "status": "passed",
+      "scope": "Update exit only; graph contents inspected separately",
+      "seconds": 2.0
+    },
+    {
+      "name": "Pixabay via OpenMontage",
+      "status": "passed",
+      "seconds": 3.484
+    },
+    {
+      "name": "Pixabay short export",
+      "status": "passed",
+      "seconds": 1.621
+    },
+    {
+      "name": "Serena navigation allowlist",
+      "status": "passed"
+    },
+    {
+      "name": "Serena py symbol",
+      "status": "failed",
+      "seconds": 40.01
+    },
+    {
+      "name": "Serena ts symbol",
+      "status": "passed",
+      "seconds": 13.55
+    },
+    {
+      "name": "Serena ps symbol",
+      "status": "passed",
+      "seconds": 0.24
+    },
+    {
+      "name": "Serena freshness fresh_calculation",
+      "status": "passed"
+    },
+    {
+      "name": "Serena freshness calculate",
+      "status": "passed"
+    },
+    {
+      "name": "OmniRoute operational trial",
+      "status": "blocked"
+    },
+    {
+      "name": "Playwright baseline facts",
+      "status": "passed",
+      "seconds": 7.779
+    },
+    {
+      "name": "Playwright console/slow asset",
+      "status": "passed"
+    },
+    {
+      "name": "Playwright MCP /",
+      "status": "passed"
+    },
+    {
+      "name": "Playwright MCP /dynamic?q=gamma",
+      "status": "passed"
+    },
+    {
+      "name": "Playwright MCP /page?n=2",
+      "status": "passed"
+    },
+    {
+      "name": "Playwright MCP /login",
+      "status": "passed"
+    },
+    {
+      "name": "Playwright MCP /private",
+      "status": "passed"
+    },
+    {
+      "name": "API Anything learning",
+      "status": "passed",
+      "seconds": 5.468
+    },
+    {
+      "name": "API Anything unseen",
+      "status": "passed",
+      "seconds": 0.301
+    },
+    {
+      "name": "API Anything changed",
+      "status": "passed",
+      "seconds": 2.293
+    },
+    {
+      "name": "Obscura CLI startup",
+      "status": "passed",
+      "scope": "Startup only; inspect commands before retrieval",
+      "seconds": 0.02
+    },
+    {
+      "name": "Existing dense bilingual retrieval",
+      "status": "passed",
+      "scope": "Retrieval of exact original spans, not generated answers"
+    },
+    {
+      "name": "OmniRoute provider registration",
+      "status": "passed",
+      "http_status": 201
+    },
+    {
+      "name": "Obscura static retrieval",
+      "status": "passed",
+      "seconds": 0.241
+    },
+    {
+      "name": "Headroom deterministic log compression",
+      "status": "passed",
+      "scope": "Local LogCompressor, no proxy/model/whole-message token benchmark",
+      "missing": [],
+      "seconds": 5.4356
+    },
+    {
+      "name": "Beads isolated database init",
+      "status": "passed",
+      "seconds": 14.145
+    },
+    {
+      "name": "Beads dependency blocking",
+      "status": "passed",
+      "seconds": 0.724
+    },
+    {
+      "name": "Beads issue export",
+      "status": "passed",
+      "scope": "Issue interchange only; not full database backup",
+      "seconds": 0.865
+    },
+    {
+      "name": "Herdr isolated CLI preflight",
+      "status": "passed",
+      "scope": "CLI/config only; process survival requires actual server/pane",
+      "seconds": 0.026
+    },
+    {
+      "name": "Xberg text PDF",
+      "status": "passed",
+      "seconds": 0.079
+    },
+    {
+      "name": "Xberg scanned PDF",
+      "status": "passed",
+      "seconds": 4.069
+    },
+    {
+      "name": "MemPalace SQLite backend retrieval",
+      "status": "passed",
+      "scope": "Current backend with existing Ollama vectors; default Chroma/model not installed"
+    },
+    {
+      "name": "MemPalace edit and deletion",
+      "status": "passed"
+    },
+    {
+      "name": "MemPalace export-rebuild",
+      "status": "passed"
+    },
+    {
+      "name": "Graphify content initial",
+      "status": "failed",
+      "scope": "Same-basename files in three languages; retained location evidence"
+    },
+    {
+      "name": "Graphify content edited",
+      "status": "failed",
+      "scope": "Same-basename files in three languages; retained location evidence"
+    },
+    {
+      "name": "Graphify content deleted",
+      "status": "passed",
+      "scope": "Same-basename files in three languages; retained location evidence"
+    },
+    {
+      "name": "Gunk Buster supported drift scan",
+      "status": "passed",
+      "seconds": 8.48
+    },
+    {
+      "name": "Gunk Buster generic stale instruction",
+      "status": "failed",
+      "scope": "No finding for the frozen obsolete-command fixture; scanner does not establish arbitrary instruction truth"
+    },
+    {
+      "name": "Composio legacy endpoint retry",
+      "status": "blocked",
+      "http_status": 401
+    },
+    {
+      "name": "Claude HUD offline fixtures",
+      "status": "failed",
+      "scope": "No native model request; no production settings",
+      "seconds": 0.863
+    },
+    {
+      "name": "VoiceStudio cold reopen health",
+      "status": "passed"
+    },
+    {
+      "name": "VoiceStudio repeat it",
+      "status": "passed",
+      "scope": "Cached model; full network isolation not established",
+      "seconds": 11.19
+    },
+    {
+      "name": "VoiceStudio repeat en",
+      "status": "passed",
+      "scope": "Cached model; full network isolation not established",
+      "seconds": 3.8
+    },
+    {
+      "name": "Kdenlive native minimal render",
+      "status": "failed",
+      "seconds": 35.973
+    },
+    {
+      "name": "Design fixtures",
+      "status": "passed",
+      "scope": "Equal brief; two sequential Codex-authored interpretations, not independent skill efficacy benchmark"
+    },
+    {
+      "name": "ECC AgentShield fixture scan",
+      "status": "passed",
+      "scope": "Seeded configuration findings; manual completeness check separate",
+      "seconds": 0.517
+    },
+    {
+      "name": "Ruflo security library surface",
+      "status": "passed",
+      "scope": "Library exports only; this package does not itself prove scanner coverage",
+      "seconds": 0.226
+    },
+    {
+      "name": "Firecrawl keyless public docs",
+      "status": "passed",
+      "scope": "Single public scrape; source snapshot retained"
+    },
+    {
+      "name": "Chrome DevTools isolated CLI start",
+      "status": "passed",
+      "seconds": 2.932
+    },
+    {
+      "name": "Chrome DevTools planted console error",
+      "status": "passed",
+      "seconds": 1.867
+    },
+    {
+      "name": "Chrome DevTools planted slow asset",
+      "status": "passed",
+      "scope": "Numeric duration checked in retained result",
+      "seconds": 2.547
+    },
+    {
+      "name": "Herdr named headless server",
+      "status": "passed",
+      "scope": "Isolated named trial; no focused production session inspected",
+      "seconds": 0.036
+    },
+    {
+      "name": "Herdr pane control discovery",
+      "status": "passed",
+      "scope": "Pane lifecycle trial follows exact returned CLI syntax",
+      "seconds": 0.031
+    },
+    {
+      "name": "OmniRoute anonymous rejection",
+      "status": "passed",
+      "http_status": 401
+    },
+    {
+      "name": "OmniRoute restricted route rejection",
+      "status": "passed",
+      "scope": "Disallowed model rejected before provider",
+      "http_status": 403
+    },
+    {
+      "name": "OmniRoute actual worker adapter",
+      "status": "passed",
+      "seconds": 3.724
+    },
+    {
+      "name": "Herdr isolated workspace",
+      "status": "passed",
+      "seconds": 0.085
+    },
+    {
+      "name": "Herdr pane list",
+      "status": "passed",
+      "scope": "Process survival follows observed pane identity",
+      "seconds": 0.035
+    },
+    {
+      "name": "OmniRoute readiness response",
+      "status": "passed",
+      "scope": "Response only; authentication assertion below",
+      "http_status": 401
+    },
+    {
+      "name": "Herdr counter survives CLI disconnect",
+      "status": "passed",
+      "scope": "Same server/pane across separate clients; TUI close/reopen and machine restart not established",
+      "seconds": 0.029,
+      "first_counter": 1,
+      "second_counter": 5
+    },
+    {
+      "name": "OpenDesign standalone frontend",
+      "status": "passed",
+      "scope": "Artifact export; independent design preference unmeasured",
+      "seconds": 4.375
+    },
+    {
+      "name": "OpenDesign standalone ui-ux",
+      "status": "passed",
+      "scope": "Artifact export; independent design preference unmeasured",
+      "seconds": 0.948
+    },
+    {
+      "name": "Graphify normalized symbols initial",
+      "status": "passed",
+      "scope": "Presentation labels normalized; exact source fixture unchanged"
+    },
+    {
+      "name": "Graphify cross-file Python caller",
+      "status": "passed",
+      "scope": "TypeScript import present; TypeScript call edge is not established"
+    },
+    {
+      "name": "Graphify normalized symbols edited",
+      "status": "passed",
+      "scope": "Presentation labels normalized; exact source fixture unchanged"
+    },
+    {
+      "name": "Graphify normalized symbols deleted",
+      "status": "passed",
+      "scope": "Presentation labels normalized; exact source fixture unchanged"
+    },
+    {
+      "name": "OmniRoute worker candidate verification",
+      "status": "passed",
+      "scope": "Verified original successful candidate; later repeat refused existing output before network"
+    },
+    {
+      "name": "OmniRoute existing-output protection",
+      "status": "passed",
+      "scope": "Later duplicate trial returned refusal; original candidate preserved. It is not an inference failure."
+    },
+    {
+      "name": "Responsive design mechanical checks",
+      "status": "passed",
+      "scope": "Two same-agent fixtures; subjective preference and controlled skill benefit not established"
+    },
+    {
+      "name": "Watch inspected visual event",
+      "status": "passed",
+      "scope": "Frame manually viewed; embedded MP4 captions were not extracted by Watch"
+    },
+    {
+      "name": "Watch embedded caption extraction",
+      "status": "failed",
+      "scope": "Fixture has mov_text subtitles; Watch reported no captions. Separate cached Whisper transcription passed."
+    },
+    {
+      "name": "Repository regression suite",
+      "status": "passed"
+    },
+    {
+      "name": "Beads issue restore",
+      "status": "passed",
+      "scope": "Issue interchange, not full Dolt database or backup verification",
+      "seconds": 0.757
+    },
+    {
+      "name": "Beads restored dependency blocking",
+      "status": "passed",
+      "seconds": 0.633
+    },
+    {
+      "name": "MemPalace post-edit retrieval",
+      "status": "passed",
+      "scope": "Deleted ID and old value absent from subsequent top-five retrieval; current value present. No generated-answer score."
+    }
+  ],
+  "limits": [
+    "Bounded synthetic fixture screening; not every candidate had a runtime trial.",
+    "Raw attempts retained; harness corrections documented in the report.",
+    "Duplicate worker refusal is an overwrite-protection result; original successful candidate retained.",
+    "Peak memory and subscription-wide quota savings unknown.",
+    "No managed third-provider writer, publishing, continuous memory hooks or bulk pack installation."
+  ]
+}

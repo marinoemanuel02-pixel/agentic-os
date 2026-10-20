@@ -3,6 +3,20 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-20 - Keep trial evidence separate from adoption and activate the free worker route
+
+- **Evidence.** Execute bounded trials across the six saved workflow groups without Claude or
+  external review. Local OCR, reusable endpoint calls, deterministic log compression and selective
+  scanners demonstrated useful narrow capabilities. Failures and screened-only candidates remain
+  explicit in the [trial report](research/2026-10-20-stack-trial-results.md).
+- **Capacity.** The saved OpenRouter account authenticated and was connected to OmniRoute. Store a
+  worker key restricted to one verified free route in the Windows secret store. Verify actual
+  worker output, anonymous rejection and forbidden-route rejection. Keep foreground startup and
+  unaccepted text candidates; do not present this as a managed third-provider code writer.
+- **Limits.** Composio's saved key returned 401. Kdenlive native rendering still times out. Preserve
+  these blockers. Keep newly trialled tools isolated; no bulk hooks, global MCP changes, paid
+  fallback, continuous memory capture or framework migration follows from a small fixture pass.
+
 ## 2026-10-20 - Distinguish the requested speech device from the packaged runtime
 
 - **Observation.** VoiceStudio 0.5.6's packaged installer ran its frozen sync without the CPU

@@ -249,7 +249,11 @@ authorize purchasing API credit, importing every collection, or publishing artif
 
 ## Progress on 20 October
 
-The plan's new cross-candidate batches have not run. The installed VoiceStudio setup did advance:
+The plan's cross-candidate batches were subsequently exercised in a bounded screen; see the
+[results and screened-only candidates](../../research/2026-10-20-stack-trial-results.md) and
+[machine receipt](../../research/2026-10-20-stack-trials.json). Not every candidate had a runtime
+trial, and the unchecked acceptance details above remain open unless the report establishes them.
+The earlier installed VoiceStudio setup had already advanced:
 localhost health passed, Supertonic-3 was selected on CPU, analytics was disabled, and Italian/English
 clips decoded and were non-silent. Its custom studio screen was visually inspected; the default
 Balanced pack remains uninstalled and is incompatible with this selection. See the

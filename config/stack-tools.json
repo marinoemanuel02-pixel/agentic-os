@@ -63,11 +63,11 @@
       }
     },
     "omniroute": {
-      "purpose": "Isolated loopback router; encrypted aos secrets and process-only keys; provider setup later",
+      "purpose": "Loopback router with saved OpenRouter connection; restricted free text route verified; start on demand",
       "command": ["{python}", "{repo}/tools/omniroute_env.py"]
     },
     "omniroute-worker": {
-      "purpose": "Text-only additional-provider candidate; provider connection and scoped key required",
+      "purpose": "Text-only candidate; inject omniroute-worker-key from aos secret and use its allowed free route",
       "command": ["{python}", "{repo}/tools/omniroute_worker.py"]
     }
   }

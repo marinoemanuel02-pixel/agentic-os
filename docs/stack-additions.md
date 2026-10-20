@@ -10,20 +10,20 @@ under the home folder outside OneDrive; the repository contains shared procedure
 
 | Addition | Delivered route | Verified here / remaining limit |
 | --- | --- | --- |
-| Watch | Shared `watch` skill and local frame extractor | Two frames from a two-second fixture, source timestamps 00:00 and 00:01; first frame inspected. Local engine, 30-frame cap, cloud speech fallback disabled. Real footage quality is unmeasured. |
-| AnyDoc | Local CLI 0.2.4 | CSV and DOCX text converted; image-only PDF exited 3 for missing OCR. Hosted OCR is refused by the launcher. Representative complex office-file fidelity remains unmeasured. |
+| Watch | Shared `watch` skill and local frame extractor | Timestamped visual-only event inspected at five seconds. Embedded MP4 captions were not extracted; separate cached Whisper worked. Local engine, 30-frame cap, cloud speech fallback disabled. |
+| AnyDoc | Local CLI 0.2.4 | DOCX/text-PDF table markers preserved; scan exited 3 locally. Hosted OCR refused. Isolated Xberg separately passed the selected local scan trial; complex office fidelity remains unmeasured. |
 | frontend-design | Official shared skill, pinned source and Apache-2.0 licence | Skill validation passed; no claim of better aesthetics without a real brief and visual comparison. |
 | UI UX Pro Max | Shared skill, offline Python search and MIT licence | Local UX query and design-system generation worked. Advice and contrast claims still need checking in the actual interface. |
 | Repomix | CLI 1.18.1 | Selected Python export contained the source and omitted the fixture `.env`; no global hook or remote-config trust enabled. Inspect exports before sharing them. |
 | RTK OSS | Windows CLI 1.0.1 | Invalid Git option preserved exit 129 and the original diagnostic. No automatic command rewrite or measured quota-saving claim. |
 | Graphify | Isolated code-only CLI | Fixture graph contained both functions and the expected caller edge, with zero reported model tokens. Global hooks/MCP and LLM backends are disabled in this route. Large-repo accuracy and freshness still need task-specific checks. |
-| Serena | Isolated on-demand CLI; six-tool navigation context | Real stdio MCP query found `calculate` and its expected body. The exposed set contained only the six configured navigation tools; dashboard and GUI log window disabled. Python language-server dependency installed. PowerShell and other languages remain untested. |
-| OpenMontage | Isolated Python environment and source | Local FFmpeg trim and localhost Backlot health check passed. Stock-corpus retrieval, CLIP models, provenance quality and cloud generation are not established. |
-| OpenDesign Agent Kit | CLI 0.2.0 | Registered fixture exported standalone HTML with its local CSS embedded. Browser exports and quality on a real design remain untested. No global MCP/initializer installed. |
+| Serena | Isolated on-demand CLI; six-tool navigation context | TS/PowerShell symbols and Python edit freshness passed with explicit languages; first Python query timed out. Six navigation tools only; dashboard and log GUI disabled. See trial limits. |
+| OpenMontage | Isolated Python environment and source | Local audio/video trim, Backlot health, a saved-key Pixabay search with source/creator metadata and a short stock export passed. CLIP models, broad provenance quality and cloud generation remain untested. |
+| OpenDesign Agent Kit | CLI 0.2.0 | Two responsive fixtures exported to standalone HTML and reopened with working filters. Real product design quality remains unmeasured. No global MCP/initializer installed. |
 | VoiceStudio | Native Windows app 0.5.6 under the home folder | Supertonic-3 preset voice selected on CPU; analytics off. Runtime imports and localhost health passed. Actual Italian (8.43 s) and English (7.73 s) WAVs decoded and were non-silent. Main studio opened after custom setup. Dubbing/cloning and subjective voice quality are untested. |
 | CLI-Anything | Kdenlive harness 1.0.0, isolated | Created project, imported media, added a track/clip and exported native XML. Existing MLT executable reports its version; consumer initialization and render attempts timed out, including an engine-only test. End-to-end render and opening the project in the editor are unverified. |
-| Composio | Isolated Python SDK | Offline custom-tool schema and execution passed without a client/account. No app is connected; a concrete missing connector, account scope and current hard free limit must be selected before hosted use. |
-| OmniRoute | Isolated CLI/server 3.8.51 plus staged text worker | Disposable server returned healthy HTTP 200 on loopback only, rejected unauthenticated `/v1/models` with 401 and created no plaintext `.env`. It was stopped after the test. No provider account is connected and no additional quota has been established. |
+| Composio | Isolated Python SDK | Offline custom tool passed. Saved key returned HTTP 401 on both account-inventory endpoints; account scope and connector execution remain blocked. |
+| OmniRoute | Isolated CLI/server 3.8.51 plus text worker | Saved OpenRouter account connected; restricted free-route worker returned a candidate. Anonymous access rejected with 401 and disallowed model with 403. Server stopped after tests; no managed third-provider writer. |
 
 Exact source revisions, installed versions and release hashes are in the
 [installation receipt](research/2026-10-20-stack-installation.json). Original logs and fixtures
@@ -33,7 +33,9 @@ help/version success is not counted as an end-to-end media or provider result.
 The real home-folder router setup also passed: health 200, anonymous inference access 401,
 administrator login 200 with a session cookie, loopback-only listener, no key in arguments/logs
 and no plaintext `.env`. Reloading its Windows-encrypted secrets preserved both ciphertexts
-and decrypted values. It has zero provider connections and was stopped after checking.
+and decrypted values. That initial test had zero provider connections. The later
+[trial run](research/2026-10-20-stack-trial-results.md) connected the saved OpenRouter account,
+verified a restricted free route and the actual worker helper, then stopped the server.
 
 Verification: `aos test` passed **527 tests under each of Windows PowerShell 5.1 and PowerShell 7**,
 with no failures or skips. After the final Python-only setup changes, all **16 launcher/router/worker
@@ -124,8 +126,8 @@ checks and retained failed attempts.
 
 ## OmniRoute as additional capacity
 
-Keep native Claude/Codex subscription clients as the normal routes. A separate OmniRoute provider
-can supply additional text workers once an eligible account is deliberately connected. Routing the
+Keep native Claude/Codex subscription clients as the normal routes. The saved OpenRouter account
+is now connected to OmniRoute and the actual text-worker route passed. Routing the
 same exhausted account through a gateway does not increase its allowance. Choose one explicit route,
 verify its authentication terms and hard free allowance, and disable paid/unknown fallbacks.
 
@@ -140,10 +142,18 @@ rules. A gateway must not bypass a known vendor limit or the two-active-actors-p
 The current managed AOS actor schema does not admit an arbitrary third provider; that integration
 remains a separate checked change. This helper provides a text candidate, not a managed code writer.
 
-After provider/account setup and creation of a scoped key, its invocation is:
+The restricted worker key is stored as `omniroute-worker-key`. Start the foreground server with
+`python tools/stack.py omniroute serve`; no additional account action is needed for the tested
+connection. Resolve its allowed route from the local dashboard/live catalog before use. Inject the
+key only into the worker process environment and clear it afterward. Its invocation is:
 
 ```powershell
-python tools/stack.py omniroute-worker --endpoint http://127.0.0.1:20128/v1 --model <explicit-route-from-live-catalog> --packet task.txt --output candidate.json
+$env:OMNIROUTE_WORKER_KEY = aos secret get omniroute-worker-key
+try {
+    python tools/stack.py omniroute-worker --endpoint http://127.0.0.1:20128/v1 --model <allowed-free-route-from-live-catalog> --packet task.txt --output candidate.json
+} finally {
+    Remove-Item Env:OMNIROUTE_WORKER_KEY -ErrorAction SilentlyContinue
+}
 ```
 
 Do not pass keys as command arguments, put them in `.env`, export native subscription credentials,
@@ -153,15 +163,17 @@ or use OmniRoute's credential-export command. Store generated router encryption/
 The foreground launcher loads or creates its encryption/signing keys and administrator password
 through the existing Windows-encrypted `aos secret` store. It does not print them or put them in
 command arguments. Informational help/version calls do not open that store. Run
-`python tools/stack.py omniroute serve` when ready to connect a provider, then open the localhost
+`python tools/stack.py omniroute serve` when needed, then open the localhost
 dashboard. The administrator password is stored as `omniroute-admin-password`; retrieve it locally
 from the secret store when the dashboard requests it, and never paste it into chat.
 Background/tray startup and the credential-export command are refused by this route.
 
 The passing disposable startup used known public fixture values, no connected accounts, no browser,
 no daemon/tray, no-recovery mode, cleared proxy variables and a longer cold-start health timeout.
-Initial health probes timed out. This establishes a working isolated Windows server and rejection of
-anonymous requests; it does not establish provider login, usable quota or production authentication.
+Initial health probes timed out. The later account trial established provider authentication,
+actual free-route responses, rejection of anonymous access and rejection of a disallowed model.
+Cold startup timeouts remain recorded. No automatic daemon startup or managed third-provider
+writer integration was added; the server is stopped after tests.
 
 ## Activation and maintenance
 
@@ -198,9 +210,13 @@ The [remaining-trials plan](superpowers/plans/2026-10-20-remaining-stack-trials.
 unadopted runtime/reference decision and groups proposed checks into six reusable fixture batches.
 It includes the earlier research proposals and distinguishes untested candidates from tools
 already covered by the baseline. Claude inference/review is excluded while its quota is exhausted.
-The new batches have not been executed merely by saving the plan.
+The [executed trial report](research/2026-10-20-stack-trial-results.md) separates real workflow
+checks, failures, blockers and candidates that did not advance beyond screening.
 
 On 20 October the encrypted store listed `openrouter-api-key`, `composio-api-key` and
 `pixabay-api-key`; values were not displayed. Key presence does not prove authentication or a working
-connector. Live provider/connector/stock checks remain in the plan. The operator has no Pexels key,
+connector. Live OpenRouter and Pixabay checks subsequently passed. Composio's saved key returned
+HTTP 401 on both inventory endpoints, so its connector check remains blocked before account scope
+could be determined. Replace/re-save a valid key for the intended project to continue it.
+The operator has no Pexels key,
 so Pexels is optional and unconfigured; no replacement account/signup is required for the local setup.
