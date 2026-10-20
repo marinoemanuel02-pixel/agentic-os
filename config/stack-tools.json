@@ -55,8 +55,8 @@
       "env": {
         "OMNIVOICE_DATA_DIR": "{home}/.aos/tools/stack/voicestudio/data",
         "OMNIVOICE_CACHE_DIR": "{home}/.aos/tools/stack/voicestudio/models",
-        "OMNIVOICE_ENGINES_DIR": "{home}/.aos/tools/stack/voicestudio/engines",
-        "OMNIVOICE_TORCH_VARIANT": "cpu",
+        "HF_HOME": "{home}/.aos/tools/stack/voicestudio/models",
+        "HF_HUB_CACHE": "{home}/.aos/tools/stack/voicestudio/models",
         "TORCH_COMPILE_DISABLE": "1",
         "TEMP": "{home}/.aos/tmp",
         "TMP": "{home}/.aos/tmp"

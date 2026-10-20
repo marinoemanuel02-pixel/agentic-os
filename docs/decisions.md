@@ -3,6 +3,16 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-20 - Distinguish the requested speech device from the packaged runtime
+
+- **Observation.** VoiceStudio 0.5.6's packaged installer ran its frozen sync without the CPU
+  exclusions and installed CUDA PyTorch plus its cuDNN compatibility package despite the CPU
+  variant environment request. The lighter runtime is not established by that setting here.
+- **Decision.** Retain the official managed runtime rather than patch its installer or claim a
+  CPU-only dependency set. Supertonic-3 itself still runs on CPU. Its isolated SDK import passed,
+  the exact model snapshot is cached under the home folder, and the supported external-engine
+  preference points at that environment. Runtime health and generated audio require separate checks.
+
 ## 2026-10-20 - Revisit deferred candidates through shared trials without Claude
 
 - **Decision.** Preserve the original reasons for unadopted tools and distinguish duplication,

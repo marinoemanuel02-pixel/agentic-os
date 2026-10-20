@@ -20,7 +20,7 @@ under the home folder outside OneDrive; the repository contains shared procedure
 | Serena | Isolated on-demand CLI; six-tool navigation context | Real stdio MCP query found `calculate` and its expected body. The exposed set contained only the six configured navigation tools; dashboard and GUI log window disabled. Python language-server dependency installed. PowerShell and other languages remain untested. |
 | OpenMontage | Isolated Python environment and source | Local FFmpeg trim and localhost Backlot health check passed. Stock-corpus retrieval, CLIP models, provenance quality and cloud generation are not established. |
 | OpenDesign Agent Kit | CLI 0.2.0 | Registered fixture exported standalone HTML with its local CSS embedded. Browser exports and quality on a real design remain untested. No global MCP/initializer installed. |
-| VoiceStudio | Native Windows app 0.5.6 under the home folder | Release hash and installed executable version checked; installer exited 0. Speech engine, models, dubbing and cloning are not provisioned or tested. |
+| VoiceStudio | Native Windows app 0.5.6 under the home folder | Supertonic-3 preset voice selected on CPU; analytics off. Runtime imports and localhost health passed. Actual Italian (8.43 s) and English (7.73 s) WAVs decoded and were non-silent. Main studio opened after custom setup. Dubbing/cloning and subjective voice quality are untested. |
 | CLI-Anything | Kdenlive harness 1.0.0, isolated | Created project, imported media, added a track/clip and exported native XML. Existing MLT executable reports its version; consumer initialization and render attempts timed out, including an engine-only test. End-to-end render and opening the project in the editor are unverified. |
 | Composio | Isolated Python SDK | Offline custom-tool schema and execution passed without a client/account. No app is connected; a concrete missing connector, account scope and current hard free limit must be selected before hosted use. |
 | OmniRoute | Isolated CLI/server 3.8.51 plus staged text worker | Disposable server returned healthy HTTP 200 on loopback only, rejected unauthenticated `/v1/models` with 401 and created no plaintext `.env`. It was stopped after the test. No provider account is connected and no additional quota has been established. |
@@ -85,11 +85,42 @@ are installed, but no credentials were configured or generation requested. OpenD
 `.artifact.json` sidecar; use absolute entry paths or run from the workspace, because relative entries are
 resolved from the current directory. Do not run its initializer against real vendor configuration blindly.
 
-VoiceStudio needs an engine/model choice on first use. Select a runtime location under
-`~/.aos/tools/stack/voicestudio` before installing its managed runtime; its default runtime is under
-application data. The launcher directs its model/project data with `OMNIVOICE_DATA_DIR`, which is
-separate from the runtime-location setting. No engine/model has been chosen or downloaded.
-Existing Whisper and FFmpeg remain usable now.
+VoiceStudio's launcher now passes an explicit `--user-data-dir` under
+`~/.aos/tools/stack/voicestudio/profile`; its managed runtime consequently lives there too.
+Changing APPDATA alone did not change Electron's profile path and was not retained as the solution.
+Data/model locations are explicit and the selected external engine path is saved in app preferences.
+On 20 October the operator delegated
+the remaining choices: Supertonic-3 bundled preset voice, Italian and English, local CPU speech,
+and analytics disabled. This is a preset-voice setup; a personal clone still needs an authorized
+reference and a cloning-capable engine when that job is requested.
+
+The engine's actual import probe passed and its pinned Hugging Face snapshot downloaded.
+Its MIT SDK and OpenRAIL-M model terms are separate; preserve the model licence and identify
+generated output as synthetic. The installed app's base-runtime setup selected CUDA dependencies
+despite the requested CPU variant. Do not claim the smaller CPU runtime from the request alone.
+The speech engine itself is CPU-only. The managed runtime subsequently passed its import check;
+localhost health returned 200, while engine selection reported `cpu_only`/`cpu`. The app generated
+Italian and English WAVs at 44,100 Hz, and decoding/duration/non-silence checks passed. Generation
+ran with `HF_HUB_OFFLINE=1`; complete network isolation was not tested. The first clip took 40.13 s
+including cold model/watermark work; the following English clip took 6.91 s. These two different
+texts/languages are not a controlled performance comparison or a listening-quality verdict.
+
+Cold installation/startup exceeded the first bounded wait and a 30-second engine-inventory call
+timed out. After startup the service answered normally. A relocation initially moved only the model
+repository, leaving Hugging Face's shared blob directory at the former cache root; synthesis failed.
+Moving that public shared blob store to the checked destination repaired all model links (zero broken,
+398,075,273 bytes across the four ONNX files). Both actual speech requests then completed.
+
+The Balanced pack is incompatible with the selected alternate engine, and this release's setup
+wizard still treats the default OmniVoice weights as required. After the custom engine's real checks,
+the intro-completion preference was saved and the main studio visually inspected. No model-installed
+flags or permissions were changed. The unused default pack remains uninstalled; a personal cloning
+or dictation workflow still requires its own engine/reference/model selection. The interactive app
+was left open for the operator; its temporary verification-controller timer was stopped.
+The Desktop `VoiceStudio` shortcut now uses the shared launcher, preserving the configured profile
+and child environment when reopened. Its target/arguments were read back; a cold shortcut launch
+was not repeated. The [activation receipt](research/2026-10-20-voice-activation.json) records actual
+checks and retained failed attempts.
 
 ## OmniRoute as additional capacity
 
@@ -160,3 +191,16 @@ Packages are pinned by the retained external lockfiles/source revisions. There i
 for this optional set. Recheck release notes and compatibility before updating; do not use a generic
 global initializer or duplicate a second vendor installation. Rollback the source integration with Git;
 retain external installs/evidence until they are no longer needed. No existing tool or account was removed.
+
+## Remaining candidates and operator setup
+
+The [remaining-trials plan](superpowers/plans/2026-10-20-remaining-stack-trials.md) lists every
+unadopted runtime/reference decision and groups proposed checks into six reusable fixture batches.
+It includes the earlier research proposals and distinguishes untested candidates from tools
+already covered by the baseline. Claude inference/review is excluded while its quota is exhausted.
+The new batches have not been executed merely by saving the plan.
+
+On 20 October the encrypted store listed `openrouter-api-key`, `composio-api-key` and
+`pixabay-api-key`; values were not displayed. Key presence does not prove authentication or a working
+connector. Live provider/connector/stock checks remain in the plan. The operator has no Pexels key,
+so Pexels is optional and unconfigured; no replacement account/signup is required for the local setup.

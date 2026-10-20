@@ -105,12 +105,12 @@ These precede the 57-name audit and are included so "initial setup" also covers 
 | Xberg | Licence corrected to MIT; proposed Python release lacked a Windows wheel. A separate Windows CLI asset exists but OCR dependencies/fidelity remain untested. |
 | Marker / Docling | Not benchmarked; isolated upstream issues do not prove they cannot run here. Need an uncovered document case. |
 | MCP-login changes / more read batching | No actual OAuth defect; independent read batching already available. |
-| Whole swarm replacement, disk-streamed CPU LLM, unspecified hosted long-task model | The inventory supplied capabilities rather than an exact validated replacement/model. aos/local Ollama already cover parts; model identity, throughput, licence and any API budget need evidence. |
-| Second full video/content orchestrator, generated-footage providers | Existing project-folder/FFmpeg/Whisper/Remotion pipeline already covers much. OpenMontage/Kdenlive are narrow trials; paid generation and new orchestration were not justified. |
-| Another native browser layer | Existing browser/Playwright access is present; only a demonstrated diagnostic or site-access gap warrants another layer. |
+| Whole swarm replacement, disk-streamed CPU LLM, unspecified hosted long-task model | No saved individual rejection verdict found. Current rationale: the inventory supplies capabilities rather than an exact validated replacement/model; aos/local Ollama already cover parts. Model identity, throughput, licence and any API budget need evidence. |
+| Second full video/content orchestrator, generated-footage providers | No saved individual rejection verdict found. Current rationale: project-folder/FFmpeg/Whisper/Remotion already cover much; OpenMontage/Kdenlive provide narrower trials. Paid generation would need separate spending authorization. |
+| Another native browser layer | No saved individual rejection verdict found. Current rationale: browser/Playwright already exist; require a demonstrated diagnostic or site-access gap. |
 
-The last three rows describe why no additional wholesale subsystem followed the earlier feature
-inventory. They do not claim a named implementation was benchmarked or found defective.
+The last three rows are current interpretations of the baseline and selection guide, not recovered
+historical verdicts. They do not claim a named implementation was benchmarked or found defective.
 
 ## A simple way to test many candidates
 
@@ -246,3 +246,13 @@ and leave it unintegrated. No single composite score hides a failed correctness 
 Some native Claude, personal-account consent and subjective voice/design checks cannot be replaced
 by mocks. The user already waived external review for this setup. This planning task does not
 authorize purchasing API credit, importing every collection, or publishing artifacts.
+
+## Progress on 20 October
+
+The plan's new cross-candidate batches have not run. The installed VoiceStudio setup did advance:
+localhost health passed, Supertonic-3 was selected on CPU, analytics was disabled, and Italian/English
+clips decoded and were non-silent. Its custom studio screen was visually inspected; the default
+Balanced pack remains uninstalled and is incompatible with this selection. See the
+[activation receipt](../../research/2026-10-20-voice-activation.json). Voice cloning/dubbing, listening
+quality, full network isolation and a controlled comparison remain open. Existing launcher controls
+passed 16 checks; the full aos suite was not repeated for these manifest/document changes.
