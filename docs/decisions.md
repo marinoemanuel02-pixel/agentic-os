@@ -3,6 +3,21 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-20 - Revisit deferred candidates through shared trials without Claude
+
+- **Decision.** Preserve the original reasons for unadopted tools and distinguish duplication,
+  conditional trials, reference collections and actual blockers. Use six shared fixture batches
+  for retrieval, design, code, history, session tooling and media rather than install every pack.
+  Compare against the installed baseline, preserve failures and use explicit correctness checks.
+- **Capacity.** The operator requested testing plans without Claude because its quota is exhausted.
+  Codex and local tools can perform these trials; mocks do not establish live Claude behavior or
+  independent other-vendor review. The earlier no-external-review exception remains applicable.
+- **Voice setup.** The operator delegated the remaining choices. Choose a compact local multilingual
+  preset-voice engine and the CPU runtime, with analytics disabled and no cloud account required.
+  Launch Electron with an explicit home-folder user-data directory: changing APPDATA alone did not
+  change its runtime root. Keep runtime/model readiness distinct from the selected configuration.
+- **Plan.** See [remaining trials](superpowers/plans/2026-10-20-remaining-stack-trials.md).
+
 ## 2026-10-20 - Install the approved optional shortlist in isolated environments
 
 - **Decision.** Add the fourteen approved narrow routes and shared skill sources from the candidate

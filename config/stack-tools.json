@@ -50,9 +50,17 @@
       "command": ["{home}/.aos/venvs/composio/Scripts/python.exe"]
     },
     "voicestudio": {
-      "purpose": "Installed desktop app; select a home-folder runtime before engine setup",
-      "command": ["{home}/.aos/tools/stack/voicestudio/app/VoiceStudio.exe"],
-      "env": {"OMNIVOICE_DATA_DIR": "{home}/.aos/tools/stack/voicestudio/data"}
+      "purpose": "Local speech app with home-folder profile, runtime and model storage",
+      "command": ["{home}/.aos/tools/stack/voicestudio/app/VoiceStudio.exe", "--user-data-dir={home}/.aos/tools/stack/voicestudio/profile"],
+      "env": {
+        "OMNIVOICE_DATA_DIR": "{home}/.aos/tools/stack/voicestudio/data",
+        "OMNIVOICE_CACHE_DIR": "{home}/.aos/tools/stack/voicestudio/models",
+        "OMNIVOICE_ENGINES_DIR": "{home}/.aos/tools/stack/voicestudio/engines",
+        "OMNIVOICE_TORCH_VARIANT": "cpu",
+        "TORCH_COMPILE_DISABLE": "1",
+        "TEMP": "{home}/.aos/tmp",
+        "TMP": "{home}/.aos/tmp"
+      }
     },
     "omniroute": {
       "purpose": "Isolated loopback router; encrypted aos secrets and process-only keys; provider setup later",
