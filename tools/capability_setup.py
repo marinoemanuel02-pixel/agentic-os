@@ -31,7 +31,7 @@ def digest(path):
 
 def safe_path(name):
     path = PurePosixPath(name.replace('\\', '/'))
-    if path.is_absolute() or any(p in ('..', '') or ':' in p for p in path.parts):
+    if path.is_absolute() or any(p in ('..', '') or ':' in p or p.rstrip(' .') != p for p in path.parts):
         raise ValueError('Archive or manifest path escapes its root')
     return path
 
@@ -231,8 +231,7 @@ def main(argv=None):
                     if args.action != 'install': raise ValueError('Dependency is not installed: ' + name)
                     continue
                 receipt = load_json(receipt_path)
-            if receipt['installed']:
-                validate_receipt(name, dep, args.root, receipt)
+            validate_receipt(name, dep, args.root, receipt)
             dependencies[name] = str(Path(receipt['entrypoint']).parents[dep.get('root_parents', 2) - 1])
         if args.action == 'install':
             result = install(args.tool, entry, args.root, apply=args.apply)

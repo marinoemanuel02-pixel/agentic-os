@@ -181,6 +181,30 @@ class SetupTests(unittest.TestCase):
             self.assertEqual(routes[tool]['command'][-2:], ['run', tool])
             self.assertIn('{repo}/tools/capability_setup.py', routes[tool]['command'])
 
+    def test_dependency_receipt_cannot_disable_validation(self):
+        module = self.module()
+        payload = self.archive()
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            dep = self.entry(payload)
+            app = dict(dep, dependencies=['dependency'])
+            def fetch(url, path): path.write_bytes(payload)
+            receipt = module.install('dependency', dep, root, apply=True, fetch=fetch)
+            module.install('fixture', app, root, apply=True, fetch=fetch)
+            receipt['installed'] = False
+            Path(receipt['entrypoint']).write_bytes(b'altered')
+            (Path(receipt['runtime']) / 'receipt.json').write_text(json.dumps(receipt))
+            (root / 'config').mkdir()
+            (root / 'config/capability-tools.json').write_text(json.dumps({'tools':{'fixture':app,'dependency':dep}}))
+            with patch.object(module, 'REPO', root):
+                self.assertEqual(module.main(['--root',str(root),'check','fixture']),2)
+
+    def test_windows_path_normalization_cannot_hide_parent_components(self):
+        module = self.module()
+        for name in ('safe/.. /outside', 'safe/. /outside', 'safe/folder./outside'):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                module.safe_path(name)
+
 
 if __name__ == '__main__':
     unittest.main()
