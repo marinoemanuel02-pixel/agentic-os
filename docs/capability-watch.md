@@ -203,4 +203,5 @@ No Blender benchmark or candidate application execution is claimed by implementi
 
 The offline acceptance suite is `python -m unittest discover -s tests -p test_capability_watch.py -v`.
 It is also wrapped by Pester, so `aos test` runs it under both Windows shells along with the existing
-repository checks. See the dated validation report for actual run counts, live feed results and limits.
+repository checks. See [the validation report](validation/2026-10-21-capability-watch.md) for actual
+run counts, live feed results and limits.

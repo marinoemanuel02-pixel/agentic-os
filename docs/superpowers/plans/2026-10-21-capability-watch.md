@@ -69,3 +69,9 @@ its API requires authentication. Public index failure remains a failure, not an 
   package returns 404. Do not configure that guessed package.
 - The repository contract permits risk-based inline execution without imported approval pauses.
   Implement here on `codex/capability-watch`; an explorer was read-only and has completed.
+- Implementation and schema/data are committed. Twenty-two focused cases and 111 root Python
+  tests pass; original-repository and enabled discovery refreshes pass. Separate Codex review
+  findings were reproduced and corrected. Claude review was refused by the fresh quota guard.
+- All five tasks are complete. Both Windows shells passed 534 Pester tests with no failures or
+  skips, including the final 22-case capability suite. Schema, syntax and whitespace checks pass.
+  Exact outcomes and review limits are recorded in `docs/validation/2026-10-21-capability-watch.md`.
