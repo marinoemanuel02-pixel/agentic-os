@@ -5236,6 +5236,15 @@ Describe 'selected stack additions' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_swarm_pool.py' -v
         $LASTEXITCODE | Should -Be 0
     }
+    It 'runs API host contract acceptance and cancellation in disposable repositories' {
+        & python -m unittest discover -s $PSScriptRoot -p 'test_swarm_contract.py' -v
+        $LASTEXITCODE | Should -Be 0
+        $helper = Join-Path $PSScriptRoot '..\tools\swarm_contract.ps1'
+        $tokens = $null; $errors = $null
+        [void][System.Management.Automation.Language.Parser]::ParseFile($helper,[ref]$tokens,[ref]$errors)
+        @($errors).Count | Should -Be 0
+        @([IO.File]::ReadAllBytes($helper) | Where-Object {$_ -gt 127}).Count | Should -Be 0
+    }
 }
 
 }

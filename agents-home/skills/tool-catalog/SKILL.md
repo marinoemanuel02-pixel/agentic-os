@@ -80,6 +80,14 @@ and restricted free text worker passed. Use `omniroute-task --packet <file> --ou
 it loads the encrypted key internally, validates the hash-only restricted policy and live zero-price
 catalog, disables fallbacks, and starts/stops only its owned loopback gateway. `omniroute-task --check`
 checks readiness without inference; `omniroute-policy check` checks the saved worker policy.
+The recovered free API pool is now the shared managed route: `python tools/stack.py swarm
+accounts` lists accounts/capabilities; `task` runs a bounded JSON packet, `submit`/`drain` queue
+work, and `verify` records actual host acceptance. Registered coordination contracts use
+`swarm contract` with checked prerequisites and ordinary host receipts. Both native agents
+use the same API queue without adding API accounts to their two-vendor actor registry.
+Embedding/reranking, supplied-source research preparation, bounded image questions and
+authorized short WAV transcription share its quota and secret controls. See `docs/swarm.md`.
+The `omniroute-task` plain-text CLI joins that ledger when the pool registry exists.
 Native clients remain normal routes; this is an unaccepted text candidate, not a managed
 third-provider writer. The operator waived external review. See the dated trial report in
 `docs/research/2026-10-20-stack-trial-results.md` for failures and screened-only candidates.

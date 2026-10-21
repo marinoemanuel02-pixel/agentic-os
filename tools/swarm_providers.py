@@ -148,7 +148,7 @@ def build_request(account, packet, key):
     if cap == 'rerank':
         return base + '/v2/rerank', headers, {'model': model, 'query': packet['query'],
             'documents': packet['documents'], 'top_n': len(packet['documents'])}
-    if cap == 'transcribe':
+    if cap == 'transcribe' and p == 'groq':
         boundary = 'aos-' + uuid.uuid4().hex
         fields = {'model': model, 'response_format': 'verbose_json', 'timestamp_granularities[]': 'segment'}
         if packet.get('language'): fields['language'] = packet['language']
@@ -163,8 +163,14 @@ def build_request(account, packet, key):
         return base + '/audio/transcriptions', headers, b''.join(parts)
     prompt = prompt_text(packet)
     if p == 'gemini':
+        if cap == 'transcribe':
+            prompt = ('Transcribe only the supplied audio. Return JSON {"text":"verbatim transcript",'
+                      '"segments":[{"start":0.0,"end":1.0,"text":"verbatim segment"}]}. '
+                      'Use seconds relative to this audio; no extra prose. Preserve its language. '
+                      + ('Expected language: ' + packet['language'] if packet.get('language') else ''))
         parts = [{'text': prompt}]
         if cap == 'vision': parts.append({'inline_data': {'mime_type': packet['mime_type'], 'data': packet['image_base64']}})
+        if cap == 'transcribe': parts.append({'inline_data': {'mime_type': 'audio/wav', 'data': packet['audio_base64']}})
         return base + '/models/' + model + ':generateContent', headers, {
             'systemInstruction': {'parts': [{'text': SYSTEM}]},
             'contents': [{'role': 'user', 'parts': parts}],
@@ -185,6 +191,18 @@ def _json_text(text):
     if value.startswith('```') and value.endswith('```'): value = '\n'.join(value.splitlines()[1:-1])
     try: return json.loads(value)
     except (ValueError, TypeError): raise ProviderError('invalid_grounded_result') from None
+
+
+def gemini_text(data):
+    try:
+        candidates = data.get('candidates', [])
+        if len(candidates) != 1 or candidates[0].get('finishReason') != 'STOP': raise ValueError()
+        parts = candidates[0]['content']['parts']
+        if any('functionCall' in x for x in parts): raise ValueError()
+        text = ''.join(x.get('text', '') for x in parts if not x.get('thought'))
+        if not text.strip(): raise ValueError()
+        return text
+    except (ValueError, TypeError, KeyError): raise ProviderError('invalid_completion') from None
 
 
 def parse_result(account, packet, data):
@@ -221,6 +239,8 @@ def parse_result(account, packet, data):
             raise ProviderError('invalid_ranking')
         result['ranking'] = [{'index': x['index'], 'score': x['relevance_score']} for x in rows]
     elif cap == 'transcribe':
+        if p == 'gemini': data = _json_text(gemini_text(data))
+        if not isinstance(data, dict): raise ProviderError('invalid_transcript')
         if not isinstance(data.get('text'), str) or not data['text'].strip(): raise ProviderError('invalid_transcript')
         rows = data.get('segments')
         if not isinstance(rows, list) or not rows: raise ProviderError('missing_timestamps')
@@ -235,11 +255,7 @@ def parse_result(account, packet, data):
     else:
         try:
             if p == 'gemini':
-                candidates = data.get('candidates', [])
-                if len(candidates) != 1 or candidates[0].get('finishReason') != 'STOP': raise ValueError()
-                parts = candidates[0]['content']['parts']
-                if any('functionCall' in x for x in parts): raise ValueError()
-                text = ''.join(x.get('text', '') for x in parts if not x.get('thought'))
+                text = gemini_text(data)
             elif p == 'cohere':
                 if data.get('finish_reason') != 'COMPLETE' or data['message'].get('tool_calls'): raise ValueError()
                 text = ''.join(x.get('text', '') for x in data['message']['content'] if x.get('type') == 'text')
@@ -267,6 +283,7 @@ def parse_result(account, packet, data):
 
 def call(account, packet, key):
     started = time.monotonic()
+    owned = None
     if account['provider'] == 'omniroute':
         import omniroute_policy as policy
         import omniroute_run as routing
@@ -278,11 +295,12 @@ def call(account, packet, key):
         url, headers, body = build_request(account, packet, worker_key)
         body['model'] = route
         remaining = max(1, DEADLINE.get() - time.monotonic()) if DEADLINE.get() else 180
-        with routing.worker_lock(), routing.gateway(BASES['omniroute'], worker_key, startup_timeout=min(180, remaining)):
+        with routing.worker_lock(), routing.gateway(BASES['omniroute'], worker_key, startup_timeout=min(180, remaining)) as owned:
             data = request_json(url, headers, body, 60)
     else:
         url, headers, body = build_request(account, packet, key)
         data = request_json(url, headers, body, 45)
     result = parse_result(account, packet, data)
+    if owned is not None: result['owned_server'] = owned
     result['seconds'] = round(time.monotonic() - started, 4)
     return result

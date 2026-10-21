@@ -1,0 +1,342 @@
+{
+  "date": "2026-10-21",
+  "scope": "both approved swarm recovery passes",
+  "external_review": false,
+  "source_sha256": {
+    "tools/swarm_config.py": "b9fdbae323cb413f94aca374da0e0d8d5e0bc594fdc21a4a007f19e70c33480c",
+    "tools/swarm_state.py": "359f05887d44fabc61af1c30614ced08e027d409e61a108a206f98a2fd63b83f",
+    "tools/swarm_providers.py": "f85a81c9e85696f632e5b22b4bd0218490375edd122bbe9205fa9f2c4da620c4",
+    "tools/swarm_pool.py": "a5266cc87f3f64f48c91844fed97ba89a8832778c4305ef38c27aa2aaa1ac40e",
+    "tools/swarm_accounts.py": "19401013affd98fd32c8ac71dcd42668d6dec977c21b32e793e15f16e0c3bbcc",
+    "tools/swarm_contract.ps1": "d45f6d156541d90f2becfde2b8b442bda0c04a5848126b309ebba7a74a4ebc74",
+    "tools/omniroute_run.py": "7080ac8e07abead18309eb4de14c5a636e094750637bd371b119ef53d16e5fa2",
+    "config/stack-tools.json": "4dd19f0720255b2b272ad04b75a5d65d8fdf39e54a673a92262e853ec51f7a75",
+    "tests/test_swarm_pool.py": "b764563f92eb8f9e064d90847fcbdc25f89270a076607d54a195f501e5b44413",
+    "tests/test_swarm_contract.py": "5b0fc0c911da424ed1141716294c796e10eb6e8a4968e6240aa8d988340a3d94",
+    "tests/aos.Tests.ps1": "2371068d1410130e543b95d35e463009421013c1b75793f98738a3f3a643b99a",
+    "agents-home/skills/coordination/SKILL.md": "e1d98a02fcf744b408a08ae5da7ba9c089fbfc7ce95631c5d6ccb83641887969",
+    "agents-home/skills/tool-catalog/SKILL.md": "ce1ff3e246bb3806c028f6e525ef31831cd4dd990c63aab3fcb5a0388c389751"
+  },
+  "backup_source_files_available": 0,
+  "backup_source_files_total": 145,
+  "backup_source_hashes_unchanged": null,
+  "saved_snapshot_hashes_unchanged": true,
+  "registered_records": 9,
+  "distinct_secret_references": 8,
+  "recovered_credentials_migrated_dpapi": 7,
+  "billing_evidence": {
+    "openrouter": "fresh zero-price metadata and zero-price/no-fallback requests",
+    "gemini_mistral_cohere": "operator attestation, paid usage disabled, seven-day expiry"
+  },
+  "local_shared_openrouter_limits": {
+    "attempts_per_rolling_minute": 10,
+    "attempts_per_rolling_day": 30
+  },
+  "initial_live": [
+    {
+      "task": "live-text-mistral-1-fd2864",
+      "label": "text-mistral-1",
+      "status": "failed",
+      "correct": false,
+      "seconds": 1.437,
+      "error": "rate",
+      "attempts": null,
+      "usage": null,
+      "reported_cost": null
+    },
+    {
+      "task": "live-text-gemini-1-7ede86",
+      "label": "text-gemini-1",
+      "status": "failed",
+      "correct": false,
+      "seconds": 1.392,
+      "error": "permanent",
+      "attempts": null,
+      "usage": null,
+      "reported_cost": null
+    },
+    {
+      "task": "live-text-cohere-1-69a5f7",
+      "label": "text-cohere-1",
+      "status": "candidate",
+      "correct": true,
+      "seconds": 2.076,
+      "error": null,
+      "attempts": 1,
+      "usage": {},
+      "reported_cost": null
+    },
+    {
+      "task": "live-text-current-openrouter-438595",
+      "label": "text-current-openrouter",
+      "status": "candidate",
+      "correct": true,
+      "seconds": 2.807,
+      "error": null,
+      "attempts": 1,
+      "usage": {
+        "completion_tokens": 44,
+        "prompt_tokens": 271,
+        "total_tokens": 315
+      },
+      "reported_cost": 0
+    },
+    {
+      "task": "live-text-recovered-openrouter-8331e5",
+      "label": "text-recovered-openrouter",
+      "status": "candidate",
+      "correct": true,
+      "seconds": 2.979,
+      "error": null,
+      "attempts": 1,
+      "usage": {
+        "completion_tokens": 50,
+        "prompt_tokens": 271,
+        "total_tokens": 321
+      },
+      "reported_cost": 0
+    },
+    {
+      "task": "live-text-current-omniroute-e9baeb",
+      "label": "text-current-omniroute",
+      "status": "candidate",
+      "correct": true,
+      "seconds": 113.197,
+      "error": null,
+      "attempts": 1,
+      "usage": {
+        "completion_tokens": 17,
+        "prompt_tokens": 271,
+        "total_tokens": 288
+      },
+      "reported_cost": null
+    },
+    {
+      "task": "live-embed-cohere-9b5739",
+      "label": "embed-cohere",
+      "status": "candidate",
+      "correct": true,
+      "seconds": 1.417,
+      "error": null,
+      "attempts": 1,
+      "usage": {},
+      "reported_cost": null
+    },
+    {
+      "task": "live-rerank-cohere-a61e8a",
+      "label": "rerank-cohere",
+      "status": "candidate",
+      "correct": true,
+      "seconds": 2.738,
+      "error": null,
+      "attempts": 1,
+      "usage": {},
+      "reported_cost": null
+    },
+    {
+      "task": "live-embed-gemini-114dbc",
+      "label": "embed-gemini",
+      "status": "failed",
+      "correct": false,
+      "seconds": 0.063,
+      "error": "no_admitted_route",
+      "attempts": null,
+      "usage": null,
+      "reported_cost": null
+    },
+    {
+      "task": "live-research-43d66d",
+      "label": "research",
+      "status": "failed",
+      "correct": false,
+      "seconds": 1.348,
+      "error": "rate",
+      "attempts": null,
+      "usage": null,
+      "reported_cost": null
+    }
+  ],
+  "gemini_live": [
+    {
+      "task": "live-gemini-text-992255",
+      "label": "gemini-text",
+      "status": "candidate",
+      "structural_correct": true,
+      "seconds": 3.948,
+      "error": null,
+      "usage": {
+        "candidatesTokenCount": 12,
+        "promptTokenCount": 56,
+        "totalTokenCount": 68
+      }
+    },
+    {
+      "task": "live-gemini-embedding-972279",
+      "label": "gemini-embedding",
+      "status": "candidate",
+      "structural_correct": true,
+      "seconds": 1.701,
+      "error": null,
+      "usage": {
+        "promptTokenCount": 9
+      }
+    },
+    {
+      "task": "live-gemini-vision-877d3c",
+      "label": "gemini-vision",
+      "status": "candidate",
+      "structural_correct": false,
+      "seconds": 2.821,
+      "error": null,
+      "usage": {
+        "candidatesTokenCount": 28,
+        "promptTokenCount": 1140,
+        "totalTokenCount": 1168
+      }
+    },
+    {
+      "task": "live-gemini-audio-7c0800",
+      "label": "gemini-audio",
+      "status": "failed",
+      "structural_correct": false,
+      "seconds": 3.133,
+      "error": "invalid_timestamps",
+      "usage": null
+    }
+  ],
+  "audio_diagnostic": {
+    "actual_seconds_ceiling": 5,
+    "expected_words_present": true,
+    "segments": [
+      {
+        "start": 0.0,
+        "end": 3.76
+      }
+    ],
+    "task": "audio-diagnostic-cd3ac8",
+    "status": "candidate",
+    "error": null
+  },
+  "final_live": [
+    {
+      "task": "final-mistral-recheck-d436b3",
+      "label": "mistral-recheck",
+      "status": "failed",
+      "error": "rate:429",
+      "seconds": 1.662
+    },
+    {
+      "task": "final-grounded-research-3906a4",
+      "label": "grounded-research",
+      "status": "candidate",
+      "error": null,
+      "seconds": 2.332
+    }
+  ],
+  "parallel": {
+    "workers": 3,
+    "wall_seconds": 3.199,
+    "results": [
+      {
+        "task": "parallel-cohere-1-0478de",
+        "status": "accepted",
+        "host_verified": true,
+        "provider_seconds": 0.9512
+      },
+      {
+        "task": "parallel-gemini-1-240a8c",
+        "status": "accepted",
+        "host_verified": true,
+        "provider_seconds": 0.9626
+      },
+      {
+        "task": "parallel-recovered-openrouter-5992c3",
+        "status": "accepted",
+        "host_verified": true,
+        "provider_seconds": 1.1193
+      }
+    ],
+    "same_prompt_sequential_baseline_measured": false
+  },
+  "registered_workflow": {
+    "results": [
+      {
+        "task": "swarm-live-a-cc92b7",
+        "account": "current-openrouter",
+        "exit_code": 0,
+        "seconds": 6.337,
+        "host_accepted": true,
+        "run": "swarm-be8a03d961834d63882507eab37bd1ec",
+        "check_exit": 0
+      },
+      {
+        "task": "swarm-live-b-cc92b7",
+        "account": "gemini-1",
+        "exit_code": 0,
+        "seconds": 5.009,
+        "host_accepted": true,
+        "run": "swarm-d463a86aa8994c288098dc0ddeaea262",
+        "check_exit": 0
+      }
+    ],
+    "artifacts_correct": true
+  },
+  "omniroute_compatibility": [
+    {
+      "tool": "omniroute",
+      "status": "passed",
+      "scope": "One actual free text worker extracts supplied facts and total; candidate remains unaccepted",
+      "requests": 1,
+      "seconds": 20.915
+    }
+  ],
+  "checks": {
+    "aos_test_powershell_51": {
+      "passed": 533,
+      "failed": 0,
+      "skipped": 0
+    },
+    "aos_test_powershell_7": {
+      "passed": 533,
+      "failed": 0,
+      "skipped": 0
+    },
+    "aos_log_confirms_both_shells": true,
+    "final_worker_controls": 35,
+    "final_host_contract_controls": 6,
+    "existing_omniroute_controls": 12,
+    "credential_value_hits_in_scanned_source_files": 0
+  },
+  "final_targeted_runs": [
+    {
+      "shell": "powershell",
+      "exit_code": 0,
+      "worker_tests": 35,
+      "host_contract_tests": 6,
+      "legacy_omniroute_tests": 12
+    },
+    {
+      "shell": "pwsh",
+      "exit_code": 0,
+      "worker_tests": 35,
+      "host_contract_tests": 6,
+      "legacy_omniroute_tests": 12
+    }
+  ],
+  "attempt_totals_by_provider": {
+    "mistral": 3,
+    "gemini": 9,
+    "cohere": 5,
+    "openrouter": 5,
+    "omniroute": 2
+  },
+  "active_attempts": 0,
+  "limits": [
+    "Mistral 429 remains conditional; lower route priority",
+    "Groq prior 403 unresolved; no active credentials registered",
+    "Cerebras and Hugging Face recurring included free eligibility unestablished",
+    "No matched sequential comparison or native subscription quota savings measured",
+    "No Claude execution or autonomous routing pressure benchmark",
+    "Initial image exact-string and audio timestamp failures retained; successful responses still require host checking"
+  ]
+}

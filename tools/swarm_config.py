@@ -12,7 +12,7 @@ import time
 PROVIDERS = {'openrouter', 'omniroute', 'gemini', 'mistral', 'cohere', 'groq'}
 CAPABILITIES = {'text', 'research', 'embed', 'rerank', 'vision', 'transcribe'}
 SUPPORT = {'openrouter': {'text', 'research'}, 'omniroute': {'text', 'research'},
-           'gemini': {'text', 'research', 'embed', 'vision'},
+           'gemini': {'text', 'research', 'embed', 'vision', 'transcribe'},
            'mistral': {'text', 'research'}, 'cohere': {'text', 'research', 'embed', 'rerank'},
            'groq': {'text', 'research', 'vision', 'transcribe'}}
 

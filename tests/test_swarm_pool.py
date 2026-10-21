@@ -6,8 +6,10 @@ from pathlib import Path
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from swarm_config import validate_registry
@@ -104,6 +106,17 @@ class AdmissionTests(unittest.TestCase):
         with self.assertRaises(Unavailable):
             self.reserve(now=1000000)
 
+    def test_reconcile_refuses_live_owner_and_preserves_charged_attempts(self):
+        pool = Pool(self.reg, self.state, secret=lambda name: 'key', check=lambda *x: None)
+        pool.submit(packet())
+        p, run, _ = self.state.claim(registry=self.reg)
+        attempt = self.state.reserve(self.reg, self.account, 'key', {'requests':1,'tokens':10},task=p['id'],run=run)
+        with self.assertRaises(ValueError): self.state.reconcile(run, stopped=lambda pid: False)
+        self.state.reconcile(run, stopped=lambda pid: True)
+        self.assertEqual(self.state.task('one')['status'], 'failed')
+        self.assertEqual(len(self.state.attempts()), 1)
+        self.assertEqual(self.state.attempts()[0]['outcome'], 'interrupted_unknown')
+
     def test_provider_and_global_concurrency(self):
         self.reserve()
         other = copy.deepcopy(self.account)
@@ -114,6 +127,15 @@ class AdmissionTests(unittest.TestCase):
         with self.assertRaises(Unavailable):
             self.reserve(third, 'key-three')
 
+    def test_openrouter_accounts_share_a_global_daily_ceiling(self):
+        self.account['limits'][0]['amount'] = 100
+        second = copy.deepcopy(self.account); second.update(id='second',quota_group='second')
+        for i in range(30):
+            a = self.account if i % 2 else second
+            self.state.finish(self.reserve(a, key=a['id'], now=time.time()+i*61), 'ok')
+        with self.assertRaises(Unavailable):
+            self.reserve(second, key='second', now=time.time()+31*61)
+
     def test_capability_units_are_reserved(self):
         self.account['limits'].append({'unit': 'audio_seconds', 'seconds': 86400, 'amount': 3})
         with self.assertRaises(Unavailable):
@@ -121,6 +143,39 @@ class AdmissionTests(unittest.TestCase):
 
 
 class WireTests(unittest.TestCase):
+    def test_additional_accounts_register_without_catalogue_code_changes(self):
+        import swarm_accounts
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder); (home / 'accounts.json').write_text(json.dumps(registry()))
+            second = copy.deepcopy(registry()['accounts'][0]); second.update(id='added',secret='new-ref',quota_group='new-owner')
+            source = home / 'new.json'; source.write_text(json.dumps(second))
+            with patch.object(swarm_accounts, 'root', lambda: home), patch.object(swarm_accounts, 'secret', lambda n: 'fixture'), patch.object(swarm_accounts, 'catalog', lambda *x: {}), patch.object(swarm_accounts, 'request_json', lambda *x: {}), patch('omniroute_run.verify_free_route', lambda *x: None):
+                result = swarm_accounts.add_account(source, backup_dir=home/'backups')
+            self.assertTrue(result['changed'])
+            self.assertEqual(len(json.loads((home/'accounts.json').read_text())['accounts']),2)
+
+    def test_gemini_audio_request_uses_inline_bytes_and_checks_timestamps(self):
+        from swarm_config import SUPPORT
+        self.assertIn('transcribe', SUPPORT['gemini'])
+        a = dict(provider='gemini', routes={'transcribe': {'model': 'fixture'}})
+        p = dict(capability='transcribe', audio_base64='ZmFrZQ==', audio_seconds=2)
+        url, headers, body = build_request(a, p, 'fixture-key')
+        self.assertIn('inline_data', body['contents'][0]['parts'][1])
+        wire = {'candidates': [{'finishReason': 'STOP', 'content': {'parts': [{'text':
+            '{"text":"hello","segments":[{"start":0,"end":1,"text":"hello"}]}'}]}}]}
+        self.assertEqual(parse_result(a, p, wire)['segments'][0]['end'], 1)
+
+    def test_catalog_selection_prefers_current_alias_and_stable_embeddings(self):
+        from swarm_accounts import pick_models
+        rows = [{'name': 'models/family-1-flash-lite', 'supportedGenerationMethods': ['generateContent']},
+                {'name': 'models/family-flash-lite-latest', 'supportedGenerationMethods': ['generateContent']},
+                {'name': 'models/embed-1', 'supportedGenerationMethods': ['embedContent']},
+                {'name': 'models/embed-2-preview', 'supportedGenerationMethods': ['embedContent']},
+                {'name': 'models/embed-2', 'supportedGenerationMethods': ['embedContent']}]
+        routes = pick_models('gemini', {'models': rows})
+        self.assertEqual(routes['text']['model'], 'family-flash-lite-latest')
+        self.assertEqual(routes['embed']['model'], 'embed-2')
+
     def test_system_payload_is_always_valid_text(self):
         url, headers, body = build_request(registry()['accounts'][0], packet(), 'fixture-key')
         self.assertTrue(all(isinstance(m['content'], str) for m in body['messages']))
@@ -188,6 +243,15 @@ class TaskTests(unittest.TestCase):
         self.assertIs(row['candidate']['accepted'], False)
         self.pool.drain()
         self.assertEqual(len(self.calls), 1)
+
+    def test_independent_tasks_wait_for_same_account_slot(self):
+        def call(a, p, k):
+            time.sleep(.15)
+            return {'text': 'candidate', 'complete': True, 'usage': {}}
+        self.pool.call = call
+        self.pool.submit(packet()); self.pool.submit(packet('two'))
+        self.pool.drain(workers=2)
+        self.assertEqual([self.state.task(n)['status'] for n in ('one', 'two')], ['candidate', 'candidate'])
 
     def test_dependency_requires_host_verification_and_detects_drift(self):
         self.pool.submit(packet()); self.pool.submit(packet('two', depends_on=['one']))
@@ -258,8 +322,21 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(self.state.task('two')['status'], 'queued')
 
     def test_packets_cannot_request_tools_or_unapproved_cloud(self):
-        for p in [packet(tools=['shell']), dict(packet(), cloud_allowed=False)]:
+        for p in [packet(tools=['shell']), dict(packet(), cloud_allowed=False), packet(contract={'run_path':'arbitrary.json'})]:
             with self.assertRaises(ValueError): self.pool.submit(p)
+
+    def test_media_file_is_snapshotted_and_not_exposed_as_a_remote_path(self):
+        from swarm_pool import validate_packet
+        data = b'\x89PNG\r\n\x1a\nfixture'
+        path = Path(self.tmp.name) / 'image.png'; path.write_bytes(data)
+        r = registry(); a = r['accounts'][0]
+        a.update(provider='gemini', free={'kind':'free_tier','confirmed_until':9999999999,'paid_disabled':True,'evidence':'fixture'},
+                 routes={'vision':{'model':'fixture'}})
+        p = validate_packet(dict(id='image', capability='vision', prompt='Read this image.', cloud_allowed=True,
+                                 image_file=str(path)), r)
+        self.assertNotIn('image_file', p)
+        import base64
+        self.assertEqual(base64.b64decode(p['image_base64']), data)
 
     def test_task_id_cannot_be_reused_for_different_input(self):
         self.pool.submit(packet())

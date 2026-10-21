@@ -36,6 +36,9 @@ class State:
                 CREATE TABLE IF NOT EXISTS ceilings(
                   credential TEXT, unit TEXT, seconds INTEGER, amount INTEGER,
                   PRIMARY KEY(credential,unit,seconds));
+                CREATE TABLE IF NOT EXISTS leases(
+                  run TEXT PRIMARY KEY, account TEXT, provider TEXT, quota_group TEXT);
+                CREATE TABLE IF NOT EXISTS holders(run TEXT PRIMARY KEY, pid INTEGER);
                 CREATE TABLE IF NOT EXISTS tasks(
                   id TEXT PRIMARY KEY, packet TEXT, packet_hash TEXT, status TEXT,
                   cancelled INTEGER DEFAULT 0, candidate TEXT, candidate_hash TEXT,
@@ -90,6 +93,9 @@ class State:
         if a['provider'] in ('openrouter', 'omniroute'):
             n = sum(x['provider'] in ('openrouter', 'omniroute') and x['started'] > now - 60 for x in rows)
             if n >= 10: raise Unavailable('Shared OpenRouter minute ceiling reached')
+            daily = sum(x['provider'] in ('openrouter', 'omniroute') and
+                        (x['started'] > now - 86400 or x['active']) for x in rows)
+            if daily >= 30: raise Unavailable('Shared OpenRouter daily ceiling reached')
 
     def eligible(self, registry, capability):
         result = []
@@ -173,17 +179,34 @@ class State:
             result.append({'task': name, 'sha256': row['candidate_hash']})
         return result
 
-    def claim(self, only=None):
+    def claim(self, only=None, registry=None):
         with self.db(True) as db:
+            leases = db.execute('SELECT * FROM leases').fetchall()
+            if registry and len(leases) >= registry['max_active']: return None
             rows = db.execute('SELECT * FROM tasks WHERE status=? ORDER BY rowid', ('queued',)).fetchall()
             for row in rows:
                 if only and row['id'] != only: continue
                 packet = json.loads(row['packet'])
                 try: inputs = self._inputs(db, packet)
                 except Unavailable: continue
+                selected = None
+                if registry:
+                    for a in sorted(registry['accounts'], key=lambda x: (x['priority'], x['id'])):
+                        if packet['capability'] not in a['routes'] or (packet.get('account') and packet['account'] != a['id']): continue
+                        if (sum(x['provider'] == a['provider'] for x in leases) >= registry['provider_active']
+                                or any(x['account'] == a['id'] or x['quota_group'] == a['quota_group'] for x in leases)):
+                            continue
+                        try: self._check(db, registry, a, {'requests': 1})
+                        except Unavailable: continue
+                        selected = a; break
+                    if selected is None: continue
                 run = 'swarm-' + uuid.uuid4().hex
                 db.execute('UPDATE tasks SET status=?,run=?,inputs=? WHERE id=?',
                            ('running', run, canonical(inputs), row['id']))
+                if selected:
+                    db.execute('INSERT INTO leases VALUES(?,?,?,?)', (run, selected['id'], selected['provider'], selected['quota_group']))
+                    db.execute('INSERT INTO holders VALUES(?,?)', (run, os.getpid()))
+                    return packet, run, selected['id']
                 return packet, run
         return None
 
@@ -217,6 +240,23 @@ class State:
             if status != 'candidate': candidate = None
             db.execute('UPDATE tasks SET status=?,candidate=?,candidate_hash=?,error=? WHERE id=?',
                        (status, canonical(candidate) if candidate else None, digest(candidate) if candidate else None, error, name))
+            db.execute('DELETE FROM leases WHERE run=?', (run,))
+            db.execute('DELETE FROM holders WHERE run=?', (run,))
+
+    def reconcile(self, run, *, stopped):
+        identifier(run)
+        with self.db(True) as db:
+            task = db.execute('SELECT * FROM tasks WHERE run=? AND status=?', (run, 'running')).fetchone()
+            holder = db.execute('SELECT pid FROM holders WHERE run=?', (run,)).fetchone()
+            if not task or not holder or not stopped(holder['pid']):
+                raise ValueError('Run is unknown or process exit is unconfirmed')
+            attempts = db.execute('SELECT pid FROM attempts WHERE run=? AND active=1', (run,)).fetchall()
+            if any(not stopped(x['pid']) for x in attempts): raise ValueError('An attempt owner is still active')
+            # Retain all request/token/audio reservations: remote completion remains unknown.
+            db.execute('UPDATE attempts SET active=0,outcome=? WHERE run=? AND active=1', ('interrupted_unknown', run))
+            db.execute('UPDATE tasks SET status=?,error=? WHERE run=?', ('failed', 'reconciled_after_confirmed_process_exit', run))
+            db.execute('DELETE FROM leases WHERE run=?', (run,))
+            db.execute('DELETE FROM holders WHERE run=?', (run,))
 
     def accept(self, name, candidate_hash, receipt):
         with self.db(True) as db:

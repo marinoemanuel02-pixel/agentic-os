@@ -9,6 +9,7 @@ import socket
 import subprocess
 import sys
 import time
+import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -144,6 +145,27 @@ def execute(packet, output, endpoint, model=None, check=False):
     return result
 
 
+def execute_managed(packet, output, endpoint, model=None):
+    """Use the shared admission ledger after swarm activation; keep the plain-text CLI."""
+    from swarm_config import load_registry, root
+    from swarm_state import State
+    from swarm_pool import Pool, export_candidate
+    endpoint = worker.validate_endpoint(endpoint)
+    if endpoint != 'http://127.0.0.1:20128/v1': raise ValueError('Managed gateway uses its registered endpoint')
+    if output.exists() or packet.stat().st_size > worker.MAX_PROMPT: raise ValueError('Output exists or packet exceeds bound')
+    registry = load_registry()
+    account = next((a for a in registry['accounts'] if a['id'] == 'current-omniroute'), None)
+    if account is None: raise ValueError('Managed gateway account unavailable')
+    route = account['routes']['text']['model']
+    if model is not None and model != 'openrouter/' + route: raise ValueError('Choose the managed explicit free route')
+    state = State(root() / 'state.sqlite'); pool = Pool(registry, state)
+    name = 'omniroute-' + uuid.uuid4().hex
+    pool.submit({'id': name, 'capability': 'text', 'account': account['id'],
+                 'cloud_allowed': True, 'prompt': packet.read_text(encoding='utf-8-sig'), 'max_attempts': 1})
+    pool.drain(only=name)
+    return export_candidate(state, name, output)['candidate']
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--endpoint', default='http://127.0.0.1:20128/v1')
@@ -155,7 +177,11 @@ def main():
     if not args.check and (args.packet is None or args.output is None):
         parser.error('--packet and --output are required for a worker task')
     try:
-        result = execute(args.packet, args.output, args.endpoint, args.model, args.check)
+        from swarm_config import root
+        if not args.check and (root() / 'accounts.json').exists():
+            result = execute_managed(args.packet, args.output, args.endpoint, args.model)
+        else:
+            result = execute(args.packet, args.output, args.endpoint, args.model, args.check)
         if args.check:
             print(json.dumps(result, indent=2))
         else:

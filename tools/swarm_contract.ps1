@@ -2,6 +2,9 @@
 param([ValidateSet('prepare','verify','fail')][string]$Action)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)
+# Python may inherit PowerShell 7's module path when launching Windows PowerShell.
+# Load that child shell's own utility module, without changing any user settings.
+Import-Module (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1') -Force
 $module = Import-Module (Join-Path $PSScriptRoot '..\aos.psm1') -Force -PassThru -DisableNameChecking
 try {
     $inputText = [Console]::In.ReadToEnd()
@@ -17,6 +20,10 @@ try {
             if (-not $ready.Ready) { throw 'prerequisites are not accepted' }
             $packet = Get-AosTaskPacket $r['id'] $repo
             if (-not $task['contract']['verify']) { throw 'host verifier required' }
+            $seconds = 300
+            if ($task['contract']['budget'] -and $task['contract']['budget']['timeout_minutes']) {
+                $seconds = [Math]::Min(300,[int]$task['contract']['budget']['timeout_minutes']*60)
+            }
             $run = 'swarm-' + [guid]::NewGuid().ToString('N')
             $runDir = Join-Path (Join-Path (Get-AosCoordDir) 'delegations') $run
             $runPath = Join-Path $runDir 'run.json'
@@ -28,12 +35,13 @@ try {
             $null = Start-AosTaskAttempt $r['id'] $run
             Write-AosCoordJson $runPath $record
             return [ordered]@{ id=$r['id']; repo=$repo; run=$run; run_path=$runPath; packet=$packet;
-                owner_session=$r['owner_session']; timeout_seconds=[Math]::Min(300,[Math]::Max(60,[int]$task['contract']['budget']['timeout_minutes']*60)) }
+                owner_session=$r['owner_session']; timeout_seconds=$seconds }
         }
         Assert-AosCoordId $r['run']
         if ($task['active_run'] -ne $r['run']) { throw 'run does not own task' }
         $run = Get-AosRunState $r['run']
         if (-not $run -or $run['worker_kind'] -ne 'api-pool' -or $run['task_id'] -ne $r['id']) { throw 'invalid API run' }
+        if ($run['state'] -eq 'needs-inspection') { throw 'process termination remains unconfirmed' }
         $ok = $false
         $check = [ordered]@{ exit_code=1; argv=@(); artifacts=@() }
         if ($Mode -eq 'verify' -and -not $run['cancel_requested']) {
@@ -46,6 +54,7 @@ try {
             $candidate = [IO.Path]::GetFullPath($r['candidate'])
             if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { throw 'candidate missing' }
             $candidateHash = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash
+            if (-not $r['candidate_file_sha256'] -or $candidateHash -ne $r['candidate_file_sha256']) { throw 'candidate changed before verification' }
             # Candidate path is passed through child environment, never interpolated into shell code.
             $oldCandidate = $env:AOS_SWARM_CANDIDATE
             try {
@@ -55,7 +64,10 @@ try {
             } finally { $env:AOS_SWARM_CANDIDATE = $oldCandidate }
             $run = Get-AosRunState $r['run']
             $unchanged = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash -eq $candidateHash
-            if ($process.KillFailed) { throw 'verifier process not confirmed stopped; inspect before completing task' }
+            if ($process.KillFailed) {
+                $null = Set-AosRunState -Id $r['run'] -State needs-inspection -Text 'Host verifier termination unconfirmed'
+                throw 'verifier process not confirmed stopped; inspect before completing task'
+            }
             $ok = ($process.Code -eq 0 -and -not $process.TimedOut -and -not $run['cancel_requested'] -and $unchanged)
             $manifest = @()
             if ($ok) {
@@ -69,7 +81,7 @@ try {
         $outcome = 'rejected'; if ($ok) { $outcome='accepted' }
         $receipt = [ordered]@{ id=$r['run']; task_id=$r['id']; worker_kind='api-pool'; vendor=$null;
             accepted=$ok; outcome=$outcome; verify=$check; repo=$repo; workdir=$repo;
-            commit=(& git -C $repo rev-parse HEAD); candidate_sha256=$r['candidate_sha256'] }
+            commit=(& git -C $repo rev-parse HEAD); candidate_sha256=$r['candidate_sha256']; candidate_file_sha256=$r['candidate_file_sha256'] }
         Write-AosCoordJson (Join-Path (Split-Path -Parent $r['run_path']) 'receipt.json') $receipt
         $null = Complete-AosTaskAttempt $r['id'] $r['run']
         $state='failed'; if ($ok) { $state='accepted' }; if ($run['cancel_requested']) { $state='cancelled' }

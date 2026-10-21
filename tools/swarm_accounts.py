@@ -1,9 +1,12 @@
 """Recover selected account keys directly into DPAPI and build a current home registry."""
 import argparse
 import ast
+from contextlib import contextmanager
+import hashlib
 import json
 from pathlib import Path
 import shutil
+import re
 import time
 import uuid
 
@@ -12,17 +15,67 @@ from swarm_providers import auth, BASES, catalog, request_json
 from swarm_pool import save_new
 
 
+@contextmanager
+def registry_write():
+    root().mkdir(parents=True, exist_ok=True)
+    lock = root() / 'accounts.lock'
+    with lock.open('x', encoding='ascii') as handle: handle.write(str(__import__('os').getpid()))
+    try: yield
+    finally: lock.unlink()
+
+
+def persist_registry(r, backup_dir=None):
+    validate_registry(r)
+    backup = Path(backup_dir or Path.home() / '.aos-backups/swarm') / (uuid.uuid4().hex + '.accounts.json')
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(root() / 'accounts.json', backup)
+    temp = root() / (uuid.uuid4().hex + '.accounts.tmp')
+    save_new(temp, r); temp.replace(root() / 'accounts.json')
+
+
+def add_account(path, *, free_confirmed=False, backup_dir=None):
+    if Path(path).stat().st_size > 16384: raise ValueError('Account record too large')
+    a = json.loads(Path(path).read_text(encoding='utf-8-sig')); r = load_registry(root() / 'accounts.json')
+    if a.get('provider') not in ('openrouter', 'omniroute') and not free_confirmed:
+        raise ValueError('Confirm free/evaluation and paid usage disabled')
+    candidate = dict(r, accounts=r['accounts'] + [a]); validate_registry(candidate)
+    key = secret(a['secret']); data = catalog(a, key)
+    if a['provider'] in ('openrouter', 'omniroute'):
+        from omniroute_run import verify_free_route
+        for route in a['routes'].values():
+            verify_free_route('openrouter/' + route['model'], ['openrouter/' + route['model']], data)
+        request_json(BASES['openrouter'] + '/key', auth('openrouter', key))
+    persist_registry(candidate, backup_dir)
+    return {'changed': True, 'account': a['id'], 'metadata_checked': True, 'inference_requests': 0}
+
+
+def renew_free(ids, *, free_confirmed=False):
+    if not free_confirmed: raise ValueError('Explicit free/evaluation billing-disabled confirmation required')
+    r = load_registry(); found = set()
+    for a in r['accounts']:
+        if a['id'] in ids:
+            if a['free']['kind'] != 'free_tier': raise ValueError('Zero-price routes do not need an attestation')
+            a['free'].update(confirmed_until=int(time.time()+7*86400), paid_disabled=True,
+                             evidence='operator billing-disabled confirmation; renewed ' + time.strftime('%Y-%m-%d'))
+            found.add(a['id'])
+    if found != set(ids): raise ValueError('Unknown account')
+    persist_registry(r)
+    return {'changed': True, 'accounts': sorted(found), 'valid_days': 7}
+
+
 def pick_models(provider, data, previous=None):
     if provider == 'gemini':
         rows = data.get('models', [])
         generation = [r for r in rows if 'generateContent' in r.get('supportedGenerationMethods', [])
                       and not any(s in r['name'].lower() for s in ('preview', 'experimental', 'image', 'tts', 'robotics', 'research', 'computer'))]
-        generation.sort(key=lambda r: ('flash' not in r['name'].lower(), 'lite' not in r['name'].lower(), r['name']))
-        embeddings = [r for r in rows if 'embedContent' in r.get('supportedGenerationMethods', [])]
+        generation.sort(key=lambda r: ('latest' not in r['name'].lower(), 'flash' not in r['name'].lower(),
+                                      'lite' not in r['name'].lower(), tuple(-int(n) for n in re.findall(r'\d+', r['name'])), r['name']))
+        embeddings = [r for r in rows if 'embedContent' in r.get('supportedGenerationMethods', [])
+                      and not any(s in r['name'] for s in ('preview', 'experimental'))]
         if not generation: raise ValueError('No current generation model')
         model = generation[0]['name'].removeprefix('models/')
-        result = {k: {'model': model} for k in ('text', 'research', 'vision')}
-        if embeddings: result['embed'] = {'model': sorted(embeddings, key=lambda r: r['name'])[-1]['name'].removeprefix('models/')}
+        result = {k: {'model': model} for k in ('text', 'research', 'vision', 'transcribe')}
+        if embeddings: result['embed'] = {'model': sorted(embeddings, key=lambda r: tuple(int(n) for n in re.findall(r'\d+', r['name'])))[-1]['name'].removeprefix('models/')}
         return result
     if provider == 'mistral':
         rows = [r for r in data.get('data', []) if r.get('capabilities', {}).get('completion_chat')]
@@ -105,6 +158,8 @@ def recover(source, *, free_confirmed=False):
                 a['routes'] = {cap: {'model': model} for cap in ('text', 'research')}
                 a['priority'] = 4 if provider == 'openrouter' else 5
             else: a['routes'] = pick_models(provider, data, previous.get(archived))
+            if 'transcribe' in a['routes']:
+                a['limits'].append({'unit': 'audio_seconds', 'seconds': 86400, 'amount': 600})
             records.append(a)
             observations.append({'account': identity, 'metadata': 'passed', 'capabilities': list(a['routes'])})
         except (ValueError, OSError, KeyError):
@@ -120,13 +175,53 @@ def recover(source, *, free_confirmed=False):
     return {'changed': True, 'accounts': observations, 'registry': str(target)}
 
 
+def refresh(account_ids):
+    """Refresh explicitly selected models; clear rejection cooldown only after a working metadata probe."""
+    from swarm_state import State
+    r = load_registry(); changed = []; clear = []
+    for identity in account_ids:
+        a = next((x for x in r['accounts'] if x['id'] == identity), None)
+        if not a or a['provider'] not in ('gemini', 'mistral', 'cohere'): raise ValueError('No refreshable account')
+        key = secret(a['secret']); routes = pick_models(a['provider'], catalog(a, key))
+        if routes == a['routes']: continue
+        if a['provider'] == 'gemini':
+            request_json(BASES['gemini'] + '/models/' + routes['text']['model'] + ':countTokens',
+                         auth('gemini', key), {'contents': [{'role': 'user', 'parts': [{'text': 'readiness'}]}]})
+            clear.append((a['quota_group'], hashlib.sha256(key.encode()).hexdigest()))
+        changed.append({'account': identity, 'previous_routes': a['routes'], 'new_routes': routes})
+        a['routes'] = routes
+        if 'transcribe' in routes and not any(x['unit'] == 'audio_seconds' for x in a['limits']):
+            a['limits'].append({'unit': 'audio_seconds', 'seconds': 86400, 'amount': 600})
+    if changed:
+        persist_registry(r)
+        state = State(root() / 'state.sqlite')
+        with state.db(True) as db:
+            for group, fingerprint in clear:
+                if db.execute('SELECT 1 FROM attempts WHERE active=1 AND (quota_group=? OR credential=?)', (group, fingerprint)).fetchone():
+                    raise ValueError('Active account retained; cooldown not reconciled')
+                db.execute('DELETE FROM cooldowns WHERE bucket IN (?,?)', ('group:' + group, 'credential:' + fingerprint))
+        save_new(root() / 'changes' / (uuid.uuid4().hex + '.json'), {'changes': changed, 'metadata_revalidated': True,
+                 'attempts_and_quota_history_preserved': True})
+    return {'changed': bool(changed), 'accounts': [x['account'] for x in changed]}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--source', required=True, type=Path)
+    parser.add_argument('--source', type=Path)
+    parser.add_argument('--refresh-account', action='append')
+    parser.add_argument('--add-account', type=Path)
+    parser.add_argument('--renew-free', action='append')
     parser.add_argument('--free-confirmed-paid-disabled', action='store_true')
     args = parser.parse_args()
     try:
-        print(json.dumps(recover(args.source, free_confirmed=args.free_confirmed_paid_disabled), indent=2)); return 0
+        if sum(bool(x) for x in (args.source,args.refresh_account,args.add_account,args.renew_free)) != 1:
+            raise ValueError('Choose exactly one account action')
+        with registry_write():
+            if args.refresh_account: result = refresh(args.refresh_account)
+            elif args.add_account: result = add_account(args.add_account, free_confirmed=args.free_confirmed_paid_disabled)
+            elif args.renew_free: result = renew_free(args.renew_free, free_confirmed=args.free_confirmed_paid_disabled)
+            else: result = recover(args.source, free_confirmed=args.free_confirmed_paid_disabled)
+        print(json.dumps(result, indent=2)); return 0
     except (ValueError, OSError, KeyError):
         print('Account recovery failed safely; existing secrets and backup were retained.', file=__import__('sys').stderr); return 2
 

@@ -21,12 +21,18 @@ from swarm_state import State, Unavailable, canonical, digest
 import swarm_providers as providers
 
 
-def validate_packet(value, registry):
+def validate_packet(value, registry, *, managed_contract=False):
     p = json.loads(canonical(value))
     allowed = {'id', 'capability', 'prompt', 'cloud_allowed', 'depends_on', 'account', 'max_tokens',
                'max_attempts', 'texts', 'input_type', 'documents', 'query', 'sources', 'mime_type',
-               'image_base64', 'audio_base64', 'audio_seconds', 'language', 'contract'}
+               'image_base64', 'audio_base64', 'audio_seconds', 'language', 'contract', 'image_file', 'audio_file'}
     if not isinstance(p, dict) or set(p) - allowed: raise ValueError('Unknown task field; tool access refused')
+    if 'contract' in p:
+        if not managed_contract: raise ValueError('Contract supervision is host-only metadata')
+        c = p['contract']
+        if (not isinstance(c, dict) or set(c) != {'id','repo','run','run_path','packet','owner_session','timeout_seconds'}
+                or type(c['timeout_seconds']) is not int or not 60 <= c['timeout_seconds'] <= 300):
+            raise ValueError('Invalid host contract metadata')
     identifier(p.get('id')); cap = p.get('capability')
     if cap not in CAPABILITIES or p.get('cloud_allowed') is not True: raise ValueError('Capability and cloud permission required')
     if (type(p.get('max_tokens', 1024)) is not int or not 16 <= p.get('max_tokens', 1024) <= 2048
@@ -64,6 +70,13 @@ def validate_packet(value, registry):
             ids.add(s['id'])
     if cap in ('vision', 'transcribe'):
         field = 'image_base64' if cap == 'vision' else 'audio_base64'
+        local = 'image_file' if cap == 'vision' else 'audio_file'
+        if local in p:
+            if field in p: raise ValueError('Choose media file or inline bytes')
+            with Path(p.pop(local)).open('rb') as handle: raw = handle.read(10 * 1024 * 1024 + 1)
+            if len(raw) > 10 * 1024 * 1024: raise ValueError('Media size exceeded')
+            p[field] = base64.b64encode(raw).decode('ascii')
+            if cap == 'vision': p.setdefault('mime_type', 'image/png' if raw.startswith(b'\x89PNG') else 'image/jpeg')
         try: data = base64.b64decode(p[field], validate=True)
         except (ValueError, KeyError, TypeError): raise ValueError('Media bytes required') from None
         if not data or len(data) > (2 * 1024 * 1024 if cap == 'vision' else 10 * 1024 * 1024):
@@ -82,6 +95,7 @@ def validate_packet(value, registry):
                 p['audio_seconds'] = math.ceil(seconds)
             except (ValueError, wave.Error, EOFError): raise ValueError('Use PCM16 WAV up to 120 seconds') from None
             if p.get('language') and not re.fullmatch('[a-z]{2}', p['language']): raise ValueError('Invalid language')
+    if 'image_file' in p or 'audio_file' in p: raise ValueError('Media file does not match capability')
     small = {k: v for k, v in p.items() if k not in ('image_base64', 'audio_base64')}
     if len(canonical(small).encode()) > 32 * 1024: raise ValueError('Text packet exceeds 32 KiB')
     return p
@@ -92,7 +106,8 @@ class Pool:
         self.registry, self.state = validate_registry(registry), state
         self.secret, self.check, self.call = secret, check, call
 
-    def submit(self, packet): return self.state.submit(validate_packet(packet, self.registry))
+    def submit(self, packet, *, managed_contract=False):
+        return self.state.submit(validate_packet(packet, self.registry, managed_contract=managed_contract))
 
     def _cancelled(self, packet):
         if self.state.cancelled(packet['id']): return True
@@ -103,7 +118,7 @@ class Pool:
             if cancelled: self.state.cancel(packet['id']); return True
         return False
 
-    def run_claimed(self, packet, run):
+    def run_claimed(self, packet, run, first_account=None):
         providers.DEADLINE.set(time.monotonic() + (packet.get('contract', {}).get('timeout_seconds', 300)))
         errors = []; count = 0
         text = canonical({k: v for k, v in packet.items() if k not in ('image_base64', 'audio_base64')})
@@ -111,7 +126,9 @@ class Pool:
         if packet['capability'] == 'vision': units['tokens'] += 8192
         if packet['capability'] == 'transcribe':
             units.update(audio_seconds=packet['audio_seconds'], tokens=packet['audio_seconds'] * 32 + 1024)
-        for a in self.state.eligible(self.registry, packet['capability']):
+        accounts = self.state.eligible(self.registry, packet['capability'])
+        accounts.sort(key=lambda a: a['id'] != first_account)
+        for a in accounts:
             if packet.get('account') and packet['account'] != a['id']: continue
             if count >= packet.get('max_attempts', 2) or self._cancelled(packet): break
             attempt = None
@@ -128,6 +145,8 @@ class Pool:
                                  model=a['routes'][packet['capability']]['model'],
                                  packet_sha256=digest(packet), attempts=count,
                                  free_admission=a['free']['kind'])
+                if a['provider'] in ('openrouter', 'omniroute'):
+                    candidate.update(pricing_verified_zero=True, automatic_fallback=False, requests=count)
                 self._cancelled(packet)
                 self.state.complete(packet['id'], run, candidate)
                 return
@@ -145,7 +164,7 @@ class Pool:
         if type(n) is not int or not 1 <= n <= self.registry['max_active']: raise ValueError('Worker count exceeds configured admission')
         def work():
             while True:
-                claim = self.state.claim(only)
+                claim = self.state.claim(only, self.registry)
                 if claim is None: return
                 self.run_claimed(*claim)
                 if only: return
@@ -193,12 +212,25 @@ def verify_candidate(state, task_id, argv, *, cwd=None, artifacts=()):
 
 def bridge(action, payload):
     exe = shutil.which('pwsh') or 'powershell'
-    result = subprocess.run([exe, '-NoProfile', '-NonInteractive', '-File',
+    result = subprocess.run([exe, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
         str(Path(__file__).with_name('swarm_contract.ps1')), action], input=json.dumps(payload),
         capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=150)
     if result.returncode: raise ValueError('Native task bridge failed; inspect task state, no provider details logged')
     try: return json.loads(result.stdout)
     except ValueError: raise ValueError('Invalid task bridge response') from None
+
+
+def process_stopped(pid):
+    if type(pid) is not int or pid <= 0: return False
+    if os.name != 'nt':
+        try: os.kill(pid, 0); return False
+        except ProcessLookupError: return True
+        except OSError: return False
+    script = ("$ErrorActionPreference='Stop'; try { $p=Get-Process -Id ([int]$env:AOS_POOL_OWNER_PID) "
+              "-ErrorAction SilentlyContinue; if ($p) {exit 0}; exit 1 } catch {exit 2}")
+    result = subprocess.run([shutil.which('pwsh') or 'powershell', '-NoProfile', '-NonInteractive', '-Command', script],
+                            env=dict(os.environ, AOS_POOL_OWNER_PID=str(pid)), capture_output=True, timeout=15)
+    return result.returncode == 1
 
 
 def main():
@@ -218,6 +250,7 @@ def main():
     p = sub.add_parser('contract'); p.add_argument('id'); p.add_argument('--repo', required=True, type=Path)
     p.add_argument('--account'); p.add_argument('--cloud-allowed', action='store_true', required=True)
     p.add_argument('--owner-session', required=True, help='Existing host checkout claim session')
+    p = sub.add_parser('reconcile'); p.add_argument('run'); p.add_argument('--confirmed-stopped', required=True, action='store_true')
     sub.add_parser('list'); sub.add_parser('attempts'); sub.add_parser('accounts')
     args = parser.parse_args()
     try:
@@ -229,12 +262,23 @@ def main():
             if args.action == 'task': pool.drain(only=name); export_candidate(state, name, args.output)
             print(json.dumps({'id': name, 'status': state.task(name)['status']}))
         elif args.action == 'drain': pool.drain(workers=args.workers); print(json.dumps(state.tasks()))
-        elif args.action == 'status': print(json.dumps(state.task(args.id), indent=2))
+        elif args.action == 'status':
+            row = state.task(args.id)
+            row['packet'] = {k: v for k, v in row['packet'].items() if k in
+                             ('id', 'capability', 'account', 'depends_on', 'max_attempts', 'max_tokens', 'cloud_allowed')}
+            if row['candidate']:
+                row['candidate'] = {k: v for k, v in row['candidate'].items() if k not in
+                                    ('text', 'vectors', 'segments', 'claims', 'ranking')}
+            print(json.dumps(row, indent=2))
         elif args.action == 'cancel': state.cancel(args.id); print(json.dumps({'cancel_requested': True, 'id': args.id}))
         elif args.action == 'export': export_candidate(state, args.id, args.output)
         elif args.action == 'verify': print(json.dumps(verify_candidate(state, args.id, json.loads(args.argv), cwd=args.cwd, artifacts=args.artifact)))
         elif args.action == 'list': print(json.dumps(state.tasks(), indent=2))
         elif args.action == 'attempts': print(json.dumps(state.attempts(), indent=2))
+        elif args.action == 'reconcile':
+            state.reconcile(args.run, stopped=process_stopped)
+            print(json.dumps({'run': args.run, 'reconciled': True, 'charged_attempts_preserved': True,
+                              'native_contract': 'inspect host task if this was a registered contract'}))
         elif args.action == 'accounts':
             from swarm_config import admitted
             print(json.dumps([{'id': a['id'], 'provider': a['provider'], 'admitted': admitted(a),
@@ -246,13 +290,14 @@ def main():
                  'contract': data}
             if args.account: p['account'] = args.account
             try:
-                name = pool.submit(p); pool.drain(only=name)
+                name = pool.submit(p, managed_contract=True); pool.drain(only=name)
                 row = state.task(name)
                 if row['status'] != 'candidate': raise ValueError('API contract has no complete candidate')
                 candidate_path = state.path.parent / 'candidates' / (name + '.json')
                 export_candidate(state, name, candidate_path)
                 # The declared verifier is host configuration, never model output.
-                done = bridge('verify', dict(data, candidate=str(candidate_path), candidate_sha256=row['candidate_sha256']))
+                done = bridge('verify', dict(data, candidate=str(candidate_path), candidate_sha256=row['candidate_sha256'],
+                                             candidate_file_sha256=hashlib.sha256(candidate_path.read_bytes()).hexdigest()))
                 state.accept(name, row['candidate_sha256'], done['verify'])
                 print(json.dumps(done))
             except BaseException:

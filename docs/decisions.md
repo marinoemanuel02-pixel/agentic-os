@@ -3,6 +3,31 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-21 - Restore the free API worker core and extend capability routing
+
+- **Scope.** The operator authorized both recovery passes and confirmed Gemini, Mistral and
+  Cohere as free/evaluation with paid usage disabled. Preserve the archived swarm framework;
+  maintain a smaller packet/candidate core with the reproduced admission defects covered by
+  tests. Do not revive its HTTP server, services, plaintext environment loader or old control plane.
+- **Admission.** Use encrypted secret references, validated account/model records, atomic
+  request/token/audio reservations, shared credential/account/provider ceilings, cooldowns,
+  bounded failover and durable queue ownership. OpenRouter requests require fresh zero prices
+  and no paid fallback. Multiple keys do not raise a provider's global allowance. Account
+  records can be added without editing the former two-slot catalogue.
+- **Integration.** Both native agents use the shared launcher. Existing registered task contracts
+  reuse host verification, receipts and artifact hashes through a separate API bridge; API
+  accounts do not become native vendor actors. The plain-text OmniRoute task CLI also joins
+  the pool ledger after activation. Cancellation and crashed-owner reconciliation preserve
+  charged attempts and unconfirmed ownership.
+- **Capabilities.** Add supplied-source preparation, one-space embedding batches, reranking,
+  bounded image candidates and authorized short WAV transcription. Preserve local/private
+  routes. Successful model output never establishes host acceptance or factual accuracy.
+- **Evidence.** See the [implementation report](research/2026-10-21-swarm-integration.md) for
+  actual provider/capability passes, initial failures, two accepted dependent live contract
+  tasks and both-shell tests. Mistral remains conditional after repeated 429 responses;
+  Groq access and Cerebras/Hugging Face free eligibility are not counted as working capacity.
+  No external review was run under the operator's explicit exception.
+
 ## 2026-10-21 - Make the approved stack repeatable and the free worker operational
 
 - **Scope.** Integrate the original fourteen approved products. Retain later positive trials as

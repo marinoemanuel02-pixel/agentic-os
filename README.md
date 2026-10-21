@@ -92,6 +92,14 @@ checked request, or `python tools/stack.py verify --output <new-evidence-folder>
 the fourteen-product workflow checks. Open VoiceStudio first for its speech check; see the guide
 for exact scopes and remaining limits.
 
+The recovered [free API worker pool](docs/swarm.md) now serves both native agents through
+`python tools/stack.py swarm`. It supports direct and queued tasks, existing checked task
+contracts, host acceptance, account quotas and cancellation. Text preparation, embeddings,
+reranking, supplied-source claim tables, image reading and short authorized WAV transcription
+share the same admission controls. Additional account records use encrypted secret references;
+the [implementation report](docs/research/2026-10-21-swarm-integration.md) distinguishes live
+passes from conditional providers. OmniRoute's text CLI also uses that ledger after activation.
+
 Tools, clones and keys live under your home folder, not AppData: both desktop apps are MSIX
 packages, and a folder they (or the agents in them) create under AppData can stay private to that app.
 

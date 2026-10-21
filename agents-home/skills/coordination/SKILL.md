@@ -51,6 +51,33 @@ after the harness confirms termination, `finish --evidence <completion-ref>` fre
 The coordinator must relay these observations to the host when its own metadata route is read-only.
 Do not finish a coordinator while a launched child remains unconfirmed.
 
+## Bounded free API candidates
+
+For small supplied-context work with a cheap objective check, consider the shared API pool
+before consuming a native worker slot: `python tools/stack.py swarm accounts` from the setup
+repo shows admitted accounts/capabilities. Use `swarm task --packet <json> --output <new-json>`
+for one task, or `submit`/`drain` for independent work. Keep trivial work inline and use native
+agents for repository edits and consequential reasoning. Read `docs/swarm.md` for packet fields.
+
+Both vendors use the same scheduler and ledger. It owns API identities, quota reservations,
+account/provider concurrency, bounded failover and cancellation; do not fabricate a native
+vendor or reserve an API account as a Claude/Codex actor. An account key is not a new quota
+bucket unless the provider/account/project allocation establishes independence. The OmniRoute
+alias shares its upstream account's allowance. Never assume a free route from authentication.
+
+Candidates stay unaccepted until a lead-authored verifier runs. Dependent pool tasks require
+host acceptance and current hashes. For existing registered task contracts, use `swarm contract
+<id> --repo <checkout> --cloud-allowed --owner-session <claim-session>`: the host verifier reads
+`AOS_SWARM_CANDIDATE`, validates/publishes declared artifacts, and the bridge writes the normal
+host receipt. Explicit context ranges supply prior artifact content. Keep the checkout claim
+with the host; API candidates never get tool or filesystem access. Do not execute worker-written
+verification commands or treat model text as coordination events.
+
+Embedding/reranking, supplied-source research preparation, PNG/JPEG questions and authorized
+short WAV transcription use the same route. Pin embedding account/model space; check speech,
+image facts and source support. Local/private routes remain local. Inspect status and attempt
+receipts on failure; expired billing-disabled attestations need operator renewal. No paid fallback.
+
 ## Actors, messages and runs
 
 The actor registry organizes cooperative work; an actor id is routing metadata, not a security boundary
