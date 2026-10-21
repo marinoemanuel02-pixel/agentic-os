@@ -1,5 +1,13 @@
 {
   "tools": {
+    "swarm": {
+      "purpose": "Managed free API pool for direct or dependent candidate tasks, capabilities, host checks and cancellation",
+      "command": ["{python}", "{repo}/tools/swarm_pool.py"]
+    },
+    "swarm-accounts": {
+      "purpose": "One-time recovered account migration directly to Windows secrets; preserves later account edits",
+      "command": ["{python}", "{repo}/tools/swarm_accounts.py"]
+    },
     "verify": {
       "purpose": "Repeatable checks of the fourteen approved products; fresh output and explicit live calls",
       "command": ["{python}", "{repo}/tools/stack_verify.py"]

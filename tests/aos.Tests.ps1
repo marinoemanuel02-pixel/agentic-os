@@ -5232,6 +5232,10 @@ Describe 'selected stack additions' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_voicestudio_launcher.py' -v
         $LASTEXITCODE | Should -Be 0
     }
+    It 'runs API swarm admission and capability controls without credentials or network' {
+        & python -m unittest discover -s $PSScriptRoot -p 'test_swarm_pool.py' -v
+        $LASTEXITCODE | Should -Be 0
+    }
 }
 
 }
