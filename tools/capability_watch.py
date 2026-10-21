@@ -205,12 +205,15 @@ def observe(source, body, checked_at):
         raise ValueError('Source exceeds 8 MiB response limit')
     kind = source['kind']
     metadata = {}
+    link_text = body
     if kind in ('json', 'npm', 'pypi', 'github_metadata', 'github_release'):
         data = json.loads(body)
         if not isinstance(data, (dict, list)):
             raise ValueError('Expected a JSON object or list')
         if kind in ('npm', 'pypi', 'github_metadata', 'github_release') and not isinstance(data, dict):
             raise ValueError('Expected metadata object')
+        # Search decoded values so escaped slashes/unicode have the same identity as plain URLs.
+        link_text = json.dumps(data, ensure_ascii=False)
         if kind == 'npm':
             metadata = {'version': data['version']}
         if kind == 'pypi':
@@ -218,6 +221,17 @@ def observe(source, body, checked_at):
             metadata = {'version': version, 'files': [x['filename'] for x in data.get('urls', [])],
                         'published_at': [x.get('upload_time_iso_8601') for x in data.get('urls', [])]}
         if kind == 'github_metadata':
+            required = {'created_at', 'pushed_at', 'fork', 'license', 'default_branch'}
+            if required - data.keys():
+                raise ValueError('Incomplete repository metadata')
+            if not isinstance(data.get('default_branch'), str) or not data['default_branch'].strip():
+                raise ValueError('Expected repository metadata with a default branch')
+            for key in ('parent', 'license'):
+                if data.get(key) is not None and not isinstance(data[key], dict):
+                    raise ValueError('Invalid repository metadata object')
+            for key in ('fork', 'archived'):
+                if data.get(key) is not None and type(data[key]) is not bool:
+                    raise ValueError('Invalid repository metadata boolean')
             metadata = {k: data.get(k) for k in ('created_at', 'pushed_at', 'fork', 'archived',
                                                 'default_branch', 'license', 'parent')}
             # Do not persist an entire nested parent repository object.
@@ -241,7 +255,7 @@ def observe(source, body, checked_at):
     return {'url': source['url'], 'kind': kind, 'tool': source['tool'], 'checked_at': checked_at,
             'sha256': hashlib.sha256(body.encode('utf-8')).hexdigest(), 'metadata': metadata,
             'signals': signals,
-            'repositories': repository_links(body) if source['role'] == 'discovery' else {}}
+            'repositories': repository_links(link_text) if source['role'] == 'discovery' else {}}
 
 
 def refresh(registry, previous, *, fetch=fetch_text, tool_ids=(), source_ids=None,

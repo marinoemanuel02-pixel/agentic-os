@@ -273,6 +273,36 @@ class CapabilityWatchTests(unittest.TestCase):
             module.refresh(self.fixture(), {'sources': {'cases': {}}}, fetch=lambda url: '[]',
                            checked_at=NOW)
 
+    def test_malformed_github_metadata_retains_the_last_good_observation(self):
+        module = self.module()
+        registry = self.fixture()
+        baseline, _ = self.run_refresh(registry)
+        for payload in ({}, {'default_branch': 'main'}, {'default_branch': 'main', 'parent': 'invalid'},
+                        {'default_branch': 'main', 'license': 'MIT'},
+                        {'default_branch': 'main', 'fork': 'false'}):
+            def fetch(url):
+                if url.endswith('/repos/storytold/pdfcraft'):
+                    return json.dumps(payload)
+                if url.endswith('/releases/latest'):
+                    return json.dumps({'tag_name': 'v0.10.1', 'published_at': NOW,
+                                       'assets': [{'name': 'pdfcraft-windows-x64.msi'}]})
+                return 'MCP over stdio. Windows. Headless.'
+            with self.subTest(payload=payload):
+                state, report = module.refresh(registry, baseline, fetch=fetch,
+                    tool_ids=['pdfcraft'], source_ids=[], checked_at=NOW)
+                self.assertEqual(state, baseline)
+                self.assertEqual(report['transitions'], [])
+                self.assertEqual(report['errors'][0]['source'], 'pdfcraft:github_metadata')
+
+    def test_escaped_json_urls_are_equivalent_to_plain_urls(self):
+        module = self.module()
+        body = r'[{"url":"https:\/\/github.com\/acme\/editor"}]'
+        state, report = module.refresh(self.fixture(), {'sources': {}}, fetch=lambda url: body,
+                                       checked_at=NOW)
+        self.assertFalse(report['errors'])
+        self.assertEqual(len(report['discoveries']), 1)
+        self.assertEqual(report['discoveries'][0]['repository'], 'https://github.com/acme/editor')
+
     def test_cli_preview_then_apply_changes_only_requested_registry(self):
         self.module()
         with tempfile.TemporaryDirectory() as folder:
