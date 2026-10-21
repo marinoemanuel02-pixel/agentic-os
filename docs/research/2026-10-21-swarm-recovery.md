@@ -25,6 +25,9 @@ Groq, Gemini, OpenRouter and Hugging Face. Ollama is opt-in; the paid OpenAI pro
 default. The source has a SQLite usage/cooldown ledger, persistent queue, failover, parallel standalone
 fanout/debate engines and local summarization support. The old dispatcher adapter's own fanout loops
 over profiles **sequentially**. Profile count does not establish concurrent worker count.
+The catalogue has two predefined credential slots per provider. `policy.json` only patches existing
+IDs; unknown IDs are ignored (`config.py:204-220`). More providers/accounts can be added in source,
+but arbitrary account onboarding is not yet a configuration-only registry.
 
 The backup's `swarm v2/secrets.env` contains fourteen nonempty, distinct credential strings, plus
 other disabled/provider/webhook entries. They are plaintext on the backup. No values, credential
@@ -151,7 +154,8 @@ single-writer contract. More account allowance and more simultaneous workers are
 1. Preserve the known source hashes and add the eight already failing probes to a maintained
    worker-core test suite. Repair hard exclusion, final admission, per-attempt accounting,
    atomic quota reservations, shared bucket identity, payload shape and free-price enforcement.
-2. Restore only that worker core into a home-folder installation. Replace plaintext loading with
+2. Restore only that worker core into a home-folder installation. Generalize the fixed catalogue
+   into validated provider/account records if more than its predefined slots are needed. Replace plaintext loading with
    Windows-encrypted secret references and redact all error paths. Leave backup copies untouched.
    The existing adapter is a reference; no need to revive Nexus or the earlier control plane.
 3. Start with the working current OpenRouter account and the independently tested recovered account.
