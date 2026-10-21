@@ -1,0 +1,549 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agentic OS candidate capabilities",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "research_inputs",
+    "sources",
+    "tools"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "research_inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "filename",
+          "sha256",
+          "notes"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "notes": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/candidate"
+      }
+    }
+  },
+  "$defs": {
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "repository",
+        "discovered_at",
+        "discovery_sources",
+        "repository_created_at",
+        "first_public_commit_at",
+        "latest_functional_commit_at",
+        "latest_release",
+        "upstream_or_parent",
+        "license",
+        "windows",
+        "interfaces",
+        "agent_properties",
+        "security",
+        "capability",
+        "status",
+        "recommended_tier",
+        "status_reason",
+        "pinned_version",
+        "last_evaluated",
+        "watch_paths",
+        "verification"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repository": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "discovered_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "discovery_sources": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "repository_created_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "first_public_commit_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "latest_functional_commit_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "latest_release": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "version",
+            "published_at"
+          ],
+          "properties": {
+            "version": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "published_at": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          }
+        },
+        "upstream_or_parent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "license": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "windows": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "build",
+            "execution"
+          ],
+          "properties": {
+            "build": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "execution": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        "interfaces": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "cli",
+            "mcp",
+            "stdio",
+            "json_rpc",
+            "headless",
+            "live_gui_attach"
+          ],
+          "properties": {
+            "cli": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "mcp": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "stdio": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "json_rpc": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "headless": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "live_gui_attach": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        "agent_properties": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "inspectable_state",
+            "render_feedback",
+            "filesystem_scoping",
+            "revision_guards",
+            "rollback",
+            "transactional_edits"
+          ],
+          "properties": {
+            "inspectable_state": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "render_feedback": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "filesystem_scoping": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "revision_guards": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "rollback": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "transactional_edits": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        "security": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "boundaries",
+            "concerns"
+          ],
+          "properties": {
+            "boundaries": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            },
+            "concerns": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            }
+          }
+        },
+        "capability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "category",
+            "replaces",
+            "incremental_value",
+            "existing_routes"
+          ],
+          "properties": {
+            "category": {
+              "type": "string",
+              "minLength": 1
+            },
+            "replaces": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            },
+            "incremental_value": {
+              "type": "string",
+              "minLength": 1
+            },
+            "existing_routes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            }
+          }
+        },
+        "status": {
+          "enum": [
+            "ignore",
+            "watch",
+            "sandbox",
+            "production"
+          ]
+        },
+        "recommended_tier": {
+          "enum": [
+            "first-evaluate",
+            "next-evaluate",
+            "conditional",
+            "watch",
+            "ignore"
+          ]
+        },
+        "status_reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pinned_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_evaluated": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "watch_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "verification": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "role",
+        "url",
+        "enabled",
+        "tool",
+        "notes"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "kind": {
+          "enum": [
+            "json",
+            "markdown",
+            "rss",
+            "npm",
+            "pypi"
+          ]
+        },
+        "role": {
+          "enum": [
+            "discovery",
+            "release"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "tool": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checked_at",
+        "version",
+        "checks",
+        "references",
+        "notes"
+      ],
+      "properties": {
+        "checked_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "license",
+            "windows_build",
+            "windows_execution",
+            "security",
+            "artifact"
+          ],
+          "properties": {
+            "source": {
+              "enum": [
+                "pass",
+                "fail",
+                "unknown"
+              ]
+            },
+            "license": {
+              "enum": [
+                "pass",
+                "fail",
+                "unknown"
+              ]
+            },
+            "windows_build": {
+              "enum": [
+                "pass",
+                "fail",
+                "unknown"
+              ]
+            },
+            "windows_execution": {
+              "enum": [
+                "pass",
+                "fail",
+                "unknown"
+              ]
+            },
+            "security": {
+              "enum": [
+                "pass",
+                "fail",
+                "unknown"
+              ]
+            },
+            "artifact": {
+              "enum": [
+                "pass",
+                "fail",
+                "unknown"
+              ]
+            }
+          }
+        },
+        "references": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

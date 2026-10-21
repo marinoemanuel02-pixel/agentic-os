@@ -3,6 +3,24 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-21 - Monitor capability transitions before adopting more applications
+
+- **Scope.** Reconcile both uploaded software audits and the harness-additions recommendations
+  into a candidate registry with a machine-readable schema. Keep candidate applications separate
+  from the fourteen adopted tools and the API worker pool. Reuse the on-demand stack launcher.
+- **Evidence.** Discovery feeds, repository metadata, documentation signals and evaluator-authored
+  local checks are distinct. Refresh reports capability-word and release changes; it never verifies
+  a feature, installs an application or promotes a status. Unknown dates, licenses and Windows
+  execution remain null. Production requires passing checks at an explicitly pinned version.
+- **Sources.** Read REA rankings, reverse-engineering indexes, REA lists, package metadata and
+  selected original repositories with bounded HTTPS requests. Glama's API is recorded but blocked
+  pending a separately authorized authentication adapter. Failed sources preserve prior evidence
+  and cause a nonzero result. No credentials, service, persistent MCP registration or PATH change.
+- **Selection.** Evaluate REA/Ghidra, PdfCraft, one of the Blender adapters and LogiSheets first.
+  Compare FilmCraft with installed Kdenlive/OpenMontage and desktop fallbacks with each other.
+  Leave remaining artifact engines demand-loaded and ANIS experimental. See the
+  [workflow and tier guide](capability-watch.md).
+
 ## 2026-10-21 - Restore the free API worker core and extend capability routing
 
 - **Scope.** The operator authorized both recovery passes and confirmed Gemini, Mistral and

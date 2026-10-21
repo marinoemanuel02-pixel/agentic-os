@@ -100,6 +100,11 @@ share the same admission controls. Additional account records use encrypted secr
 the [implementation report](docs/research/2026-10-21-swarm-integration.md) distinguishes live
 passes from conditional providers. OmniRoute's text CLI also uses that ledger after activation.
 
+The [capability registry](docs/capability-watch.md) tracks candidate applications separately from
+adopted tools. Use `python tools/stack.py capabilities validate` and `capabilities refresh` to
+preview discoveries, or `capabilities refresh --tool pdfcraft --apply` to retain upstream signals.
+Refresh never installs a tool or promotes a candidate; local evidence and status changes are explicit.
+
 Tools, clones and keys live under your home folder, not AppData: both desktop apps are MSIX
 packages, and a folder they (or the agents in them) create under AppData can stay private to that app.
 

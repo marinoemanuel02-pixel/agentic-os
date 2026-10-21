@@ -59,6 +59,12 @@ Claude's optional native `aos-status` mod lives in `plugins/aos-status`. Its `/a
 shows bounded local coordination records and measured context without model calls or writes.
 Persistent installation requires the project's independent review; see that directory's README.
 
+Candidate capabilities use `python tools/stack.py capabilities`: `validate`, `list`, `refresh`,
+`record` and `status`. Default refresh previews public discovery feeds; `--tool <id>` reads that
+original repository, and `--apply` retains observations under `~/.aos/capability-watch`. Treat word
+matches as unverified leads. Evidence import and status changes are explicit; nothing installs or
+starts a candidate. See `docs/capability-watch.md` for tiers and comparisons with existing routes.
+
 Optional stack additions use `python tools/stack.py <tool> ...` from this repo; `list` shows routes.
 AnyDoc converts local documents (hosted OCR refused); Repomix exports selected files; RTK OSS
 filters explicit commands while preserving their failures. Graphify uses code-only extraction with

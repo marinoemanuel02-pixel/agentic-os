@@ -1,5 +1,9 @@
 {
   "tools": {
+    "capabilities": {
+      "purpose": "Candidate registry and capability-transition discovery; no installs or persistent servers",
+      "command": ["{python}", "{repo}/tools/capability_watch.py"]
+    },
     "swarm": {
       "purpose": "Managed free API pool for direct or dependent candidate tasks, capabilities, host checks and cancellation",
       "command": ["{python}", "{repo}/tools/swarm_pool.py"]

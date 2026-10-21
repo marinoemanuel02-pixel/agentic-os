@@ -218,6 +218,61 @@ class CapabilityWatchTests(unittest.TestCase):
             module.write_json(path, {'after': True})
             self.assertEqual(json.loads(path.read_text()), {'after': True})
 
+    def test_schema_version_cannot_be_a_boolean(self):
+        module = self.module()
+        registry = self.fixture()
+        registry['schema_version'] = True
+        with self.assertRaises(ValueError): module.validate_registry(registry)
+
+    def test_evaluation_order_compares_instants_across_timezones(self):
+        module = self.module()
+        tool = self.fixture()['tools'][0]
+        module.record_evidence(tool, self.evidence())
+        older = self.evidence()
+        older['checked_at'] = '2026-10-21T21:00:00+02:00'
+        with self.assertRaises(ValueError): module.record_evidence(tool, older)
+
+    def test_rss_and_pypi_are_parsed_without_running_their_content(self):
+        module = self.module()
+        registry = self.fixture()
+        source = registry['sources'][0]
+        source['kind'] = 'rss'
+        state, report = module.refresh(registry, {'sources': {}}, fetch=lambda url:
+            '<rss><channel><item><link>https://github.com/acme/editor</link></item></channel></rss>',
+            checked_at=NOW)
+        self.assertFalse(report['errors'])
+        self.assertEqual(len(report['discoveries']), 1)
+        source.update(kind='pypi', role='release', tool='pdfcraft')
+        state, report = module.refresh(registry, {'sources': {}}, fetch=lambda url: json.dumps(
+            {'info': {'version': '2.0'}, 'urls': [{'filename': 'example.whl',
+              'upload_time_iso_8601': NOW}]}), checked_at=NOW)
+        self.assertEqual(state['sources']['cases']['metadata']['version'], '2.0')
+
+    def test_limits_filtering_and_missing_sources_are_explicit(self):
+        module = self.module()
+        registry = self.fixture()
+        body = json.dumps([{'url': 'https://github.com/acme/editor'},
+                           {'url': 'https://github.com/acme/second'}])
+        state, report = module.refresh(registry, {'sources': {}}, fetch=lambda url: body,
+                                       checked_at=NOW, limit=1)
+        self.assertEqual(len(report['discoveries']), 1)
+        self.assertEqual(report['discovery_count'], 2)
+        _, report = module.refresh(registry, state, fetch=lambda url: body, checked_at=NOW)
+        self.assertEqual(len(report['discoveries']), 1)
+        with self.assertRaises(ValueError):
+            module.refresh(registry, {'sources': {}}, limit=0)
+        with self.assertRaises(ValueError):
+            module.refresh(registry, {'sources': {}}, source_ids=['missing'])
+        module.MAX_BYTES = 8
+        _, report = module.refresh(registry, {'sources': {}}, fetch=lambda url: body, checked_at=NOW)
+        self.assertTrue(report['errors'])
+
+    def test_malformed_saved_source_is_rejected_before_refresh(self):
+        module = self.module()
+        with self.assertRaises(ValueError):
+            module.refresh(self.fixture(), {'sources': {'cases': {}}}, fetch=lambda url: '[]',
+                           checked_at=NOW)
+
     def test_cli_preview_then_apply_changes_only_requested_registry(self):
         self.module()
         with tempfile.TemporaryDirectory() as folder:
