@@ -194,7 +194,8 @@ def launch_plan(receipt, entry, arguments, dependencies=None):
     env = environment(runtime)
     values = {'home': str(Path.home()), 'runtime': str(runtime), 'repo': str(REPO)}
     values.update(dependencies or {})
-    blender = sorted((Path(os.environ.get('ProgramFiles', 'C:/Program Files')) / 'Blender Foundation').glob('Blender */blender.exe'))
+    program_files = os.environ.get('ProgramFiles')
+    blender = sorted((Path(program_files) / 'Blender Foundation').glob('Blender */blender.exe')) if program_files else []
     if blender:
         values['blender'] = str(blender[-1])
     env.update({k: v.format_map(values) for k, v in entry.get('env', {}).items()})
