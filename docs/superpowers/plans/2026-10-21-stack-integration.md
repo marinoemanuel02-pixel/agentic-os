@@ -27,41 +27,47 @@ implementation, delegated routine choices and waived external review; no additio
 Files: `config/stack-tools.json`, a small `tools/stack_verify.py`, scoped Python regression tests,
 and `docs/stack-additions.md`. Read-only native inventory supplies paths/decisions; lead integrates.
 
-- [ ] Compare the approved receipt, current routes, shared skills and retained source pins.
-- [ ] Define a repeatable verification runner: explicit selected tools, fresh exclusive output folder,
+- [x] Compare the approved receipt, current routes, shared skills and retained source pins.
+- [x] Define a repeatable verification runner: explicit selected tools, fresh exclusive output folder,
   bounded owned processes, redacted receipts and separate local/live/operator-needed outcomes.
-- [ ] Write failing controls for selection, output preservation, timeout/failure reporting and
+- [x] Write failing controls for selection, output preservation, timeout/failure reporting and
   refusal to silently turn a skipped/unavailable check into a pass; implement the narrow runner.
-- [ ] Execute real fixture checks for all fourteen products, reusing original expected facts where
+- [x] Execute real fixture checks for all fourteen products, reusing original expected facts where
   useful; inspect selected visual/audio artifacts before claims. Fix observed integration defects.
-- [ ] Preserve sources/failed attempts and commit the independently useful result.
+- [x] Preserve sources/failed attempts and commit the independently useful result.
 
 ## Task 2: One-command OmniRoute worker operation
 
 Files: `tools/omniroute_worker.py`, a focused `tools/omniroute_run.py` if lifecycle needs separation,
 `config/stack-tools.json`, scoped Python regression tests and the shared tool guide.
 
-- [ ] Inspect the installed gateway schema, scoped saved key, active provider and current official
+- [x] Inspect the installed gateway schema, scoped saved key, active provider and current official
   free-route pricing/limits. Do not print secrets or persist model names in the repository.
-- [ ] Write failing tests for encrypted-key loading, only allowed verified-free routes, no paid
+- [x] Write failing tests for encrypted-key loading, only allowed verified-free routes, no paid
   fallback, response completeness, exclusive candidate output and owned-service lifecycle.
-- [ ] Provide a single callable route that loads credentials internally, validates one explicit
+- [x] Provide a single callable route that loads credentials internally, validates one explicit
   allowed route and makes one bounded request. Reuse an already healthy loopback server, or start
   and stop an owned foreground instance without touching unrelated processes.
-- [ ] Verify a real task with checkable facts, anonymous/disallowed rejection, no plaintext key in
+- [x] Verify a real task with checkable facts, anonymous/disallowed rejection, no plaintext key in
   args/logs, stopped owned server, and a second clean run. Keep the result a lead-verified text
   candidate; do not claim it is a native filesystem writer or independent reviewer.
-- [ ] Commit the operational route and usage instructions.
+- [x] Commit the operational route and usage instructions.
 
 ## Task 3: Integrate, verify and close
 
-- [ ] Refresh source-of-truth discovery docs, current status and machine receipt. Recheck installed
+- [x] Refresh source-of-truth discovery docs, current status and machine receipt. Recheck installed
   links/launchers rather than add a second installation per vendor.
-- [ ] Run relevant Python controls, bootstrap dry-run if applying configuration, and full `aos test`
+- [x] Run relevant Python controls, bootstrap dry-run if applying configuration, and full `aos test`
   under PowerShell 5.1 and 7. Preserve non-green results and resolve actual regressions.
-- [ ] Record exact scope, dates, operator prerequisites and remaining unverified features; no
+- [x] Record exact scope, dates, operator prerequisites and remaining unverified features; no
   absolute perfection claim. Commit, preserve handoff state and release observed actors/claims.
 
 Review focus: moved/missing installs; stale successful receipts; credential/redirect leaks; cold
 startup and occupied ports; free-route metadata changes; partial outputs; runtime writes outside
 the intended folder; third-provider actor identity and candidate acceptance remain distinct.
+
+Completion evidence: `docs/research/2026-10-21-stack-integration.md` and its JSON receipt.
+The primary final run passed fourteen scopes; `aos test` passed 531 tests per shell with no failures
+or skips. No configuration apply occurred, so bootstrap preview was conditional and not repeated.
+Source-supported speech cold-start repair and worker hash-only policy hardening were added after
+actual failures. Logs retain the initial blockers and two corrected harness assumptions.

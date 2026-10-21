@@ -1,0 +1,236 @@
+{
+  "date": "2026-10-21",
+  "timezone": "Europe/Rome",
+  "scope": "Fourteen approved products; later trials remain unadopted; operator waived external review",
+  "installation_provenance": "docs/research/2026-10-20-stack-installation.json",
+  "evidence_root": "~/.aos/research/stack-integration-20261021",
+  "workflow_receipt": "verify-final-01/receipt.json",
+  "workflow_started_at_utc": "2026-10-20T22:42:43.807470+00:00",
+  "all_fourteen_passed": true,
+  "results": [
+    {
+      "tool": "watch",
+      "status": "passed",
+      "scope": "Real local frames and embedded text captions; paths checked, visual content not human-inspected",
+      "frames": 4,
+      "seconds": 1.48
+    },
+    {
+      "tool": "anydoc",
+      "status": "passed",
+      "scope": "Generated local DOCX text conversion; complex layout and scanned OCR not established",
+      "seconds": 0.21
+    },
+    {
+      "tool": "frontend-design",
+      "status": "passed",
+      "scope": "Shared source/link/content integration only; no aesthetic effectiveness claim",
+      "source_sha256": "b8009ae690dfa69edc7f08bb8715f32db8817112cfa4388741dbaf876c237df8",
+      "seconds": 0.003
+    },
+    {
+      "tool": "ui-ux",
+      "status": "passed",
+      "scope": "Offline UX reference lookup returns relevant keyboard guidance; product design quality not measured",
+      "seconds": 0.28
+    },
+    {
+      "tool": "repomix",
+      "status": "passed",
+      "scope": "Selected multilingual export preserves source markers and excludes synthetic .env canary",
+      "seconds": 1.183
+    },
+    {
+      "tool": "rtk",
+      "status": "passed",
+      "scope": "Invalid Git command preserves diagnostic and original exit 129",
+      "seconds": 0.249
+    },
+    {
+      "tool": "graphify",
+      "status": "passed",
+      "scope": "Code-only Python symbols/cross-file caller; zero reported model tokens; TS call accuracy not established",
+      "seconds": 1.459
+    },
+    {
+      "tool": "serena",
+      "status": "passed",
+      "scope": "Six-tool allowlist and real Python/TypeScript/PowerShell symbol bodies with cached dependencies",
+      "seconds": 6.453
+    },
+    {
+      "tool": "kdenlive",
+      "status": "passed",
+      "scope": "New harness project/import/timeline/XML/native checked-subset export and decode; editor UI/effects unverified",
+      "seconds": 2.789
+    },
+    {
+      "tool": "openmontage",
+      "status": "passed",
+      "scope": "Local audio/video trim with checked duration; stock-provider calls/cloud generation not exercised",
+      "seconds": 0.402
+    },
+    {
+      "tool": "open-design",
+      "status": "passed",
+      "scope": "Registered HTML exported with expected content; browser interaction not exercised by this check",
+      "artifact": "design\\exports\\index.html",
+      "seconds": 0.473
+    },
+    {
+      "tool": "voicestudio",
+      "status": "passed",
+      "scope": "Existing cached local engine generated decoded non-silent Italian/English clips; listening quality not judged",
+      "clips": [
+        {
+          "language": "it",
+          "duration": 5.433469387755102
+        },
+        {
+          "language": "en",
+          "duration": 4.1099319727891155
+        }
+      ],
+      "seconds": 7.532
+    },
+    {
+      "tool": "composio",
+      "status": "passed",
+      "scope": "Authenticated consumer MCP tool discovery only; no account writes or messages",
+      "tool_count": 11,
+      "seconds": 2.264
+    },
+    {
+      "tool": "omniroute",
+      "status": "passed",
+      "scope": "One actual free text worker extracts supplied facts and total; candidate remains unaccepted",
+      "requests": 1,
+      "seconds": 12.549
+    }
+  ],
+  "code_sha256": {
+    "tools/stack.py": "6a44fb53d0a5313b0cdcc566f05bc3fdc3b56c1f53798d4ecabc1dce9293a198",
+    "tools/stack_verify.py": "9692ee6e41c376ab9dc2e8853f350a94194c23c9795e3e2dfd5fab37a8c97e0f",
+    "tools/voicestudio_run.py": "673ad691132fee4ede240a76e3a1cee6d74413a8af3043fe58cf2783d4f2098c",
+    "tools/omniroute_env.py": "07f50eaad9718902313c23067c48d54d85fccb00c9c45b8c5afa61cefb448ce6",
+    "tools/omniroute_worker.py": "a87121ee05c42a85eb738eadf3912a45d85c25450cd4affcdacae6ca15c49c51",
+    "tools/omniroute_run.py": "8c5fe98237df508f67e5cfce0ec4600de0ffebd86c058646aad98c9b75af5e6e",
+    "tools/omniroute_policy.py": "4f35de1d0ecf9d7dd3ea4a31a81425f869b355a38833e1364665354eced7a38e",
+    "config/stack-tools.json": "8de8e173ba119c0238bb2c86a99c9a131a2250453fdad6b4583f7f8630276138",
+    "tests/test_stack_launcher.py": "89e1c67fb5c8122d9224e1ac6e6691ee6e4ddf5933d7a8e15cf1456aaecbe8a3",
+    "tests/test_stack_repairs.py": "472069a4c7fe7ffaa2b6eb836bb9a07015a2279a7c5f7c3f52df099eb1f8fb9c",
+    "tests/test_stack_verify.py": "e628bdca9e3c13b7d0aef0b24dcfd93e24426c9e410b59b08a4629efe180e1c4",
+    "tests/test_omniroute_integration.py": "456d362d1639fdafdd567b50115aea4b2c76715d64c3fb49d6e917d86e3bebcf",
+    "tests/test_voicestudio_launcher.py": "d373676c5b3fc26392e181f2685c4895af1b45a3b7d85644025c991ab31e3bda",
+    "tests/aos.Tests.ps1": "060106a428e6a4ba00736d53f6538641afa46201349fe537278bd18068684d36"
+  },
+  "regression": {
+    "command": "aos test",
+    "exited": 0,
+    "static_checks": "passed",
+    "shells": [
+      {
+        "shell": "Windows PowerShell 5.1",
+        "passed": 531,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "shell": "PowerShell 7",
+        "passed": 531,
+        "failed": 0,
+        "skipped": 0
+      }
+    ],
+    "shell_success_log": "aos-test-final.txt",
+    "detailed_count_evidence": "Codex exec session 81411: Pester discovery and completed suite output",
+    "optional_python_controls": {
+      "launcher": 16,
+      "repairs": 10,
+      "verifier": 7,
+      "worker_policy_lifecycle": 12,
+      "voice_launcher": 3
+    }
+  },
+  "router": {
+    "installed_version": "3.8.51",
+    "surface": "one unaccepted text-only candidate",
+    "hash_only_worker_auth": true,
+    "legacy_key_field_empty": true,
+    "encrypted_key_store": true,
+    "recovery": "DPAPI-encrypted database snapshot; in-memory recovery check passed",
+    "route": "explicit saved allowed free route; resolved at runtime; no repository model pin",
+    "live_zero_price_verification": true,
+    "provider_allow_fallbacks": false,
+    "provider_max_prices": {
+      "prompt": 0,
+      "completion": 0,
+      "request": 0
+    },
+    "no_log": true,
+    "automatic_combos": false,
+    "auto_resolve": false,
+    "anonymous_http": 401,
+    "old_key_http": 401,
+    "current_key_http": 200,
+    "forbidden_inference_http": 403,
+    "real_fact_extraction_passed": true,
+    "accepted": false,
+    "owned_shutdown_passed": true,
+    "native_third_provider_writer": false
+  },
+  "voice": {
+    "app_version": "0.5.6",
+    "engine": "Supertonic-3",
+    "device": "CPU",
+    "cold_app_owned_backend": true,
+    "supported_backend_command_override": true,
+    "cached_imports_passed": true,
+    "offline_cache_mode": true,
+    "full_network_isolation_tested": false,
+    "app_websocket_connected": true,
+    "generated_languages": [
+      "it",
+      "en"
+    ],
+    "new_model_downloads": false,
+    "fake_install_markers": false,
+    "owned_shutdown_passed": true,
+    "native_visual_interaction_retested": false,
+    "subjective_audio_quality_tested": false
+  },
+  "extra_content_checks": {
+    "watch_frame_visually_inspected": true,
+    "kdenlive_prior_fixture_ssim": 0.988638,
+    "open_design_reopen": [
+      {
+        "width": 1280,
+        "passed": true
+      },
+      {
+        "width": 390,
+        "passed": true
+      }
+    ]
+  },
+  "prior_failures_preserved": [
+    "initial missing helpers/services",
+    "legacy digest auth alias regression",
+    "empty packaged stdout readiness-marker mismatch",
+    "lead health URL typo",
+    "in-memory SQLite WAL header deserialize probe"
+  ],
+  "operator_action_required": false,
+  "pexels": "optional; no key configured",
+  "global_mcp_or_path_changes": false,
+  "external_review": false,
+  "unrelated_media_handoff_unchanged": true,
+  "limits": [
+    "No aesthetic quality claim",
+    "No cloning/dubbing verification",
+    "No arbitrary editor effects verification",
+    "No general connected-app write verification",
+    "Provider quotas and changing route availability still apply",
+    "No claim that all upstream features or security properties were tested"
+  ]
+}

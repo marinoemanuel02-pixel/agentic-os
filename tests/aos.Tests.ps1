@@ -5228,6 +5228,10 @@ Describe 'selected stack additions' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_omniroute_integration.py' -v
         $LASTEXITCODE | Should -Be 0
     }
+    It 'runs the cached speech launcher controls without installed runtimes' {
+        & python -m unittest discover -s $PSScriptRoot -p 'test_voicestudio_launcher.py' -v
+        $LASTEXITCODE | Should -Be 0
+    }
 }
 
 }

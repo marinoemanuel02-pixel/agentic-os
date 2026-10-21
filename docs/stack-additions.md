@@ -1,6 +1,6 @@
 # Optional stack additions
 
-Installed and checked on 19-20 October 2026 following the
+Installed on 19-20 October and integrated again on 21 October 2026 following the
 [candidate audit](research/2026-10-19-candidate-audit.md). The approved scope is the
 recommended and conditional shortlist plus OmniRoute, not every audit entry.
 Use the narrow routes below on demand. Packages, source clones and environments live
@@ -20,10 +20,10 @@ under the home folder outside OneDrive; the repository contains shared procedure
 | Serena | Isolated on-demand CLI; six-tool navigation context | Fresh-server Python/TypeScript/PowerShell lookups passed with explicit languages and cached dependencies. Allow startup time beyond the earlier short client deadline. Six navigation tools only; dashboard/log GUI disabled. |
 | OpenMontage | Isolated Python environment and source | Local audio/video trim, Backlot health, a saved-key Pixabay search with source/creator metadata and a short stock export passed. CLIP models, broad provenance quality and cloud generation remain untested. |
 | OpenDesign Agent Kit | CLI 0.2.0 | Two responsive fixtures exported to standalone HTML and reopened with working filters. Real product design quality remains unmeasured. No global MCP/initializer installed. |
-| VoiceStudio | Native Windows app 0.5.6 under the home folder | Supertonic-3 preset voice selected on CPU; analytics off. Runtime imports and localhost health passed. Actual Italian (8.43 s) and English (7.73 s) WAVs decoded and were non-silent. Main studio opened after custom setup. Dubbing/cloning and subjective voice quality are untested. |
+| VoiceStudio | Native Windows app 0.5.6 with cached-backend launcher | Supertonic-3 preset voice selected on CPU; analytics off. Cold app-owned backend, health, app WebSocket connection and decoded non-silent Italian/English speech passed. Dubbing/cloning and subjective voice quality are untested. |
 | CLI-Anything | Kdenlive harness 1.0.0 plus checked native render helper | Project creation/import/track/clip/XML passed. Isolated plugin rendering now exports the original project; decoding and video similarity passed. Unsupported active services are refused. Full plugin startup and opening the editor remain unverified. |
 | Composio | On-demand consumer Connect MCP client; SDK environment retained | Saved consumer key authenticates with the correct header/endpoint. Tool listing/discovery and a connected GitHub read passed. Other apps/actions require their own scoped verification. |
-| OmniRoute | Isolated CLI/server 3.8.51 plus text worker | Saved OpenRouter account connected; restricted free-route worker returned a candidate. Anonymous access rejected with 401 and disallowed model with 403. Server stopped after tests; no managed third-provider writer. |
+| OmniRoute | Isolated CLI/server 3.8.51 plus one-command text task | Saved OpenRouter connection, live zero-price checks, explicit restricted route and actual fact extraction passed. Anonymous/old credential rejected with 401, disallowed inference with 403. Owned server stopped after tasks; no managed third-provider writer. |
 
 Exact source revisions, installed versions and release hashes are in the
 [installation receipt](research/2026-10-20-stack-installation.json). Original logs and fixtures
@@ -45,6 +45,8 @@ Those figures describe the earlier installation. The later [repair report](resea
 records the corrected routes and adds ten offline regression controls.
 After the repairs, `aos test` passed **528 tests per shell**, with zero failures or skips.
 The ten repair controls and sixteen existing launcher controls passed separately as well.
+The [21 October integration report](research/2026-10-21-stack-integration.md) records the latest
+fourteen-product run, cold speech startup, worker-policy hardening and final regression results.
 
 ## Use the tools
 
@@ -59,6 +61,21 @@ python tools/stack.py watch recording.mp4 --start 10 --end 20 --detail efficient
 python tools/stack.py ui-ux "accessible dashboard" --domain ux -n 3
 python tools/stack.py graphify update path/to/project --no-cluster
 ```
+
+Repeat actual workflow checks into a **new** home-folder evidence directory:
+
+```powershell
+python tools/stack.py voicestudio
+# Keep the app open; in another terminal from this repo:
+python tools/stack.py verify --output "$HOME/.aos/research/stack-check-new" --live
+```
+
+The runner creates its own disposable documents, code and media. `--live` permits consumer Composio
+tool discovery and one fact-checkable free-route OmniRoute inference. It makes no connector writes.
+Omit `--live` for local checks; those two checks are then explicitly skipped and the overall result
+is non-green. Repeat `--tool <name>` to select checks; use `--help` for the accepted names.
+A missing speech backend is blocked, not passed. Existing output directories are refused. Receipts
+record command results, scope and current launcher/manifest hashes; this is not a full install attestation.
 
 The launcher passes literal arguments, child-only environment variables and the child's exit code.
 It does not set user PATH, register MCP servers, install hooks, start a permanent daemon, or
@@ -167,10 +184,17 @@ the intro-completion preference was saved and the main studio visually inspected
 flags or permissions were changed. The unused default pack remains uninstalled; a personal cloning
 or dictation workflow still requires its own engine/reference/model selection. The interactive app
 was left open for the operator; its temporary verification-controller timer was stopped.
-The Desktop `VoiceStudio` shortcut now uses the shared launcher, preserving the configured profile
-and child environment when reopened. Its target/arguments were read back; a cold shortcut launch
-was not repeated. The [activation receipt](research/2026-10-20-voice-activation.json) records actual
-checks and retained failed attempts.
+The [activation receipt](research/2026-10-20-voice-activation.json) preserves that earlier evidence.
+
+The 21 October cold check found that the packaged supervisor did not recognize the cached runtime.
+`tools/voicestudio_run.py` now checks that interpreter's real imports and uses the app's supported
+`OMNIVOICE_BACKEND_CMD` override, with an absolute backend directory. Electron owns the backend;
+no install/model flags or preferences are fabricated. The existing Desktop shortcut already routes
+through `stack.py voicestudio`, so it receives this fix. A fresh app-owned process tree reached health
+200, connected its WebSocket and generated bilingual non-silent audio; stopping that tree closed
+port 3900. Native visual interaction was not repeated in this check. Packaged stdout lacked a literal
+readiness marker; the retained harness mismatch is separate from the passing behavioral checks.
+Use `python tools/stack.py voicestudio --check` for an import-only check without opening the app.
 
 ## OmniRoute as additional capacity
 
@@ -179,10 +203,10 @@ is now connected to OmniRoute and the actual text-worker route passed. Routing t
 same exhausted account through a gateway does not increase its allowance. Choose one explicit route,
 verify its authentication terms and hard free allowance, and disable paid/unknown fallbacks.
 
-`tools/omniroute_worker.py` prepares the narrow integration: one explicit route, one text packet
+`tools/omniroute_run.py` provides the narrow integration around `omniroute_worker.py`: one explicit route, one text packet
 (at most 32 KiB), one non-streaming request, bounded response, no filesystem tools, no redirects,
 no automatic retries and no accepted result by default. It uses an explicit loopback endpoint and
-a scoped router key injected into that process from `aos secret`. The result records hashes,
+a scoped router key loaded internally from `aos secret`. The result records hashes,
 reported usage/model and completeness; it is a candidate for the lead to verify, not a native AOS
 delegate receipt or an independent other-vendor review. A partial answer remains incomplete.
 Before activation, assign the route to its actual provider and apply the existing actor/capacity
@@ -190,19 +214,31 @@ rules. A gateway must not bypass a known vendor limit or the two-active-actors-p
 The current managed AOS actor schema does not admit an arbitrary third provider; that integration
 remains a separate checked change. This helper provides a text candidate, not a managed code writer.
 
-The restricted worker key is stored as `omniroute-worker-key`. Start the foreground server with
-`python tools/stack.py omniroute serve`; no additional account action is needed for the tested
-connection. Resolve its allowed route from the local dashboard/live catalog before use. Inject the
-key only into the worker process environment and clear it afterward. Its invocation is:
+The restricted worker key is stored as `omniroute-worker-key`. No additional account action is
+needed for the tested connection. The task command checks its local restricted policy and current
+OpenRouter pricing, starts a foreground gateway if needed, makes one request, and stops only the
+gateway it started. An existing authenticated server is reused and left running. Invocation:
 
 ```powershell
-$env:OMNIROUTE_WORKER_KEY = aos secret get omniroute-worker-key
-try {
-    python tools/stack.py omniroute-worker --endpoint http://127.0.0.1:20128/v1 --model <allowed-free-route-from-live-catalog> --packet task.txt --output candidate.json
-} finally {
-    Remove-Item Env:OMNIROUTE_WORKER_KEY -ErrorAction SilentlyContinue
-}
+python tools/stack.py omniroute-task --check
+python tools/stack.py omniroute-task --packet task.txt --output candidate.json
+python tools/stack.py omniroute-policy check
 ```
+
+The saved policy currently has one explicit free route; its changing model name is not pinned in
+this repo. Multiple allowed routes require an explicit `--model`. Unknown/nonzero pricing, wildcard
+or combo routing, automatic resolution, enabled prompt logging and a plaintext legacy key are
+refused. Requests send `allow_fallbacks=false` and zero maximum prompt/completion/request prices.
+One worker lock prevents concurrent tasks through this helper. Existing candidate files are refused.
+
+The initial gateway database duplicated the worker credential as plaintext. It was rotated into
+hash-only authentication: the legacy `key` field is empty and `key_hash` holds SHA-256; the actual
+random credential stays in the Windows-encrypted store. A digest string in the legacy field would
+still be an alternate accepted credential, so that arrangement is also refused. Automatic combos,
+auto-resolution and prompt logging are disabled for this key. `omniroute-policy harden` is an
+idempotent offline repair; it refuses a running gateway and saves an encrypted database snapshot
+under `~/.aos-backups/omniroute` before changing anything. Recovery is for this Windows account;
+never write a decrypted recovery database or paste credentials into a report.
 
 Do not pass keys as command arguments, put them in `.env`, export native subscription credentials,
 or use OmniRoute's credential-export command. Store generated router encryption/signing keys with
@@ -221,7 +257,9 @@ no daemon/tray, no-recovery mode, cleared proxy variables and a longer cold-star
 Initial health probes timed out. The later account trial established provider authentication,
 actual free-route responses, rejection of anonymous access and rejection of a disallowed model.
 Cold startup timeouts remain recorded. No automatic daemon startup or managed third-provider
-writer integration was added; the server is stopped after tests.
+writer integration was added. On-demand owned startup/shutdown is now integrated and the server
+is stopped after tests. Provider quotas still apply; additional free capacity comes from the
+connected provider, not from bypassing an exhausted subscription.
 
 ## Activation and maintenance
 

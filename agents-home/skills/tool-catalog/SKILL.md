@@ -71,15 +71,23 @@ OpenMontage local board, OpenDesign Agent Kit exports, VoiceStudio app and Compo
 The checked renderer uses isolated plugins and refuses unsupported active services. Watch adds local
 embedded text captions while retaining the pinned frame extractor. Paid/cloud examples
 in upstream documentation are not permission to use them. VoiceStudio's local Supertonic preset
-speech passed bilingual generation and cold reopen. Composio's consumer key now passes Connect
+speech passed cold app-owned backend startup, bilingual generation and shutdown through the shared
+launcher; `voicestudio --check` only checks cached imports. Composio's consumer key now passes Connect
 authentication, discovery and a connected GitHub read. Use `composio tools` or an explicitly
 authorized `composio call <tool> --input <json>`; the key comes from `aos secret` in memory.
 Do not use the consumer key as developer SDK auth. OmniRoute's saved OpenRouter connection
-and restricted free text worker passed; its foreground launcher injects encrypted-store keys and binds
-loopback. Native clients remain normal routes; this is an unaccepted text candidate, not a managed
+and restricted free text worker passed. Use `omniroute-task --packet <file> --output <new-json>`:
+it loads the encrypted key internally, validates the hash-only restricted policy and live zero-price
+catalog, disables fallbacks, and starts/stops only its owned loopback gateway. `omniroute-task --check`
+checks readiness without inference; `omniroute-policy check` checks the saved worker policy.
+Native clients remain normal routes; this is an unaccepted text candidate, not a managed
 third-provider writer. The operator waived external review. See the dated trial report in
 `docs/research/2026-10-20-stack-trial-results.md` for failures and screened-only candidates.
 The later `docs/research/2026-10-20-stack-repairs.md` records repaired routes and remaining limits.
+Use `verify --output <new-home-folder> --live` for repeatable checks of all fourteen approved
+products; keep VoiceStudio open for speech. Live mode permits Composio discovery and one free
+OmniRoute request. Skips, blockers and failures remain explicit. See
+`docs/research/2026-10-21-stack-integration.md` for current integration evidence.
 
 ## Other agents
 

@@ -3,6 +3,23 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-21 - Make the approved stack repeatable and the free worker operational
+
+- **Scope.** Integrate the original fourteen approved products. Retain later positive trials as
+  trials; helpers do not expand adoption. A new verification command creates fresh fixtures and
+  reports passed, failed, blocked and skipped checks without promoting version/help calls to workflows.
+- **Capacity.** Add one-command OmniRoute tasks with encrypted-key loading, explicit restricted
+  free-route admission, live zero-price checks, no provider fallback and owned foreground lifecycle.
+  Rotate the database's plaintext worker credential into hash-only authentication; clear its legacy
+  key field, disable automatic routing/logging and retain encrypted recovery snapshots. Candidates
+  still require lead verification and are not managed third-provider filesystem writers.
+- **Speech.** Cold startup exposed stale packaged runtime recognition. Use the supported backend
+  command override with the existing checked interpreter; Electron owns startup/shutdown. Preserve
+  the selected local engine and real installation state. No default model pack or new account is needed.
+- **Evidence.** The [integration report](research/2026-10-21-stack-integration.md) preserves scopes,
+  initial failures, corrections and final checks. No external review was run under the operator's
+  explicit exception. No global MCP, PATH, native credential export or automatic hook was added.
+
 ## 2026-10-20 - Repair the optional routes at their actual integration boundaries
 
 - **Composio.** The operator's screenshot established a consumer Connect key, not a developer

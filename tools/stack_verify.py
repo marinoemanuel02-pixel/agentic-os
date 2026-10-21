@@ -352,7 +352,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True, help='New exclusive evidence directory')
     parser.add_argument('--tool', action='append', default=[], choices=APPROVED)
-    parser.add_argument('--live', action='store_true', help='Allow authenticated Composio discovery, no write actions')
+    parser.add_argument('--live', action='store_true', help='Allow Composio discovery and one verified-free OmniRoute text request')
     args = parser.parse_args()
     try:
         selected = select_tools(args.tool)

@@ -86,8 +86,11 @@ native mod system. It is installed and enabled under the operator's explicit rev
 
 The approved optional [stack additions](docs/stack-additions.md) add local video frames, document
 conversion, selected repository exports, design references and on-demand code navigation. The guide
-also records the conditional media/connector installs and OmniRoute's prepared additional-worker
-route, including the account, activation and runtime checks that remain.
+also records the media/connector installs and OmniRoute's operational free text-worker route.
+Use `python tools/stack.py omniroute-task --packet task.txt --output candidate.json` for one
+checked request, or `python tools/stack.py verify --output <new-evidence-folder> --live` to repeat
+the fourteen-product workflow checks. Open VoiceStudio first for its speech check; see the guide
+for exact scopes and remaining limits.
 
 Tools, clones and keys live under your home folder, not AppData: both desktop apps are MSIX
 packages, and a folder they (or the agents in them) create under AppData can stay private to that app.

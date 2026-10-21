@@ -59,7 +59,7 @@
     },
     "voicestudio": {
       "purpose": "Local speech app with home-folder profile, runtime and model storage",
-      "command": ["{home}/.aos/tools/stack/voicestudio/app/VoiceStudio.exe", "--user-data-dir={home}/.aos/tools/stack/voicestudio/profile"],
+      "command": ["{python}", "{repo}/tools/voicestudio_run.py"],
       "env": {
         "OMNIVOICE_DATA_DIR": "{home}/.aos/tools/stack/voicestudio/data",
         "OMNIVOICE_CACHE_DIR": "{home}/.aos/tools/stack/voicestudio/models",
