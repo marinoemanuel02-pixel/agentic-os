@@ -5220,6 +5220,10 @@ Describe 'selected stack additions' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_capability_watch.py' -v
         $LASTEXITCODE | Should -Be 0
     }
+    It 'runs pinned capability setup controls without real downloads or installs' {
+        & python -m unittest discover -s $PSScriptRoot -p 'test_capability_setup.py' -v
+        $LASTEXITCODE | Should -Be 0
+    }
     It 'runs optional stack repair controls without credentials or installed services' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_stack_repairs.py' -v
         $LASTEXITCODE | Should -Be 0

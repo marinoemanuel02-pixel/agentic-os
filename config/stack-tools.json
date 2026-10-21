@@ -1,5 +1,41 @@
 {
   "tools": {
+    "rea": {
+      "purpose": "Pinned REA with local Ghidra/JDK for copied static-analysis targets; no agent registration",
+      "command": ["{python}", "{repo}/tools/capability_setup.py", "run", "rea"]
+    },
+    "pdfcraft": {
+      "purpose": "Pinned semantic PDF editor; use mcp --root with a copied task directory",
+      "command": ["{python}", "{repo}/tools/capability_setup.py", "run", "pdfcraft"]
+    },
+    "blender-agent-sdk": {
+      "purpose": "Pinned persistent Blender scene control, checkpoints and renders; execution disabled by default",
+      "command": ["{python}", "{repo}/tools/capability_setup.py", "run", "blender-agent-sdk"]
+    },
+    "logisheets": {
+      "purpose": "Pinned semantic workbook MCP; local filesystem access requires task copies",
+      "command": ["{python}", "{repo}/tools/capability_setup.py", "run", "logisheets"]
+    },
+    "filmcraft": {
+      "purpose": "Pinned timeline editing and rendering; use explicit copied media and project paths",
+      "command": ["{python}", "{repo}/tools/capability_setup.py", "run", "filmcraft"]
+    },
+    "photocraft": {
+      "purpose": "Pinned layered PSD editing; configure automation read/write roots for MCP",
+      "command": ["{python}", "{repo}/tools/capability_setup.py", "run", "photocraft"]
+    },
+    "agent-desktop": {
+      "purpose": "Pinned Windows accessibility fallback; scope snapshots to the intended window and session",
+      "command": ["{python}", "{repo}/tools/capability_setup.py", "run", "agent-desktop"]
+    },
+    "blender-mcp-benchmark": {
+      "purpose": "Pinned comparison adapter only; observed headless state and render defects",
+      "command": ["{python}", "{repo}/tools/capability_setup.py", "run", "blender-mcp"]
+    },
+    "capability-setup": {
+      "purpose": "Explicit pinned capability installs and on-demand launch; preview before --apply",
+      "command": ["{python}", "{repo}/tools/capability_setup.py"]
+    },
     "capabilities": {
       "purpose": "Candidate registry and capability-transition discovery; no installs or persistent servers",
       "command": ["{python}", "{repo}/tools/capability_watch.py"]

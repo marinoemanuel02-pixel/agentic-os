@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'tools/capability_setup.py'
@@ -97,7 +98,25 @@ class SetupTests(unittest.TestCase):
             command, environment = module.launch_plan(receipt, self.entry(payload), ['literal;echo nope'])
             self.assertEqual(command[-1], 'literal;echo nope')
             self.assertIn('profile', environment['LOCALAPPDATA'])
+            self.assertEqual(environment['AGENT_DESKTOP_HOME'], str(Path(receipt['runtime']) / 'profile/state'))
             self.assertEqual(command[0], receipt['entrypoint'])
+
+    def test_wheel_cache_preserves_the_installable_distribution_filename(self):
+        module = self.module()
+        payload = b'wheel fixture'
+        entry = dict(self.entry(payload), kind='wheel', filename='example-1.0-py3-none-any.whl',
+                     entrypoint='venv/Scripts/tool.exe')
+        commands = []
+        with tempfile.TemporaryDirectory() as folder:
+            def fetch(url, path): path.write_bytes(payload)
+            def execute(command, **kwargs):
+                commands.append(command)
+                if command[1] == 'venv':
+                    scripts = Path(command[-1]) / 'Scripts'
+                    scripts.mkdir(parents=True)
+                    (scripts / 'tool.exe').write_bytes(b'fixture')
+            module.install('fixture', entry, Path(folder), apply=True, fetch=fetch, execute=execute)
+            self.assertEqual(Path(commands[-1][-1]).name, entry['filename'])
 
     def test_manifest_rejects_unknown_kinds_unpinned_hashes_and_paths(self):
         module = self.module()
@@ -108,6 +127,59 @@ class SetupTests(unittest.TestCase):
             if mutation == 'path': entry['entrypoint'] = '../outside.exe'
             if mutation == 'version': entry['version'] = '../../outside'
             with self.subTest(mutation=mutation), self.assertRaises(ValueError): module.validate_entry(entry)
+
+    def test_check_rejects_changed_manifest_and_escaped_receipt(self):
+        module = self.module()
+        payload = self.archive()
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            entry = self.entry(payload)
+            def fetch(url, path): path.write_bytes(payload)
+            receipt = module.install('fixture', entry, root, apply=True, fetch=fetch)
+            config = root / 'config'
+            config.mkdir()
+            (config / 'capability-tools.json').write_text(json.dumps({'tools': {'fixture': dict(entry, sha256='0'*64)}}))
+            with patch.object(module, 'REPO', root):
+                self.assertEqual(module.main(['--root', str(root), 'check', 'fixture']), 2)
+            escaped = dict(receipt, entrypoint=str(root / 'outside.exe'))
+            (root / 'outside.exe').write_bytes(b'fixture tool')
+            with self.assertRaises(ValueError):
+                module.validate_receipt('fixture', entry, root, escaped)
+
+    def test_windows_batch_launch_is_refused_before_shell_interpretation(self):
+        module = self.module()
+        for suffix in ('.bat', '.cmd', '.BAT'):
+            with self.subTest(suffix=suffix), self.assertRaises(ValueError):
+                module.launch_plan({'runtime': 'fixture', 'entrypoint': 'fixture' + suffix},
+                                   self.entry(self.archive()), ['x&echo.SETUP_ARGUMENT_EXECUTED'])
+
+    def test_npm_setup_does_not_launch_a_windows_batch_shim(self):
+        module = self.module()
+        payload = b'package'
+        entry = dict(self.entry(payload), kind='npm', filename='fixture.tgz', entrypoint='node_modules/fixture/cli.js')
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            npm = root / 'node_modules/npm/bin/npm-cli.js'
+            npm.parent.mkdir(parents=True)
+            npm.write_text('fixture')
+            def fetch(url, path): path.write_bytes(payload)
+            def execute(command, **kwargs):
+                self.assertFalse(command[0].endswith('.cmd'))
+                self.assertIn(str(npm), command)
+                output = root / 'fixture/1.0/node_modules/fixture/cli.js'
+                output.parent.mkdir(parents=True)
+                output.write_text('fixture')
+            with patch.object(module.shutil, 'which', side_effect=lambda name: str(root / 'npm.cmd') if name.startswith('npm') else 'node.exe'):
+                module.install('fixture', entry, root, apply=True, fetch=fetch, execute=execute)
+
+    def test_prepared_routes_use_checked_on_demand_launcher(self):
+        module = self.module()
+        routes = json.loads((SCRIPT.parents[1] / 'config/stack-tools.json').read_text())['tools']
+        manifest = json.loads((SCRIPT.parents[1] / 'config/capability-tools.json').read_text())['tools']
+        for tool in ('rea', 'pdfcraft', 'blender-agent-sdk', 'logisheets', 'filmcraft', 'photocraft', 'agent-desktop'):
+            module.validate_entry(manifest[tool])
+            self.assertEqual(routes[tool]['command'][-2:], ['run', tool])
+            self.assertIn('{repo}/tools/capability_setup.py', routes[tool]['command'])
 
 
 if __name__ == '__main__':

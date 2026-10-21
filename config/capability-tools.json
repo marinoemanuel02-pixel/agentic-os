@@ -1,0 +1,132 @@
+{
+  "tools": {
+    "pdfcraft": {
+      "version": "v0.11.0",
+      "kind": "archive",
+      "url": "https://github.com/storytold/pdfcraft/releases/download/v0.11.0/pdfcraft-0.11.0-windows-x64-portable.zip",
+      "sha256": "1655b326dc3d34e7fe1a5c211d06a603b12661765291ea995da2b7d9bcf2ff3c",
+      "filename": "pdfcraft-0.11.0-windows-x64-portable.zip",
+      "entrypoint": "**/pdfcraft-cli.exe",
+      "arguments": [],
+      "dependencies": [],
+      "env": {}
+    },
+    "filmcraft": {
+      "version": "v0.10.0",
+      "kind": "archive",
+      "url": "https://github.com/storytold/filmcraft/releases/download/v0.10.0/filmcraft-0.10.0-windows-x64-portable.zip",
+      "sha256": "8f5b52e0f8fd5540b5e0a4c5ae283f11371df1d983fd109f248a3d6c1ed5a263",
+      "filename": "filmcraft-0.10.0-windows-x64-portable.zip",
+      "entrypoint": "**/filmcraft-cli.exe",
+      "arguments": [],
+      "dependencies": [],
+      "env": {}
+    },
+    "photocraft": {
+      "version": "v0.12.0",
+      "kind": "archive",
+      "url": "https://github.com/storytold/photocraft/releases/download/v0.12.0/photocraft-0.12.0-windows-x64-portable.zip",
+      "sha256": "fdc8da51cba975e52ddc4dfb4833b4001c10ea7e067423b1304569a67a41aaff",
+      "filename": "photocraft-0.12.0-windows-x64-portable.zip",
+      "entrypoint": "**/photocraft-cli.exe",
+      "arguments": [],
+      "dependencies": [],
+      "env": {}
+    },
+    "agent-desktop": {
+      "version": "v0.10.1",
+      "kind": "archive",
+      "url": "https://github.com/lahfir/agent-desktop/releases/download/v0.10.1/agent-desktop-v0.10.1-x86_64-pc-windows-msvc.tar.gz",
+      "sha256": "b679d6c6c18c32f8259d4e861c4e632642448437c5b8ab51d89c8245b30f5347",
+      "filename": "agent-desktop-v0.10.1-x86_64-pc-windows-msvc.tar.gz",
+      "entrypoint": "**/agent-desktop.exe",
+      "arguments": [],
+      "dependencies": [],
+      "env": {}
+    },
+    "ghidra": {
+      "version": "Ghidra_12.1.4_build",
+      "kind": "archive",
+      "url": "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.4_build/ghidra_12.1.4_PUBLIC_20260921.zip",
+      "sha256": "ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db",
+      "filename": "ghidra_12.1.4_PUBLIC_20260921.zip",
+      "entrypoint": "**/support/analyzeHeadless.bat",
+      "arguments": [],
+      "dependencies": [
+        "jdk21"
+      ],
+      "env": {
+        "JAVA_HOME": "{jdk21}"
+      },
+      "root_parents": 2
+    },
+    "jdk21": {
+      "version": "jdk-21.0.12.1+1",
+      "kind": "archive",
+      "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_windows_hotspot_21.0.12.1_1.zip",
+      "sha256": "f9d6e191ab098c0d416e7d588a24420a8621cd2f4720dab2459b8b7b2d2d8b4e",
+      "filename": "OpenJDK21U-jdk_x64_windows_hotspot_21.0.12.1_1.zip",
+      "entrypoint": "**/bin/java.exe",
+      "arguments": [],
+      "dependencies": [],
+      "env": {},
+      "root_parents": 2
+    },
+    "blender-agent-sdk": {
+      "version": "0.2.0",
+      "kind": "wheel",
+      "url": "https://github.com/yazzang-homelab/blender-agent-sdk/releases/download/v0.2.0/blender_agent_sdk-0.2.0-py3-none-any.whl",
+      "sha256": "3a1744c693e84fd7dc22be2c7dcd92dc460efee119c024145c269d2267dc4244",
+      "filename": "blender_agent_sdk-0.2.0-py3-none-any.whl",
+      "entrypoint": "venv/Scripts/blender-agent.exe",
+      "arguments": [],
+      "dependencies": [],
+      "env": {
+        "BLENDER": "{blender}",
+        "BLENDER_AGENT_RENDER_ENGINE": "CYCLES"
+      }
+    },
+    "rea": {
+      "version": "6.7.0",
+      "kind": "npm",
+      "url": "https://registry.npmjs.org/rea-agents/-/rea-agents-6.7.0.tgz",
+      "sha256": "20958a66dba1a011e50a486beb9463a343128ed368c984f94065362c13f51f90",
+      "filename": "rea-agents-6.7.0.tgz",
+      "entrypoint": "node_modules/rea-agents/scripts/rea.mjs",
+      "arguments": [],
+      "dependencies": [
+        "jdk21",
+        "ghidra"
+      ],
+      "env": {
+        "JAVA_HOME": "{jdk21}",
+        "GHIDRA_INSTALL_DIR": "{ghidra}",
+        "REA_ANALYSIS_PROVIDER": "ghidra"
+      }
+    },
+    "logisheets": {
+      "version": "0.6.0",
+      "kind": "npm",
+      "url": "https://registry.npmjs.org/logisheets-mcp/-/logisheets-mcp-0.6.0.tgz",
+      "sha256": "66a4621d8eada3df0a409e1fa3d9ec401984f0929ae1fe0cee398181317adaa6",
+      "filename": "logisheets-mcp-0.6.0.tgz",
+      "entrypoint": "node_modules/logisheets-mcp/dist/cli.js",
+      "arguments": [],
+      "dependencies": [],
+      "env": {}
+    },
+    "blender-mcp": {
+      "version": "0.11.1-5a9e923f",
+      "kind": "python-source",
+      "url": "https://codeload.github.com/sandraschi/blender-mcp/zip/5a9e923f6ae68cfc34a221d31bd1fd5c8aff07f6",
+      "sha256": "c2dbe1ab524f648b2035ba8d818d354fcdc1c104e3a3ae531f27b4134ccd20c7",
+      "filename": "blender-mcp-source.zip",
+      "entrypoint": "venv/Scripts/blender-mcp-server.exe",
+      "arguments": [],
+      "dependencies": [],
+      "env": {
+        "BLENDER_EXECUTABLE": "{blender}"
+      }
+    }
+  }
+}

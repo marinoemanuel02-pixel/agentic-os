@@ -103,9 +103,26 @@ def environment(runtime):
     profile = Path(runtime) / 'profile'
     env.update({'APPDATA': str(profile / 'roaming'), 'LOCALAPPDATA': str(profile / 'local'),
                 'TEMP': str(profile / 'tmp'), 'TMP': str(profile / 'tmp'), 'PYTHONUTF8': '1',
+                'AGENT_DESKTOP_HOME': str(profile / 'state'),
                 'UV_CACHE_DIR': str(Path.home() / '.aos/uv/cache'),
                 'npm_config_cache': str(Path.home() / '.aos/npm/cache')})
     return env
+
+
+def validate_receipt(tool, entry, root, receipt):
+    validate_entry(entry)
+    runtime = (Path(root) / tool / entry['version']).resolve()
+    executable = Path(receipt['entrypoint']).resolve()
+    fingerprint = hashlib.sha256(json.dumps(entry, sort_keys=True).encode()).hexdigest()
+    if (receipt.get('installed') is not True or receipt['tool'] != tool
+            or receipt['version'] != entry['version'] or receipt['spec_sha256'] != fingerprint
+            or receipt['artifact_sha256'] != entry['sha256'] or receipt['source'] != entry['url']
+            or Path(receipt['runtime']).resolve() != runtime
+            or not executable.is_relative_to(runtime)
+            or executable not in [p.resolve() for p in runtime.glob(entry['entrypoint'])]
+            or digest(executable) != receipt['entrypoint_sha256']):
+        raise ValueError('Installed pin, location or entrypoint changed; inspect before replacing it')
+    return receipt
 
 
 def install(tool, entry, root, *, apply=False, fetch=download, execute=subprocess.run):
@@ -114,20 +131,16 @@ def install(tool, entry, root, *, apply=False, fetch=download, execute=subproces
         raise ValueError('Invalid tool identifier')
     root = Path(root).resolve()
     runtime = root / tool / entry['version']
-    spec_hash = hashlib.sha256(json.dumps(entry, sort_keys=True).encode()).hexdigest()
     if not apply:
         return {'installed': False, 'tool': tool, 'version': entry['version'], 'target': str(runtime),
                 'source': entry['url'], 'sha256': entry['sha256']}
     with locked(runtime):
         receipt_file = runtime / 'receipt.json'
         if receipt_file.exists():
-            receipt = load_json(receipt_file)
-            if receipt['spec_sha256'] != spec_hash or digest(receipt['entrypoint']) != receipt['entrypoint_sha256']:
-                raise ValueError('Installed pin or entrypoint changed; inspect before replacing it')
-            return receipt
+            return validate_receipt(tool, entry, root, load_json(receipt_file))
         if runtime.exists():
             raise ValueError('Unreceipted installation exists; preserve and inspect it before retrying')
-        cache = root / 'downloads' / (entry['sha256'][:16] + '-' + entry['filename'])
+        cache = root / 'downloads' / entry['sha256'][:16] / entry['filename']
         cache.parent.mkdir(parents=True, exist_ok=True)
         with locked(cache):
             if not cache.exists():
@@ -148,7 +161,11 @@ def install(tool, entry, root, *, apply=False, fetch=download, execute=subproces
             for folder in ('TEMP', 'APPDATA', 'LOCALAPPDATA'):
                 Path(env[folder]).mkdir(parents=True, exist_ok=True)
             if entry['kind'] == 'npm':
-                command = [shutil.which('npm.cmd') or shutil.which('npm') or 'npm', 'install',
+                npm = Path(shutil.which('npm.cmd') or shutil.which('npm') or '')
+                cli = npm.parent / 'node_modules/npm/bin/npm-cli.js'
+                if not cli.is_file():
+                    raise ValueError('Cannot locate npm-cli.js; refusing a Windows batch shim')
+                command = [shutil.which('node') or 'node', str(cli), 'install',
                            '--prefix', str(runtime), '--ignore-scripts', '--no-audit', '--no-fund', str(cache)]
                 execute(command, check=True, env=env, cwd=runtime, timeout=600)
             else:
@@ -162,7 +179,8 @@ def install(tool, entry, root, *, apply=False, fetch=download, execute=subproces
         if len(matches) != 1 or not matches[0].is_file():
             raise ValueError('Pinned installation did not produce one expected entrypoint')
         receipt = {'installed': True, 'tool': tool, 'version': entry['version'],
-                   'spec_sha256': spec_hash, 'artifact_sha256': entry['sha256'],
+                   'spec_sha256': hashlib.sha256(json.dumps(entry, sort_keys=True).encode()).hexdigest(),
+                   'artifact_sha256': entry['sha256'],
                    'entrypoint': str(matches[0]), 'entrypoint_sha256': digest(matches[0]),
                    'runtime': str(runtime), 'source': entry['url']}
         write_json(receipt_file, receipt)
@@ -170,6 +188,8 @@ def install(tool, entry, root, *, apply=False, fetch=download, execute=subproces
 
 
 def launch_plan(receipt, entry, arguments, dependencies=None):
+    if Path(receipt['entrypoint']).suffix.lower() in ('.bat', '.cmd'):
+        raise ValueError('Direct Windows batch launch is refused; use the REA Ghidra provider')
     runtime = Path(receipt['runtime'])
     env = environment(runtime)
     values = {'home': str(Path.home()), 'runtime': str(runtime), 'repo': str(REPO)}
@@ -211,15 +231,15 @@ def main(argv=None):
                     if args.action != 'install': raise ValueError('Dependency is not installed: ' + name)
                     continue
                 receipt = load_json(receipt_path)
+            if receipt['installed']:
+                validate_receipt(name, dep, args.root, receipt)
             dependencies[name] = str(Path(receipt['entrypoint']).parents[dep.get('root_parents', 2) - 1])
         if args.action == 'install':
             result = install(args.tool, entry, args.root, apply=args.apply)
         else:
             receipt_path = args.root / args.tool / entry['version'] / 'receipt.json'
             if not receipt_path.exists(): raise ValueError('Tool is not installed; use explicit install --apply')
-            receipt = load_json(receipt_path)
-            if digest(receipt['entrypoint']) != receipt['entrypoint_sha256']:
-                raise ValueError('Installed entrypoint changed')
+            receipt = validate_receipt(args.tool, entry, args.root, load_json(receipt_path))
             result = receipt
             if args.action == 'run':
                 command, env = launch_plan(receipt, entry, args.arguments, dependencies)
