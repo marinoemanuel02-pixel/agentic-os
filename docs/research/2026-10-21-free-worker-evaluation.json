@@ -1,0 +1,290 @@
+{
+  "date": "2026-10-21",
+  "timezone": "Europe/Rome",
+  "scope": "Free-worker utility and current single-agent/native orchestration coverage; no production changes",
+  "evidence_root": "~/.aos/research/free-worker-utility-20261021",
+  "routes": {
+    "omniroute": {
+      "upstream": "OpenRouter",
+      "active_provider_connections": 1,
+      "allowed_free_routes": 1,
+      "installed": true,
+      "callable": true,
+      "native_managed_delegate": false
+    },
+    "separate_direct_trial": {
+      "location": "Desktop/1-Projects/videos/where-you-end/tools/or",
+      "paid_capped_trial": true,
+      "called": false,
+      "free_key_rotation_pool_established": false
+    },
+    "free_key_swarm": {
+      "identity": null,
+      "installed": null,
+      "called": false,
+      "checked": "11 supplied text attachments, setup evidence, clone metadata, relevant chat history",
+      "operator_information_needed": "repository name or URL"
+    }
+  },
+  "original_task_results": [
+    {
+      "name": "01-ticket-triage",
+      "mode": "single-agent shared CLI, cold gateway",
+      "prompt_bytes": 679,
+      "source_sha256": "f6a47a14830ad8f0f374cb9b1a606390618ec4eb17ba28beeecbe5b63e97ed5c",
+      "wall_seconds": 98.893,
+      "inference_seconds": 2.663,
+      "usage": {
+        "prompt_tokens": 359,
+        "completion_tokens": 212,
+        "total_tokens": 571
+      },
+      "response_bytes": 165,
+      "complete": true,
+      "pricing_verified_zero": true,
+      "automatic_fallback": false,
+      "accepted": false,
+      "filesystem_tools": false,
+      "status": "passed",
+      "checks": {
+        "correct_labels": 12,
+        "total": 12
+      }
+    },
+    {
+      "name": "02-grounded-status",
+      "mode": "reused gateway, one bounded helper task",
+      "prompt_bytes": 1379,
+      "source_sha256": "d9a39d1522e17cba0769b49b30a0ca36651e05e1fa611cea4dac518b5d3b63d0",
+      "wall_seconds": 5.909,
+      "inference_seconds": 4.561,
+      "usage": {
+        "prompt_tokens": 589,
+        "completion_tokens": 389,
+        "total_tokens": 978
+      },
+      "response_bytes": 220,
+      "complete": true,
+      "pricing_verified_zero": true,
+      "automatic_fallback": false,
+      "accepted": false,
+      "filesystem_tools": false,
+      "status": "passed",
+      "checks": {
+        "grounded_states": 4,
+        "unknown_preserved": true,
+        "source_instruction_ignored": true
+      }
+    },
+    {
+      "name": "03-code-helper",
+      "mode": "reused gateway, one bounded helper task",
+      "prompt_bytes": 675,
+      "source_sha256": "09e69fb31787eb6778b1ba6f3e6331567a98ef6754f68cfea4a5d1d020cfbde5",
+      "wall_seconds": 23.314,
+      "inference_seconds": 21.985,
+      "usage": {
+        "prompt_tokens": 337,
+        "completion_tokens": 1897,
+        "total_tokens": 2234
+      },
+      "response_bytes": 589,
+      "complete": true,
+      "pricing_verified_zero": true,
+      "automatic_fallback": false,
+      "accepted": false,
+      "filesystem_tools": false,
+      "status": "needs_host_code_inspection",
+      "checks": null
+    },
+    {
+      "name": "04-italian-facts",
+      "mode": "reused gateway, one bounded helper task",
+      "prompt_bytes": 652,
+      "source_sha256": "8b87a74ba9c1f62963eae160590d3374f91142c1a5a93bd4021907597b1117d8",
+      "wall_seconds": 4.789,
+      "inference_seconds": 3.124,
+      "usage": {
+        "prompt_tokens": 373,
+        "completion_tokens": 285,
+        "total_tokens": 658
+      },
+      "response_bytes": 122,
+      "complete": true,
+      "pricing_verified_zero": true,
+      "automatic_fallback": false,
+      "accepted": false,
+      "filesystem_tools": false,
+      "status": "failed",
+      "error_type": "AssertionError"
+    },
+    {
+      "name": "05-workflow-extraction",
+      "mode": "reused gateway, one bounded helper task",
+      "prompt_bytes": 545,
+      "source_sha256": "634916c5ce647f1acea5f8efbb0f182c9ec58072e328e23e71d035ed538173bb",
+      "wall_seconds": 3.089,
+      "inference_seconds": 1.827,
+      "usage": {
+        "prompt_tokens": 330,
+        "completion_tokens": 171,
+        "total_tokens": 501
+      },
+      "response_bytes": 308,
+      "complete": true,
+      "pricing_verified_zero": true,
+      "automatic_fallback": false,
+      "accepted": false,
+      "filesystem_tools": false,
+      "status": "passed",
+      "checks": {
+        "exact_verified_job_records": 8,
+        "downstream_admission": "host checked before second call"
+      }
+    },
+    {
+      "name": "06-dependent-schedule",
+      "mode": "reused gateway, one bounded helper task",
+      "prompt_bytes": 748,
+      "source_sha256": "2a4e586ad9c82284bf58fbfd8a4060cf5e8581aca9932d99ec36cfb5b1186b40",
+      "wall_seconds": 10.805,
+      "inference_seconds": 9.485,
+      "usage": {
+        "prompt_tokens": 443,
+        "completion_tokens": 904,
+        "total_tokens": 1347
+      },
+      "response_bytes": 351,
+      "complete": true,
+      "pricing_verified_zero": true,
+      "automatic_fallback": false,
+      "accepted": false,
+      "filesystem_tools": false,
+      "status": "passed",
+      "checks": {
+        "jobs": 8,
+        "workers": 2,
+        "dependencies_valid": true,
+        "no_overlaps": true,
+        "optimal_makespan": 11
+      }
+    }
+  ],
+  "host_assessment": {
+    "original_results_unchanged": true,
+    "provider_requests": 6,
+    "assessment": "Six synthetic tasks produced useful host-checked outputs; four strict JSON graders passed, code passed nine tests, Italian text passed factual review after an overstrict exact-string mismatch.",
+    "code": {
+      "manually_inspected": true,
+      "passed": 9,
+      "failed": 0,
+      "baseline_failed": 8,
+      "production_code_installed": false,
+      "sha256": "5581b22aa403c2f2271dced45ff86bd82e00214babd5e5f20045629227cef12c"
+    },
+    "italian": {
+      "original_automated_status": "failed",
+      "cause": "Expected exact short voice string; returned faithful longer wording",
+      "host_factual_assessment": "passed",
+      "date_unknown_preserved": true,
+      "new_model_call": false
+    },
+    "workflow": {
+      "steps": 2,
+      "upstream_facts_checked_before_downstream": true,
+      "jobs": 8,
+      "resources": 2,
+      "optimal_makespan": 11,
+      "native_aos_managed_delegation": false
+    },
+    "timing": {
+      "first_cold_cli_seconds": 98.893,
+      "first_inference_seconds": 2.663,
+      "batch_gateway_startup_seconds": 9.096,
+      "warm_helper_min_seconds": 3.089,
+      "warm_helper_max_seconds": 23.314,
+      "warm_helper_median_seconds": 5.909,
+      "total_reported_tokens": 6289,
+      "cloud_subscription_savings_measured": false,
+      "lead_review_time_measured": false
+    },
+    "quota_before": {
+      "free_model_daily_requests": {
+        "used": 0,
+        "limit": 1000,
+        "remaining": 1000
+      },
+      "usage_daily": 0,
+      "is_free_tier": false,
+      "limit_remaining": null
+    },
+    "quota_after": {
+      "free_model_daily_requests": {
+        "used": 6,
+        "limit": 1000,
+        "remaining": 994
+      },
+      "usage_daily": 0,
+      "is_free_tier": false,
+      "limit_remaining": null
+    },
+    "paid_usage_daily_before": 0,
+    "paid_usage_daily_after": 0,
+    "no_paid_fallback": true,
+    "owned_gateway_stopped": true,
+    "unknown_repository": "Separate swarm with rotating free LLM keys not identified; awaiting name/URL"
+  },
+  "native_admission_probes": [
+    {
+      "vendor": "openrouter",
+      "native_route_rejected": true,
+      "native_delegate_accepted": false,
+      "outcome": "refused"
+    },
+    {
+      "vendor": "omniroute",
+      "native_route_rejected": true,
+      "native_delegate_accepted": false,
+      "outcome": "refused"
+    }
+  ],
+  "exclusive_lock_control": {
+    "second_concurrent_task_refused": true,
+    "lock_removed_after_owner_exit": true,
+    "inference_requests": 0
+  },
+  "source_sha256": {
+    "tools/stack.py": "6a44fb53d0a5313b0cdcc566f05bc3fdc3b56c1f53798d4ecabc1dce9293a198",
+    "tools/omniroute_run.py": "8c5fe98237df508f67e5cfce0ec4600de0ffebd86c058646aad98c9b75af5e6e",
+    "tools/omniroute_worker.py": "a87121ee05c42a85eb738eadf3912a45d85c25450cd4affcdacae6ca15c49c51",
+    "tools/omniroute_policy.py": "4f35de1d0ecf9d7dd3ea4a31a81425f869b355a38833e1364665354eced7a38e",
+    "config/coordination.ps1": "38a95989064fa96481105031f1548044bfa044b85e764ef9a96eb73618dbcc8d",
+    "config/task-contracts.ps1": "2976e71992d829b80322bab94ab7a6951b0133500ab655476625446458cfaadb",
+    "aos.psm1": "445ce627a459c1ae5dca76dd4a1458dd4a3e0c3672d6e9a4655fc48800ada311"
+  },
+  "evidence_sha256": {
+    "evaluate.py": "dd151d54e13111e18ac8023bed47386080572a129e764f50f06c4cd6c2f95fbe",
+    "orchestration-check.ps1": "18ea7419d8009d1e1daab2f0d928cab76bd86c789cc1138b338f9b04af0d90d6",
+    "orchestration-admission.json": "a4adae2f3570deb26d6f7368b45963ab9040cb9a9b06834740772093410f23e9",
+    "generated_ready.py": "5581b22aa403c2f2271dced45ff86bd82e00214babd5e5f20045629227cef12c",
+    "test_generated_ready.py": "2b568e37535c10bf0e932e1e1e97d9ec95a7dc861bc3a8cf00a935199627fe96",
+    "code-checks.txt": "a9aafdc7fe2f0491b3ac14511b9bdf768b22b6b6ff087bfb16465f3027fb25e2",
+    "code-baseline.txt": "e159f2f32da4d92026711074b0c711d371edcc6270e3842b2a632f3c71051c34",
+    "results.json": "7521d0a90176b5c6dba656499983d9e43036c662d6f87d20705983ff6387d518",
+    "host-assessment.json": "c8e16961472bd163d0f1324fd9ecba4d4f545fac838f292f80802f33c0946ef1"
+  },
+  "production_sources_match_previous_integration_receipt": true,
+  "production_tests_changed": false,
+  "full_aos_test_repeated": false,
+  "reason": "Evidence-only commit; six live utility calls and targeted controls executed instead",
+  "external_review": false,
+  "claude_inference": false,
+  "paid_inference": false,
+  "automatic_swarm_rotation_installed": false,
+  "limits": [
+    "Small synthetic sample, one allowed route, no measured native-model baseline",
+    "No measured lead review time or subscription quota saving",
+    "Native third-provider lifecycle and parallel worker pooling not integrated",
+    "Separate swarm repository identity remains unknown"
+  ]
+}
