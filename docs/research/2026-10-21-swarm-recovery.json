@@ -1,0 +1,1038 @@
+{
+  "date": "2026-10-21",
+  "timezone": "Europe/Rome",
+  "scope": "Locate archived own swarm, assess integration and current provider capacity; no production reactivation",
+  "evidence_root": "~/.aos/research/swarm-recovery-20261021",
+  "recovered_source": {
+    "drive_relative_path": "legacy/4-Media/swarm variants/swarm v2",
+    "distribution": "swarm",
+    "distribution_version": "2.0.0",
+    "module_version": "2.0.0-mvp",
+    "repository_url": null,
+    "git_revision": null,
+    "license_file": null
+  },
+  "prior_integration": {
+    "drive_relative_path": "orchestration layer",
+    "adapter": "src/dispatch/workers/swarm_pool.py",
+    "toggles": [
+      "DISPATCH_SWARM_ENABLED",
+      "DISPATCH_SWARM_FANOUT_ENABLED"
+    ],
+    "modes": [
+      "single",
+      "fanout"
+    ],
+    "adapter_fanout_parallel": false,
+    "standalone_swarm_parallel_fanout_exists": true,
+    "current_aos_pool_integrated": false
+  },
+  "credentials": {
+    "provider_families": 7,
+    "declared_remote_slots": 14,
+    "nonempty_slots": 14,
+    "distinct_credential_strings": 14,
+    "duplicate_slot_groups": [],
+    "current_encrypted_openrouter_matches": {
+      "openrouter-api-key": [],
+      "OPENROUTER_API_KEY": []
+    },
+    "current_authentication_tested": false,
+    "account_project_independence_tested": false,
+    "credentials_copied_or_changed": false,
+    "backup_written": false
+  },
+  "metadata_authentication": {
+    "passed": 9,
+    "archived_primary_openrouter_401": 1,
+    "groq_cerebras_403_unverified": 4,
+    "raw_results": [
+      {
+        "provider": "cerebras",
+        "credential_slot": "CEREBRAS_API_KEY",
+        "generation_requests": 0,
+        "free_eligibility_verified": false,
+        "http_status": 403,
+        "error_type": null,
+        "seconds": 0.138,
+        "anonymous_http_status": 403,
+        "status": "metadata_access_rejected",
+        "archived_model_in_current_catalog": null
+      },
+      {
+        "provider": "cerebras",
+        "credential_slot": "CEREBRAS_API_KEY_2",
+        "generation_requests": 0,
+        "free_eligibility_verified": false,
+        "http_status": 403,
+        "error_type": null,
+        "seconds": 0.109,
+        "anonymous_http_status": 403,
+        "status": "metadata_access_rejected",
+        "archived_model_in_current_catalog": null
+      },
+      {
+        "provider": "mistral",
+        "credential_slot": "MISTRAL_API_KEY",
+        "generation_requests": 0,
+        "free_eligibility_verified": false,
+        "http_status": 200,
+        "error_type": null,
+        "seconds": 0.406,
+        "anonymous_http_status": 401,
+        "status": "metadata_auth_passed",
+        "archived_model_in_current_catalog": true
+      },
+      {
+        "provider": "mistral",
+        "credential_slot": "MISTRAL_API_KEY_2",
+        "generation_requests": 0,
+        "free_eligibility_verified": false,
+        "http_status": 200,
+        "error_type": null,
+        "seconds": 0.378,
+        "anonymous_http_status": 401,
+        "status": "metadata_auth_passed",
+        "archived_model_in_current_catalog": true
+      },
+      {
+        "provider": "cohere",
+        "credential_slot": "COHERE_API_KEY",
+        "generation_requests": 0,
+        "free_eligibility_verified": false,
+        "http_status": 200,
+        "error_type": null,
+        "seconds": 0.271,
+        "anonymous_http_status": 200,
+        "status": "metadata_available_auth_not_established",
+        "archived_model_in_current_catalog": null
+      },
+      {
+        "provider": "cohere",
+        "credential_slot": "COHERE_API_KEY_2",
+        "generation_requests": 0,
+        "free_eligibility_verified": false,
+        "http_status": 200,
+        "error_type": null,
+        "seconds": 0.269,
+        "anonymous_http_status": 200,
+        "status": "metadata_available_auth_not_established",
+        "archived_model_in_current_catalog": null
+      },
+      {
+        "provider": "groq",
+        "credential_slot": "GROQ_API_KEY",
+        "generation_requests": 0,
+        "free_eligibility_verified": false,
+        "http_status": 403,
+        "error_type": null,
+        "seconds": 0.115,
+        "anonymous_http_status": 403,
+        "status": "metadata_access_rejected",
+        "archived_model_in_current_catalog": null
+      },
+      {
+        "provider": "groq",
+        "credential_slot": "GROQ_API_KEY_2",
+        "generation_requests": 0,
+        "free_eligibility_verified": false,
+        "http_status": 403,
+        "error_type": null,
+        "seconds": 0.12,
+        "anonymous_http_status": 403,
+        "status": "metadata_access_rejected",
+        "archived_model_in_current_catalog": null
+      },
+      {
+        "provider": "gemini",
+        "credential_slot": "GEMINI_API_KEY",
+        "generation_requests": 0,
+        "free_eligibility_verified": false,
+        "http_status": 200,
+        "error_type": null,
+        "seconds": 0.264,
+        "anonymous_http_status": 403,
+        "status": "metadata_auth_passed",
+        "archived_model_in_current_catalog": false
+      },
+      {
+        "provider": "gemini",
+        "credential_slot": "GEMINI_API_KEY_2",
+        "generation_requests": 0,
+        "free_eligibility_verified": false,
+        "http_status": 200,
+        "error_type": null,
+        "seconds": 0.243,
+        "anonymous_http_status": 403,
+        "status": "metadata_auth_passed",
+        "archived_model_in_current_catalog": false
+      },
+      {
+        "provider": "openrouter",
+        "credential_slot": "OPENROUTER_API_KEY",
+        "generation_requests": 0,
+        "free_eligibility_verified": false,
+        "http_status": 401,
+        "error_type": null,
+        "seconds": 0.293,
+        "anonymous_http_status": 401,
+        "status": "metadata_access_rejected",
+        "archived_model_in_current_catalog": null
+      },
+      {
+        "provider": "openrouter",
+        "credential_slot": "OPENROUTER_API_KEY_2",
+        "generation_requests": 0,
+        "free_eligibility_verified": false,
+        "http_status": 200,
+        "error_type": null,
+        "seconds": 0.295,
+        "anonymous_http_status": 401,
+        "status": "metadata_auth_passed",
+        "free_model_daily_requests": {
+          "used": 0,
+          "limit": 50,
+          "remaining": 50
+        },
+        "reported_usage_daily": 0,
+        "archived_model_in_current_catalog": false
+      },
+      {
+        "provider": "huggingface",
+        "credential_slot": "HF_API_KEY",
+        "generation_requests": 0,
+        "free_eligibility_verified": false,
+        "http_status": 200,
+        "error_type": null,
+        "seconds": 0.25,
+        "anonymous_http_status": 401,
+        "status": "metadata_auth_passed",
+        "archived_model_in_current_catalog": null
+      },
+      {
+        "provider": "huggingface",
+        "credential_slot": "HF_API_KEY_2",
+        "generation_requests": 0,
+        "free_eligibility_verified": false,
+        "http_status": 200,
+        "error_type": null,
+        "seconds": 0.275,
+        "anonymous_http_status": 401,
+        "status": "metadata_auth_passed",
+        "archived_model_in_current_catalog": null
+      }
+    ],
+    "cohere_verified_followup": [
+      {
+        "provider": "cohere",
+        "credential_slot": "COHERE_API_KEY",
+        "http_status": 200,
+        "anonymous_valid": false,
+        "credential_valid": true,
+        "auth_verified": true
+      },
+      {
+        "provider": "cohere",
+        "credential_slot": "COHERE_API_KEY_2",
+        "http_status": 200,
+        "anonymous_valid": false,
+        "credential_valid": true,
+        "auth_verified": true
+      }
+    ],
+    "current_vs_archived_openrouter": {
+      "provider": "openrouter",
+      "current_http": 200,
+      "archived_second_http": 200,
+      "same_creator_user": false,
+      "current_free_model_daily_requests": {
+        "used": 6,
+        "limit": 1000,
+        "remaining": 994
+      },
+      "archived_second_free_model_daily_requests": {
+        "used": 0,
+        "limit": 50,
+        "remaining": 50
+      }
+    },
+    "free_eligibility_not_inferred_from_auth": true
+  },
+  "source_test_suites": {
+    "swarm": {
+      "passed": 57,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "network_or_process_attempts": 0
+    },
+    "dispatch": {
+      "passed": 17,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "network_or_process_attempts": 0
+    }
+  },
+  "expected_regression_failures": {
+    "test_methods": 8,
+    "failed_assertions": 14,
+    "errors": 0,
+    "blocked_external_attempts": 0,
+    "actual_remote_requests": 0,
+    "source_changed": false,
+    "observations": [
+      {
+        "check": "call_boundary",
+        "already_hard_capped": true,
+        "fake_provider_calls": 1
+      },
+      {
+        "check": "concurrent_reservation",
+        "daily_hard": 1,
+        "fake_provider_calls": 2,
+        "ledger_calls": 2
+      },
+      {
+        "check": "duplicate_credential",
+        "same_credential": true,
+        "first_over_hard": true,
+        "second_over_hard": false
+      },
+      {
+        "check": "retry_accounting",
+        "fake_wire_attempts": 3,
+        "ledger_calls": 1
+      },
+      {
+        "check": "hard_cap",
+        "over_hard": true,
+        "selected": {
+          "fanout": [
+            "fixture"
+          ],
+          "fanout_skipped": [
+            "fixture"
+          ],
+          "failover": [
+            "fixture"
+          ],
+          "single": [
+            "fixture"
+          ]
+        }
+      },
+      {
+        "check": "free_price_guard",
+        "provider_preferences_present": false
+      },
+      {
+        "check": "permanent_cooldown",
+        "cooling": true,
+        "selected": {
+          "fanout": [
+            "fixture"
+          ],
+          "fanout_skipped": [
+            "fixture"
+          ],
+          "failover": [
+            "fixture"
+          ],
+          "single": [
+            "fixture"
+          ]
+        }
+      },
+      {
+        "check": "adapter_payload",
+        "invalid_system_contents": 1
+      }
+    ]
+  },
+  "independent_account_live_check": {
+    "status": "passed",
+    "generation_requests": 1,
+    "retries": 0,
+    "candidate_complete": true,
+    "candidate_accepted": false,
+    "fields_correct": true,
+    "seconds": 2.974,
+    "usage": {
+      "prompt_tokens": 237,
+      "completion_tokens": 79,
+      "total_tokens": 316
+    },
+    "live_pricing_verified_zero": true,
+    "allow_fallbacks": false,
+    "provider_max_prices": {
+      "prompt": 0,
+      "completion": 0,
+      "request": 0
+    },
+    "before": {
+      "free_model_daily_requests": {
+        "used": 0,
+        "limit": 50,
+        "remaining": 50
+      },
+      "usage_daily": 0
+    },
+    "after": {
+      "free_model_daily_requests": {
+        "used": 0,
+        "limit": 50,
+        "remaining": 50
+      },
+      "usage_daily": 0
+    },
+    "key_copied_or_migrated": false,
+    "production_configuration_changed": false
+  },
+  "source_snapshot": {
+    "files": 145,
+    "credential_files_copied": 0,
+    "backup_hashes_rechecked": true,
+    "identities": [
+      {
+        "snapshot": "swarm/alerts.py",
+        "sha256": "858657ba5ec55a513aaacd72a86184b39f06f00e226d9fecd1c8af7cfac26664"
+      },
+      {
+        "snapshot": "swarm/artifacts.py",
+        "sha256": "0fbf7b2562a855237f8f3d6e0e974ecd9bb53fee621e49d030db59b193ac9d50"
+      },
+      {
+        "snapshot": "swarm/cli.py",
+        "sha256": "65a0592ae902ec352d644fd0bf8f83367709e02f0f935777673722bc72c935f2"
+      },
+      {
+        "snapshot": "swarm/config.py",
+        "sha256": "27e6b9a4b9a71ab853887f11743698b31f4f66f4049f99cbe03a9b99d332a900"
+      },
+      {
+        "snapshot": "swarm/ledger.py",
+        "sha256": "0a7d7d038bb90449e88ae4a35b51fc6ab93c28fbcadb5bf05b54f0ee6d475b9f"
+      },
+      {
+        "snapshot": "swarm/locks.py",
+        "sha256": "c2e429d7272a4c13e6265d14667ac00b8f1f9f9231690d582f1f01a317d9981d"
+      },
+      {
+        "snapshot": "swarm/ollama.py",
+        "sha256": "c80656d6cd3e4d297c5c02cacf8819a55027859f9130662c905c679de27b86bf"
+      },
+      {
+        "snapshot": "swarm/paths.py",
+        "sha256": "4acec7d7db760666ec38c9b69684c9fd8743ff0a61d047c28a66015d862dccda"
+      },
+      {
+        "snapshot": "swarm/queue.py",
+        "sha256": "d3fb49d4dd9dea84faf186011d79f3c3cfaff5db0283a3ac7ce5705c2273b7cc"
+      },
+      {
+        "snapshot": "swarm/roles.py",
+        "sha256": "173e31765129b0c050b5b445df1312cce94c8fc0509d9ed4ec45e6943f33288f"
+      },
+      {
+        "snapshot": "swarm/router.py",
+        "sha256": "4ac7f256cf4baf1bc0174f42ab847f2714f85018786ec36652a761b9b9104848"
+      },
+      {
+        "snapshot": "swarm/store.py",
+        "sha256": "0af1c765de0e837794f7497f0aa17dd06635649a70f914f1f4cecf0b9241f3ca"
+      },
+      {
+        "snapshot": "swarm/worker.py",
+        "sha256": "5e1994caf0d29fe7ee9ff9aa936f54048eeec0f2de62e1750e05592510211c7b"
+      },
+      {
+        "snapshot": "swarm/__init__.py",
+        "sha256": "8bfdc6967987ce95738a9e5894ff7b0011b96c14c7cb1a6b270227a4ecfd207a"
+      },
+      {
+        "snapshot": "swarm/__main__.py",
+        "sha256": "43812fe6929fe76d86085ab2373d60b87d0e0ef42372fca66452762a8a17e14b"
+      },
+      {
+        "snapshot": "swarm/engines/autoloop.py",
+        "sha256": "4313f051210375f37e5e0d32086fce94e35138192018d2b5585421becc5ca740"
+      },
+      {
+        "snapshot": "swarm/engines/common.py",
+        "sha256": "e2890cfa7c9c7778e12e8717ac72e8dd27efc9254cf280b1e07ce1c42ff68838"
+      },
+      {
+        "snapshot": "swarm/engines/debate.py",
+        "sha256": "02a4dce75f191a1343acef648d32b08e9f6c3c4e158d2f292a918472562e3550"
+      },
+      {
+        "snapshot": "swarm/engines/memory.py",
+        "sha256": "86c91e49a511ee30f961d546ff152904ffa0ba6603b28810fed555f01a45ef37"
+      },
+      {
+        "snapshot": "swarm/engines/modes.py",
+        "sha256": "bc1e0527f1d41827fe5104332d1f6b5f795c01880d8407c20ab29c32ef96f4b7"
+      },
+      {
+        "snapshot": "swarm/engines/prospector.py",
+        "sha256": "b1f65682a7414762e9815d0eee937f755acdf3068f26ffeb8256b8f14f31a8fa"
+      },
+      {
+        "snapshot": "swarm/engines/run.py",
+        "sha256": "c8ec56189ff640d9484acce2665df71469d7687e8e2573c0859941ee12a294e6"
+      },
+      {
+        "snapshot": "swarm/engines/specs.py",
+        "sha256": "2b247f3a6661f53daf8c1024bc2f5936f8da21cd6f83f46d50321b3446ac8364"
+      },
+      {
+        "snapshot": "swarm/engines/__init__.py",
+        "sha256": "4d0b81f623654ac36e35dedf78b6b93c9574207f1e7c554c6a3ed9320144c324"
+      },
+      {
+        "snapshot": "swarm/providers/base.py",
+        "sha256": "f7d02a3b617ed6f5650fe46225bbe4c4843129b7f6d9bdcbeec40e2fff611567"
+      },
+      {
+        "snapshot": "swarm/providers/cohere.py",
+        "sha256": "f6761985c48ae367bd8ef1a11b36c5e75715fa4fe0cd6af22afd4f5848deb223"
+      },
+      {
+        "snapshot": "swarm/providers/gemini.py",
+        "sha256": "6af80fb92e46a491ec2afe1814ea10b432a21b924506d878f6489d73a8b32010"
+      },
+      {
+        "snapshot": "swarm/providers/huggingface.py",
+        "sha256": "7351edfe1a90203af2248454160a14af4109bcba6bc0f0652276ac9167d7d569"
+      },
+      {
+        "snapshot": "swarm/providers/openai_compat.py",
+        "sha256": "5c68b7ede74aa6f1b58546eab911a85b7c94e620a0c54a9ab86f7aff1bf35042"
+      },
+      {
+        "snapshot": "swarm/providers/__init__.py",
+        "sha256": "4260caeeb4ad9ea112d5a0bcf7c1571824501b5b37383f75587711911ded46b6"
+      },
+      {
+        "snapshot": "swarm/transport/http.py",
+        "sha256": "59b2498b2b95297de4cac5971d9fbcd283957220689e60503168107e610994ca"
+      },
+      {
+        "snapshot": "swarm/transport/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/accounting.py",
+        "sha256": "db49682b6cc1c095a4cbf53ec2ead9c21b00b5c9dab35933d618ff8567684949"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/availability.py",
+        "sha256": "45887eba84b49c1bca4054079b109252380bb14a90598b9218d8b0d8f4b446ab"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/bindings.py",
+        "sha256": "f1b87ccb73a5696514a1859f431e93b080c689d532ed6c117a7f10e75261ddbe"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/brain.py",
+        "sha256": "ef29fac05a34029cdb428324ab401f054f45322b448c3779babf74374d04b9a0"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/checkpoint.py",
+        "sha256": "b14261ffccd5bd0d5784f826880e44376ff11ad1690e476214ead26b7fcf4655"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/computer_use.py",
+        "sha256": "fc744d6c6591fc3f28befd09fe119963cdf6f318d45d40cf55c4a6065801ec26"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/contextmap.py",
+        "sha256": "17cd87a572d2ef82295d97d6c9b3da4bb5531a802d0d98323245d78ee16a9e7f"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/devspace.py",
+        "sha256": "f386c89a41d7969999fa5736e3acb3dd3d669108081b8f3b9892c72f6a26cb3b"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/dispatcher.py",
+        "sha256": "c68bb3b0b6eb3f52fb195e029acaa9565c2a3bfb87f8f3919e1a85ad4cd98348"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/effects.py",
+        "sha256": "9fadc88bf7a4846d175c2485dfe25173a0325bd5ce40df9cfcb561794808aedb"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/fleet.py",
+        "sha256": "03cda3a5f553c76890db8514b3293351f8de9fb947ddad675cff268c15894378"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/gate.py",
+        "sha256": "135378ecb72830a85e3ac5974d6e234d399af961edcb144e6aa47360948d007b"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/harnesses.py",
+        "sha256": "b95c804cce87d55c3e4107320491171049101b447250969d0db2f703661d1ed7"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/ledger.py",
+        "sha256": "09beec44a7c857ab4c5d1a989f6ce327fee5913d6c31b8070937f41e362f110f"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/memory.py",
+        "sha256": "d541f85e2c71dd88dfd9ef306cf7f7ed7f13535ad0aac731135bdc9e03073311"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/models.py",
+        "sha256": "0637800b46ddca24802fa6e951780cf802d828fc48039532b5bd5245d1d5ae90"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/notifications.py",
+        "sha256": "1dd5f1b980354e7ac1cf4263c237be019f82d65b16e0b7de0262e512f701bb8b"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/orchestration.py",
+        "sha256": "d58b05ccec0351a1afa6b931aec8fa48a0a31cc641397385c5fb3a67bd63f1c0"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/presets.py",
+        "sha256": "3a9080bebb9d93443bfb7b664d4cd4eb352e0130d67dd3b054f846e1f1b2abf6"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/preset_manager.py",
+        "sha256": "9ec44d5c0fa656cc18be0ead3c46d63f6953dab3e822295ca80a71aaf72c4fad"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/project_artifacts.py",
+        "sha256": "85bd2bab00aca396a3c255fa225df403f596fb4a3e0987de034249aa4f8965e3"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/project_devspace.py",
+        "sha256": "8ec33e41e92c9f9a160a2b36839e9f02ea66e80f7299e3700e1376e90adc2def"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/project_runtime.py",
+        "sha256": "e43f3431009205f985fc68cc2299526028b0fcd123bffff7fb2c19bdca9dbe3d"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/readiness.py",
+        "sha256": "c17abdeede55d29dcb7397242e8625162a3463061892d242239d25f2e665d010"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/router.py",
+        "sha256": "1d3a97241465950353aba3b4d5954ebcb31a6c2c880bdf33d57779b00295eff3"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/sandbox.py",
+        "sha256": "d7a32e1d09bcf328b74616e9181123bb0a2b269bc60a2aa6cd7627dd6964dba6"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/sandbox_team.py",
+        "sha256": "c251dd1a7ecaff7ed5fa4781d665c83c91400a0adebe2299cf70bb23cc7afe8a"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/schedule.py",
+        "sha256": "7d91373a0f077490e1669a842535ed85188e7a427586faa2347a40d5cf3e98b5"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/scope.py",
+        "sha256": "f664a09f22a9dcc4c904b22d62f7d06a6b83f1632f8c4897afdb1b5ed7641481"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/session_computer.py",
+        "sha256": "ab454293f7ba519936311ec820dcb969043fc6edab2a2682234f22cc53ed184d"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/skills.py",
+        "sha256": "561672133a389198bdff6d0f8f2c756e07423c2eb9a4278e17484055c7e1cf94"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/store.py",
+        "sha256": "e3748adea2d9bbf117084d0c68003a4cfe1932dbc9cb288f3473a0cacc2c9361"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/team.py",
+        "sha256": "1c3ded12115e6c671ef0610e1482c56a416722eeae15e3265137bf8ed7e2040e"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/trace.py",
+        "sha256": "9d5550b4894fcf035273042c1194b3b57f709b2d47f287eab8b860874a550943"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/web.py",
+        "sha256": "8d796cb2032c4b5abb939a62771f51d93fe3a62e6447696157e0d8b73c163786"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/windows_host.py",
+        "sha256": "7def52f22d4a43c93b127a9e520147218b84f55d9902db2bf313725b6f99f2f2"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/writes.py",
+        "sha256": "72b86a3f14308a1ce69981b53c3b2195668847d7b700cd3ff12203138c0e7e85"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/__init__.py",
+        "sha256": "1de00a6ff75496eaead328fa5550bb4f60a6d8cac1e87bcc7c2bafbf43078051"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/__main__.py",
+        "sha256": "cff9c77faa071cbf582390a7be335d5d6fb181e2402cb31b0d64dd63c789fa52"
+      },
+      {
+        "snapshot": "dispatch-src/orch/capabilities.py",
+        "sha256": "1a88ecf31febb2097ec05ac38c04bc75e3745d22f6e87f334da2eb91d2cae044"
+      },
+      {
+        "snapshot": "dispatch-src/orch/config.py",
+        "sha256": "4492f6386a107d8c336b1e5ea69290cb419cf0bc41b6eaa3c9f9f9ae6b7de8e0"
+      },
+      {
+        "snapshot": "dispatch-src/orch/config_io.py",
+        "sha256": "18579ee914f16f7ce14de949b515e01d6dd711cfc2dc7939c4513fc6b6600b62"
+      },
+      {
+        "snapshot": "dispatch-src/orch/console.py",
+        "sha256": "83034f07e8dc09268900b38e22a87288b2cc4d6a8e4b2c61b54327f885d7e367"
+      },
+      {
+        "snapshot": "dispatch-src/orch/env.py",
+        "sha256": "32c17682cdb2f044b7a7ceef307ddac9e4c8c05523902842b541ba3641877141"
+      },
+      {
+        "snapshot": "dispatch-src/orch/events.py",
+        "sha256": "f130061e3229cef7f0b817cc13d2d6492a4d357fe2a4f70dd1ce09e3f9a41e72"
+      },
+      {
+        "snapshot": "dispatch-src/orch/gates.py",
+        "sha256": "a19d41038c4669d6e3c6c2588c27ffe4b9fd525eb3b0efec634859244f8ce4d1"
+      },
+      {
+        "snapshot": "dispatch-src/orch/inspector.py",
+        "sha256": "e4929b00e3ad1e47963526dfbea500c592d6b19cf0d60c099423af1d0b574bd1"
+      },
+      {
+        "snapshot": "dispatch-src/orch/kernel.py",
+        "sha256": "620ba39bd4094d0c8f29bc373484f09e79ec74ce0f2d5f302e9fe06aa446a756"
+      },
+      {
+        "snapshot": "dispatch-src/orch/modes.py",
+        "sha256": "9996cff5fdad8f05f6def51d959d9c315d0b07d3964d661bbfab8abea824519f"
+      },
+      {
+        "snapshot": "dispatch-src/orch/parallel.py",
+        "sha256": "695b61ae3cb5a01efb0a2e362e81743e76f5baa737dfe0ff18d3eff384f13f00"
+      },
+      {
+        "snapshot": "dispatch-src/orch/qualify.py",
+        "sha256": "b0a3fc9a01f4874d9ee4942aff88542e31d09635f3a326c33d7c11ad3d6a23dd"
+      },
+      {
+        "snapshot": "dispatch-src/orch/registry_mgmt.py",
+        "sha256": "acf9174321c7218a380cdf27cbc185c1022baf2f9f773d7ee58e38bd5fe12165"
+      },
+      {
+        "snapshot": "dispatch-src/orch/router.py",
+        "sha256": "c0a563fad0042ab216a9a36046f66ec15e1b7c24e93648c3d9b5498b18b78a68"
+      },
+      {
+        "snapshot": "dispatch-src/orch/sandbox.py",
+        "sha256": "4bec3c1850e41e846beb021fc44bd49066ef3c045716d868c83613c22e59c3d8"
+      },
+      {
+        "snapshot": "dispatch-src/orch/store.py",
+        "sha256": "706d12b44bb5bb7f80949b912724302b4c1261c75b4929220455eaa6fba912e3"
+      },
+      {
+        "snapshot": "dispatch-src/orch/synthesis.py",
+        "sha256": "b506051a3893d98cb59bf241f74938e24c995a3c650c29043a258dc3dba68753"
+      },
+      {
+        "snapshot": "dispatch-src/orch/task_graph.py",
+        "sha256": "5de75274ec13539f3d98ac0f96e1a8326812a08b1cc0a2ff72959f7eeb90519d"
+      },
+      {
+        "snapshot": "dispatch-src/orch/__init__.py",
+        "sha256": "aba8cc4f391663733b32f95d711bf2b5f2754eb1366aa111335adeefe0a9e706"
+      },
+      {
+        "snapshot": "dispatch-src/orch/adapters/base.py",
+        "sha256": "aa9f832227d69af5c3a1e3554eee8a67ac330073d2e9cec44e8cfce15581d56d"
+      },
+      {
+        "snapshot": "dispatch-src/orch/adapters/claude_code.py",
+        "sha256": "a9a08444d6688a521d69617f7487c73579c501c72520d37356e90fb87a679842"
+      },
+      {
+        "snapshot": "dispatch-src/orch/adapters/deterministic.py",
+        "sha256": "6a011759c65f00d27eaf16715739a7b6c42833da66406f02a485931dc2f219c0"
+      },
+      {
+        "snapshot": "dispatch-src/orch/adapters/glm.py",
+        "sha256": "b358cf1a516f3ad0aa27093ed47feb6f565fe6da2300c8c2c7b712f6c1376e74"
+      },
+      {
+        "snapshot": "dispatch-src/orch/adapters/__init__.py",
+        "sha256": "b84bc865acd36e5bd1fd057084a9926a657c908d82a19d61e55e9a03ec4e6258"
+      },
+      {
+        "snapshot": "dispatch-src/orch/content/assets.py",
+        "sha256": "bdb5316d221067e1a21a2beee95b4afc9b9e196747626691e86b1a51d6a95cfd"
+      },
+      {
+        "snapshot": "dispatch-src/orch/content/brief.py",
+        "sha256": "37716d30cbf3c00d3571fd516bb75ea987018979df13d847db9598e89bad8b47"
+      },
+      {
+        "snapshot": "dispatch-src/orch/content/content_gates.py",
+        "sha256": "d001e839330abc491873ea8855efd493a8fa25bacf5f6d3815bc17c671d099f0"
+      },
+      {
+        "snapshot": "dispatch-src/orch/content/export.py",
+        "sha256": "1baeb84bedf9da5af10dd76e3e2b7b349996976fed51d049d68816278113115d"
+      },
+      {
+        "snapshot": "dispatch-src/orch/content/manifest.py",
+        "sha256": "455c88072008226c037dc520d2df73737609167abbcf410434c44dd8cf56b0a7"
+      },
+      {
+        "snapshot": "dispatch-src/orch/content/pipeline.py",
+        "sha256": "1449f4b183396939c8b6b0a724c73ff4fd445119ac8562731a7b877c7468561e"
+      },
+      {
+        "snapshot": "dispatch-src/orch/content/preview.py",
+        "sha256": "2f75553b86c2a113a58f3a8c2c1b254a430a5b19b111e47e6dc4dd432dc68a20"
+      },
+      {
+        "snapshot": "dispatch-src/orch/content/proposal.py",
+        "sha256": "f43a3c1146abca2fccf0ea3fba3980586cddde934234a2c6b9692bd0179c6774"
+      },
+      {
+        "snapshot": "dispatch-src/orch/content/render.py",
+        "sha256": "6b578403373929ddb4479151a36cc4dac8a4711770469f48f9f2285e0c4fffbb"
+      },
+      {
+        "snapshot": "dispatch-src/orch/content/script.py",
+        "sha256": "9b35c5dc342a8b6bd146c41f0d69730cecb99662bb31db32195c155e5d26ad8b"
+      },
+      {
+        "snapshot": "dispatch-src/orch/content/storyboard.py",
+        "sha256": "d32bb79c44445a2b3362db18afa4c2c4f1292d5d024a77a37f32ef726557610e"
+      },
+      {
+        "snapshot": "dispatch-src/orch/content/validation.py",
+        "sha256": "87f45d24382e249c96b0dd632e8a6ff91fc0031a4d793ddac2e6faf98e73d09d"
+      },
+      {
+        "snapshot": "dispatch-src/orch/content/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "snapshot": "dispatch-src/orch/context/changes.py",
+        "sha256": "2983a35bdf4a6590e27f5abd799ed6e5a099db90964cac7c6a83011b4350335c"
+      },
+      {
+        "snapshot": "dispatch-src/orch/context/graph.py",
+        "sha256": "eaf0ac15caf509965ed5ddd3d6bc492247ed27b6d4532ee410d56ada4a6e6054"
+      },
+      {
+        "snapshot": "dispatch-src/orch/context/index.py",
+        "sha256": "c2d84b9ed8bfe0842a452e92f138401516261015bcadeb2e74026adbf166d8b3"
+      },
+      {
+        "snapshot": "dispatch-src/orch/context/render.py",
+        "sha256": "f3984325ca977d31d1c7548ed66e93fd3370b7c66da44f6b92747b6a3e5966cf"
+      },
+      {
+        "snapshot": "dispatch-src/orch/context/retrieval.py",
+        "sha256": "2b808cd3eed7331c8c8fbf552c9780c896a679c0e07503e1f48b5cb5f4007892"
+      },
+      {
+        "snapshot": "dispatch-src/orch/context/workspace.py",
+        "sha256": "d436def7993c560cf1137f05d555669d4f42dc1e8598719a2723d56d21579fd1"
+      },
+      {
+        "snapshot": "dispatch-src/orch/context/__init__.py",
+        "sha256": "5a378f3b70a7fc60bde3fcb389bfa5ab03b2ba686be45245474e2abdf68fd401"
+      },
+      {
+        "snapshot": "dispatch-src/orch/context/__main__.py",
+        "sha256": "d559922bdd93bfccd748d14e202f5132ff0640d3a7268341a62adf4adfbd2e8d"
+      },
+      {
+        "snapshot": "dispatch-src/orch/eval/canary.py",
+        "sha256": "8d49ed12665ad0d25cadc09848855a423ac2716142c6d52d1befde5ec3175064"
+      },
+      {
+        "snapshot": "dispatch-src/orch/eval/comparison.py",
+        "sha256": "baba9ee6d6a33a1b1dbda4c90cde87517a6a963f7df1b525cf0aca5bbb31068e"
+      },
+      {
+        "snapshot": "dispatch-src/orch/eval/contract.py",
+        "sha256": "b393af3bd3fd18d9cf8be4d2b9ab55950080823130ec7feb1966bae56284669d"
+      },
+      {
+        "snapshot": "dispatch-src/orch/eval/evaluation.py",
+        "sha256": "85b1849b57ed6ffa4004bbd2effcb250efc153bc43454ead1bb3704bbbff5659"
+      },
+      {
+        "snapshot": "dispatch-src/orch/eval/eval_gates.py",
+        "sha256": "993502264cb30fc9bc7fa102955170e73946fede5baaaaf32af3f7a87e60a2fa"
+      },
+      {
+        "snapshot": "dispatch-src/orch/eval/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "snapshot": "dispatch-src/orch/writes/apply.py",
+        "sha256": "2f491fdef94a7cbbe9b1218920edb8864c8c4a1f0dd6800ba2534c1c4085b1c0"
+      },
+      {
+        "snapshot": "dispatch-src/orch/writes/code_validator.py",
+        "sha256": "e944c3fbecd2ff712ac7b4744b00b6cd0cfa2fed5b2e82d98369ee5f7ed7259a"
+      },
+      {
+        "snapshot": "dispatch-src/orch/writes/diff.py",
+        "sha256": "11839b12f6ff12a0d48cc15db28583454361fa11d9cc07af0f24ce9d963f672a"
+      },
+      {
+        "snapshot": "dispatch-src/orch/writes/gate.py",
+        "sha256": "06e6e2964b016f36f2608d1aeb230506d5a97ce267c7b606f83504588b0b3c3f"
+      },
+      {
+        "snapshot": "dispatch-src/orch/writes/lease.py",
+        "sha256": "e5ca5d76d31d4fdb18cb47393f11f9bb8a9df560e8949b258f547ec56b6a0f10"
+      },
+      {
+        "snapshot": "dispatch-src/orch/writes/patch.py",
+        "sha256": "a10f08e8f1bab0fe45bef0ca0e1890e94fc3bfcaa98182c55c46b11e1a5f941b"
+      },
+      {
+        "snapshot": "dispatch-src/orch/writes/reindex.py",
+        "sha256": "f898046ae7b8493e95e96a4d34c5ff3b4c40d4a73b00b49ccb1d0217405fb62e"
+      },
+      {
+        "snapshot": "dispatch-src/orch/writes/validator.py",
+        "sha256": "6a5cc84ebad2bd2c1f40c883306675936d58fd88bf2d825daba34f1a2dc442b2"
+      },
+      {
+        "snapshot": "dispatch-src/orch/writes/worktree.py",
+        "sha256": "f72e61d003bcf254a8f87e3b6d35cdd5ca8a937f01a65008cde4d01db3b4a8e8"
+      },
+      {
+        "snapshot": "dispatch-src/orch/writes/__init__.py",
+        "sha256": "7efdf42aeaf73277fada6be51f48a5c930e4f65590fc0bf3591c591c839ed7d1"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/workers/base.py",
+        "sha256": "e5f5c24ab65ac60b2227d0e3db8f3135bb0ff0de46cbbecf97cc3bccdbffcc2b"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/workers/claude_code.py",
+        "sha256": "814b0f03e3886351e8df46234b58d17305d14e743077f6e6c4255693b69c0e0b"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/workers/codex.py",
+        "sha256": "9a60417d4806469af02648379df2c73d9ec3d177550958c4885f2c00334faf17"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/workers/glm.py",
+        "sha256": "17f81b293491188272a83ebf4b1043afc862a29f7196e845b1ee852e25083bce"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/workers/hermes.py",
+        "sha256": "2cd81512dbc83cd21a453df2c70753391714d72e0fd91a6333d70f2dcdef535c"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/workers/model_catalog.py",
+        "sha256": "90ee7a25e07f413e78d1f8d7763b5c60a42532e0288c59257c3dd8ea9ae49ac6"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/workers/openclaw.py",
+        "sha256": "3531a7cc393d5864375b05ed2eaad9682537f87db48428998ef43f37f04a476d"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/workers/process.py",
+        "sha256": "497f8255b824cac62bf77da6c367c927124970e09d5433b5639a5198f3015ad1"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/workers/swarm_pool.py",
+        "sha256": "b0e7f1de011e8d2e12f7b40a5151317a93e45affa96e1dd5754671086173f263"
+      },
+      {
+        "snapshot": "dispatch-src/dispatch/workers/__init__.py",
+        "sha256": "75437860fba1fc6a27bb874a52b7637cb347ae0c288639072cd6b85039d9d720"
+      },
+      {
+        "snapshot": "tests/test_package.py",
+        "sha256": "fefdac0e41c5777167cedf3608c96e4f769e8bfe0cdf93c6eddc5d0c44d2ca7f"
+      },
+      {
+        "snapshot": "tests/test_prospector.py",
+        "sha256": "2d3752a3aa4d79e00a947773d910a006f76910ecda7342f45557bafea5306337"
+      },
+      {
+        "snapshot": "tests/test_swarm_pool.py",
+        "sha256": "b61d5e48a762f7afe60246a0dc98d76866538e8f957ee3ab564a8891c06c9038"
+      }
+    ]
+  },
+  "evidence_sha256": {
+    "stage.py": "ba2a4d1ced7785a84406e9de109a334b69aed3f4b03179d63051eec1a99835cc",
+    "run-tests.py": "eb1406ac35f6a16d7cce57a660ef3574a3f8d5b3fd78fb39a36ea78b30ece22a",
+    "regression-probes.py": "f27522960ed595d40eebf6baf3dd09401eb9b61685bc6ee0459ffbccba51a6df",
+    "regression-probes.json": "5956570eacdcbace5981865a5182f252daa3b4f59cfb491be4d0e24e24484baa",
+    "upstream-tests-meta-swarm.json": "1393d5ce8425d92898eadc33072a8186213a226c0b6e7d985b339db38cfef698",
+    "upstream-tests-meta-dispatch.json": "f573eb8f63d52aa221c94ae2835300768decc7b21d321591cee3f2f7a9949189",
+    "credential-metadata.py": "b6706dc5b720a283e43841c0a0ec4aafb68d4639ecbfb23af87636a65a341cb7",
+    "credential-metadata.json": "f335c020c689e144ab6f7694701c9ed66df5b23f892250f7adbbdd89ffae3daa",
+    "metadata-auth.py": "33841292223a5037795678406e9b30f57c377cbe48e95a0e24ec10ade3b4a722",
+    "metadata-auth.json": "911b88a826c1b174ea9fb6030a566f41cd73d280f01dad6f8d9cf04759135b38",
+    "metadata-followup.py": "6a8ca58be3d0a2d01a37fd860c89b28abafe4c52079fc561ad7a5e454a9bded4",
+    "metadata-followup.json": "adcedcc88bebc906cdf1b021302cf5437253ffe8995f3a2977b422dc8747655a",
+    "extra-free-account.py": "aec12b9238e5dd60dd6e9982fa5690ec8404e185a830a689f64e5e03050bae29",
+    "extra-free-account.json": "5f4b395e73181531bc4bed9dc4b315deb6735c1cd61af002457d0a349408efab"
+  },
+  "implementation_admission": "not ready; eight reproduced defect groups remain unfixed",
+  "further_surfaces": [
+    "bounded coding/text tasks",
+    "public-data embeddings and reranking",
+    "optional authorized cloud transcription",
+    "bounded vision/OCR checks",
+    "source-grounded research extraction"
+  ],
+  "provider_doc_sources": [
+    "https://ai.google.dev/gemini-api/docs/rate-limits",
+    "https://ai.google.dev/gemini-api/docs/billing",
+    "https://ai.google.dev/gemini-api/docs/pricing",
+    "https://console.groq.com/docs/rate-limits",
+    "https://console.groq.com/docs/speech-to-text",
+    "https://console.groq.com/docs/vision",
+    "https://inference-docs.cerebras.ai/support/rate-limits",
+    "https://docs.mistral.ai/admin/billing-usage/usage-limits",
+    "https://docs.cohere.com/v1/docs/rate-limits",
+    "https://huggingface.co/docs/inference-providers/main/pricing"
+  ],
+  "documented_changes": {
+    "cerebras": "time/credit-bounded trial; no permanently renewing free tier",
+    "huggingface": "opened current page: free users receive no included Inference Providers credits"
+  },
+  "production_source_unchanged": true,
+  "production_secrets_or_gateway_changed": false,
+  "source_backup_modified": false,
+  "archived_credentials_imported": false,
+  "permanent_services_started": false,
+  "external_review": false,
+  "claude_inference": false,
+  "full_aos_test_repeated": false,
+  "retained_non_green_attempts": [
+    "class replacement prevented asyncio collection",
+    "combined-suite missing-package fixture conflict",
+    "eight regression methods / fourteen assertions"
+  ],
+  "limits": [
+    "Metadata does not establish free/trial eligibility or quota owner for every provider",
+    "Cerebras/Groq403 responses do not establish invalid credentials",
+    "One real recovered-account task is not a complete provider-pool benchmark",
+    "No restored native delegation or new modality implementation is claimed"
+  ]
+}

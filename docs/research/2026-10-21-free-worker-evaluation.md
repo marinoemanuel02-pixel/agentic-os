@@ -1,5 +1,11 @@
 # Free-worker usefulness and delegation coverage
 
+**Later same-day update:** the supplied external drive identified the user's actual `swarm v2`
+and its earlier orchestration adapter. The [recovery assessment](2026-10-21-swarm-recovery.md)
+supersedes the repository-identity unknown below and records fourteen archived credential slots,
+current authentication, an independent live free-account check and reproduced defects. The original
+evaluation below remains the earlier current-machine evidence.
+
 21 October 2026, Europe/Rome. Check the existing OpenRouter/OmniRoute route and identify the
 operator's separately mentioned swarm with rotating free LLM keys. No production behavior was
 changed, Claude inference used, paid trial invoked, or new provider connected.
