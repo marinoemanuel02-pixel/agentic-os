@@ -4712,6 +4712,40 @@ Describe 'coordination tuning safety' {
         Test-Path -LiteralPath (Join-Path $outside 'output.txt') | Should -BeFalse
     }
 
+    It 'accepts only cloud-sync placeholders among reparse points and still rejects real links' {
+        # OneDrive Files On-Demand marks every synced file ReparsePoint (tag 0x9000a01a) with an empty LinkType.
+        Set-Content -LiteralPath (Join-Path $repo 'cloudfile.txt') -Value 'x'
+        Mock Get-Item -ModuleName aos -ParameterFilter { $LiteralPath -like '*cloudfile.txt' } {
+            [pscustomobject]@{ Attributes = [IO.FileAttributes]'Archive, ReparsePoint'; LinkType = $null }
+        }
+        Mock Test-AosCloudReparse -ModuleName aos { $true }
+        { InModuleScope aos -Parameters @{ R = $repo } { param($R) Resolve-AosTaskFile $R 'cloudfile.txt' } } | Should -Not -Throw
+        Mock Test-AosCloudReparse -ModuleName aos { $false }
+        { InModuleScope aos -Parameters @{ R = $repo } { param($R) Resolve-AosTaskFile $R 'cloudfile.txt' } } | Should -Throw '*through a link*'
+        Mock Get-Item -ModuleName aos -ParameterFilter { $LiteralPath -like '*cloudfile.txt' } {
+            [pscustomobject]@{ Attributes = [IO.FileAttributes]'Archive, ReparsePoint'; LinkType = 'SymbolicLink' }
+        }
+        Mock Test-AosCloudReparse -ModuleName aos { $true }
+        { InModuleScope aos -Parameters @{ R = $repo } { param($R) Resolve-AosTaskFile $R 'cloudfile.txt' } } | Should -Throw '*through a link*'
+    }
+
+    It 'reads reparse tags directly and recognizes only the cloud-files family' {
+        $outside = New-TestFolder (Join-Path $caseRoot 'outside-tag')
+        Set-Content -LiteralPath (Join-Path $repo 'plain.txt') -Value 'x'
+        $link = Join-Path $repo 'linked-tag'
+        & cmd /c mklink /J "$link" "$outside" | Out-Null
+        InModuleScope aos -Parameters @{ F = (Join-Path $repo 'plain.txt'); L = $link } {
+            param($F, $L)
+            Get-AosReparseTag $F | Should -Be 0
+            Get-AosReparseTag (Join-Path $F 'missing') | Should -Be 0
+            Get-AosReparseTag $L | Should -Be 2684354563    # IO_REPARSE_TAG_MOUNT_POINT 0xA0000003
+            Test-AosCloudReparse $F | Should -BeFalse
+            Test-AosCloudReparse $L | Should -BeFalse
+            foreach ($tag in @(2415919130, 2415960090, 2415980570)) { Test-AosCloudReparseTag ([uint32]$tag) | Should -BeTrue }    # CLOUD, OneDrive 0x9000A01A, CLOUD_F
+            foreach ($tag in @(0, 2684354563, 2684354572, 2415919132, 2147483667)) { Test-AosCloudReparseTag ([uint32]$tag) | Should -BeFalse }    # none, mount point, symlink, ProjFS, dedup
+        }
+    }
+
     It 'stores a missing dependency but reports it not ready and refuses to start' {
         $null = Add-TuningTask 'child' @{ depends_on = @('absent-parent') }
         InModuleScope aos { Get-AosTaskRecord -Id 'child' } | Should -Not -BeNullOrEmpty
@@ -4924,6 +4958,44 @@ Describe 'coordination tuning events' {
             Set-AosRunState -Id waitmetric -State waiting-input | Out-Null
             Set-AosRunState -Id waitmetric -State running | Out-Null
             (Get-AosRunState waitmetric)['waiting_seconds'] | Should -BeGreaterOrEqual 3
+        }
+    }
+    It 'does not add the local UTC offset to a wait read back from the stored stamp' {
+        # PowerShell 7 reads the persisted ISO stamp back as a DateTime; a wait of 5 s once recorded 7205 s at UTC+2.
+        InModuleScope aos {
+            foreach ($format in @('yyyy-MM-ddTHH:mm:ssZ', 'o')) {
+                $id = 'waitoffset' + $format.Length
+                Reserve-AosActor -Id $id -Vendor codex -Task event-task | Out-Null
+                Set-AosRunState -Id $id -State waiting-input | Out-Null
+                $r = Get-AosRunState $id
+                $r['waiting_since'] = (Get-Date).ToUniversalTime().AddSeconds(-5).ToString($format, [System.Globalization.CultureInfo]::InvariantCulture)
+                Write-AosCoordJson (Join-Path (Get-AosCoordDir) "delegations/$id/run.json") $r
+                Set-AosRunState -Id $id -State running | Out-Null
+                $waited = (Get-AosRunState $id)['waiting_seconds']
+                $waited | Should -BeGreaterOrEqual 5
+                $waited | Should -BeLessThan 60
+            }
+        }
+    }
+    It 'measures elapsed time exactly from stamps and DateTime values of any kind, whatever the culture' {
+        InModuleScope aos {
+            $now = [DateTime]::new(2026, 10, 22, 6, 0, 5, 250, [DateTimeKind]::Utc)
+            $then = $now.AddSeconds(-5)    # 06:00:00.250 UTC
+            $invariant = [System.Globalization.CultureInfo]::InvariantCulture
+            $whole = $then.ToString('yyyy-MM-ddTHH:mm:ssZ', $invariant)    # as persisted: no fraction
+            $cases = @(
+                $then.ToString('yyyy-MM-ddTHH:mm:ss.fffZ', $invariant), $then.ToString('o', $invariant), $then,
+                $then.ToLocalTime(), [DateTime]::SpecifyKind($then, [DateTimeKind]::Unspecified))
+            $saved = [System.Globalization.CultureInfo]::CurrentCulture
+            try {
+                foreach ($culture in @('en-US', 'th-TH')) {    # th-TH defaults to the Buddhist calendar
+                    [System.Globalization.CultureInfo]::CurrentCulture = [System.Globalization.CultureInfo]::GetCultureInfo($culture)
+                    foreach ($value in $cases) { [Math]::Abs((Get-AosElapsedSince $value $now) - 5.0) | Should -BeLessThan 0.0001 }
+                    [Math]::Abs((Get-AosElapsedSince $whole $now) - 5.25) | Should -BeLessThan 0.0001
+                }
+            } finally { [System.Globalization.CultureInfo]::CurrentCulture = $saved }
+            Get-AosElapsedSince 'not a stamp' $now | Should -Be 0
+            Get-AosElapsedSince $now.AddSeconds(60) $now | Should -Be 0
         }
     }
     It 'correlates steering with the active normalized turn and clears it on completion' {

@@ -283,6 +283,18 @@ function Get-AosTaskInbox {
     })
 }
 
+function Get-AosElapsedSince($Stamp,[DateTime]$Now=[DateTime]::UtcNow) {
+    # PowerShell 7 reads a stored ISO stamp back as a DateTime. Normalize its kind directly: going through text would shift it
+    # by the local UTC offset, drop fractions and depend on the culture's calendar.
+    if ($Stamp -is [DateTime]) {
+        $since=$Stamp
+        if ($since.Kind -eq [DateTimeKind]::Unspecified) { $since=[DateTime]::SpecifyKind($since,[DateTimeKind]::Utc) }
+        $since=$since.ToUniversalTime()
+    } else { $since=ConvertFrom-AosUtcStamp ([string]$Stamp) }
+    if (-not $since) { return 0.0 }
+    return [Math]::Max(0.0,($Now.ToUniversalTime()-$since).TotalSeconds)
+}
+
 function Get-AosRunState([string]$Id) {
     Assert-AosCoordId $Id
     $path=Join-Path (Join-Path (Join-Path (Get-AosCoordDir) 'delegations') $Id) 'run.json'
@@ -307,8 +319,7 @@ function Set-AosRunState {
         }
         if (-not $run.Contains('waiting_seconds')) { $run['waiting_seconds']=0.0 }
         if ($run['waiting_since'] -and $State -ne 'waiting-input') {
-            $since=[DateTime]::Parse($run['waiting_since']).ToUniversalTime()
-            $run['waiting_seconds']=[Math]::Round(([double]$run['waiting_seconds']+[Math]::Max(0,([DateTime]::UtcNow-$since).TotalSeconds)),4)
+            $run['waiting_seconds']=[Math]::Round(([double]$run['waiting_seconds']+(Get-AosElapsedSince $run['waiting_since'])),4)
             $run['waiting_since']=''
         }
         if ($State -eq 'waiting-input' -and -not $run['waiting_since']) { $run['waiting_since']=Get-AosUtcStamp }

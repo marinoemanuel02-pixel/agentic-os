@@ -11,6 +11,49 @@ function Get-AosTaskRecord([string]$Id) {
     return $row
 }
 
+function Get-AosReparseTag([string]$Path) {
+    # The reparse tag of an item, 0 when it is not a reparse point or cannot be read; PowerShell does not expose it.
+    if (-not ('AosReparseTag' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class AosReparseTag {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct FindData {
+        public uint Attributes;
+        public System.Runtime.InteropServices.ComTypes.FILETIME Created, Accessed, Written;
+        public uint SizeHigh, SizeLow, Tag, Reserved1;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string FileName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)] public string AlternateName;
+    }
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    static extern IntPtr FindFirstFileW(string name, out FindData data);
+    [DllImport("kernel32.dll")]
+    static extern bool FindClose(IntPtr handle);
+    public static uint Of(string path) {
+        FindData data;
+        IntPtr handle = FindFirstFileW(path, out data);
+        if (handle == new IntPtr(-1)) return 0;
+        FindClose(handle);
+        return (data.Attributes & 0x400) != 0 ? data.Tag : 0;
+    }
+}
+'@
+    }
+    $full=[IO.Path]::GetFullPath($Path)
+    if ($full.StartsWith('\\?\')) { }
+    elseif ($full.StartsWith('\\')) { $full='\\?\UNC\'+$full.Substring(2) }
+    else { $full='\\?\'+$full }
+    return [uint32][AosReparseTag]::Of($full)
+}
+
+function Test-AosCloudReparseTag([uint32]$Tag) {
+    # IO_REPARSE_TAG_CLOUD and CLOUD_1..CLOUD_F are 0x9000001A with the 0xF000 bits free; OneDrive Files On-Demand uses 0x9000A01A.
+    return (($Tag -band [uint32]4294905855) -eq [uint32]2415919130)
+}
+
+function Test-AosCloudReparse([string]$Path) { return (Test-AosCloudReparseTag (Get-AosReparseTag $Path)) }
+
 function Resolve-AosTaskFile([string]$Repo,[string]$Path) {
     if (-not $Path -or [IO.Path]::IsPathRooted($Path) -or $Path -match '[:\x00-\x1f]' -or
         @($Path.Replace('\','/').Split('/') | Where-Object { $_ -in @('','..','.git','.') }).Count) { throw 'unsafe relative task path' }
@@ -21,7 +64,11 @@ function Resolve-AosTaskFile([string]$Repo,[string]$Path) {
     foreach ($segment in $Path.Replace('\','/').Split('/')) {
         $part=Join-Path $part $segment
         if (Test-Path -LiteralPath $part) {
-            if ((Get-Item -LiteralPath $part -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'unsafe relative task path through a link' }
+            $item=Get-Item -LiteralPath $part -Force
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                # Only cloud-sync placeholders (OneDrive Files On-Demand) may be reparse points: they report no LinkType and carry a cloud tag. Everything else stays refused.
+                if ($item.LinkType -or -not (Test-AosCloudReparse $part)) { throw 'unsafe relative task path through a link' }
+            }
         }
     }
     return $full

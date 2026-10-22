@@ -3243,7 +3243,7 @@ function Invoke-AosDelegate {
         $waitRun=Get-AosRunState $id
         if ($waitRun) {
             $waiting=[double]$waitRun['waiting_seconds']
-            if ($waitRun['waiting_since']) { $waiting+=[Math]::Max(0,([DateTime]::UtcNow-[DateTime]::Parse($waitRun['waiting_since']).ToUniversalTime()).TotalSeconds) }
+            if ($waitRun['waiting_since']) { $waiting+=(Get-AosElapsedSince $waitRun['waiting_since']) }
             # Waiting is a measured subset of execution, not an additional phase to sum.
             $receipt.phase_seconds.waiting=[Math]::Round($waiting,4)
         }
