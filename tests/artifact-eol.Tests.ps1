@@ -17,6 +17,13 @@ BeforeAll {
     function ConvertTo-EolBytes([string]$Text, [string]$Eol) {
         return [System.Text.Encoding]::UTF8.GetBytes($Text.Replace("`r`n", "`n").Replace("`n", $Eol))
     }
+    # SHA-256 of a file's bytes in the manifest's own form (upper-case hex), without Get-FileHash, which is not
+    # resolvable in a Windows PowerShell child of PowerShell 7 that inherited its module path.
+    function Get-EolRawHash([string]$Path) {
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        try { return ([System.BitConverter]::ToString($sha.ComputeHash([System.IO.File]::ReadAllBytes($Path))) -replace '-', '') }
+        finally { $sha.Dispose() }
+    }
     # Manifest of one file, then the verdict for the repository as it is on disk now.
     function Get-EolManifest([string]$Repo, [string[]]$Files) {
         InModuleScope aos -Parameters @{ R = $Repo; F = $Files } { param($R, $F) @(Get-AosArtifactManifest $R $F) }
@@ -69,8 +76,8 @@ It 'keeps the raw sha256 field unchanged and adds a text hash only for text file
     Write-EolBytes (Join-Path $repo 'a.txt') (ConvertTo-EolBytes $text "`r`n")
     Write-EolBytes (Join-Path $repo 'b.bin') ([byte[]](0, 1, 2, 13, 10))
     $rows = Get-EolManifest $repo @('a.txt', 'b.bin')
-    $rows[0]['sha256'] | Should -BeExactly (Get-FileHash -LiteralPath (Join-Path $repo 'a.txt') -Algorithm SHA256).Hash
-    $rows[1]['sha256'] | Should -BeExactly (Get-FileHash -LiteralPath (Join-Path $repo 'b.bin') -Algorithm SHA256).Hash
+    $rows[0]['sha256'] | Should -BeExactly (Get-EolRawHash (Join-Path $repo 'a.txt'))
+    $rows[1]['sha256'] | Should -BeExactly (Get-EolRawHash (Join-Path $repo 'b.bin'))
     [string]$rows[0]['sha256_text'] | Should -Not -BeNullOrEmpty
     [string]$rows[0]['sha256_text'] | Should -Not -BeExactly $rows[0]['sha256']
     [string]$rows[1]['sha256_text'] | Should -BeNullOrEmpty
@@ -79,7 +86,7 @@ It 'keeps the raw sha256 field unchanged and adds a text hash only for text file
 It 'verifies a legacy row that holds only the raw hash of the LF bytes against a CRLF checkout' {
     $lfBytes = ConvertTo-EolBytes $text "`n"
     Write-EolBytes (Join-Path $repo 'a.txt') $lfBytes
-    $legacy = @([ordered]@{ path = 'a.txt'; sha256 = (Get-FileHash -LiteralPath (Join-Path $repo 'a.txt') -Algorithm SHA256).Hash })
+    $legacy = @([ordered]@{ path = 'a.txt'; sha256 = (Get-EolRawHash (Join-Path $repo 'a.txt')) })
     Write-EolBytes (Join-Path $repo 'a.txt') (ConvertTo-EolBytes $text "`r`n")
     Test-EolManifest $repo $legacy | Should -BeTrue
 }
