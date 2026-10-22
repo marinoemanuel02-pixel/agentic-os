@@ -2435,6 +2435,20 @@ function Invoke-AosGit([string]$Dir, [string[]]$Arguments, [int]$TimeoutSeconds 
     return [pscustomobject]@{ Code = $r.Code; Out = $r.Out.TrimEnd(); Err = $r.Err.TrimEnd() }
 }
 
+function Invoke-AosGitWithIdentity([string]$Dir, [string[]]$Arguments, [int]$TimeoutSeconds = 60) {
+    # Fill only missing identity fields for this command; never write git configuration.
+    $identity = @()
+    foreach ($field in @('name', 'email')) {
+        $configured = Invoke-AosGit -Dir $Dir -Arguments @('config', "user.$field")
+        if ($configured.Code -ne 0 -or [string]::IsNullOrWhiteSpace($configured.Out)) {
+            $fallback = 'aos-delegate'
+            if ($field -eq 'email') { $fallback = 'aos-delegate@localhost' }
+            $identity += @('-c', "user.$field=$fallback")
+        }
+    }
+    return (Invoke-AosGit -Dir $Dir -Arguments ($identity + @($Arguments)) -TimeoutSeconds $TimeoutSeconds)
+}
+
 #endregion
 #region claims ----------------------------------------------------------------------------
 
@@ -3472,7 +3486,7 @@ function Invoke-AosDelegate {
             if ($receipt.delegate -and $receipt.delegate.summary) { $summary = (($receipt.delegate.summary -split "`r?`n")[0]) }
             if ($summary.Length -gt 72) { $summary = $summary.Substring(0, 72) }
             $null = Invoke-AosGit -Dir $workdir -Arguments @('add', '-A')
-            $cm = Invoke-AosGit -Dir $workdir -Arguments @('commit', '-q', '-m', "delegate ${id}: $summary")
+            $cm = Invoke-AosGitWithIdentity -Dir $workdir -Arguments @('commit', '-q', '-m', "delegate ${id}: $summary")
             if ($cm.Code -eq 0) { $receipt.commit = (Invoke-AosGit -Dir $workdir -Arguments @('rev-parse', 'HEAD')).Out }
         }
     }
