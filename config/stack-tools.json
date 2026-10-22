@@ -1,5 +1,9 @@
 {
   "tools": {
+    "capabilities-local": {
+      "purpose": "This machine's explicit capability trial/admission registry; seed remains portable",
+      "command": ["{python}", "{repo}/tools/capability_watch.py", "--registry", "{home}/.aos/capability-watch/registry.json"]
+    },
     "rea": {
       "purpose": "Pinned REA with local Ghidra/JDK for copied static-analysis targets; no agent registration",
       "command": ["{python}", "{repo}/tools/capability_setup.py", "run", "rea"]

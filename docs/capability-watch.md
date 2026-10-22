@@ -10,8 +10,13 @@ capability catalogue retain their existing scopes.
 [`config/capabilities.json`](../config/capabilities.json) is the reviewed candidate list;
 [`config/capabilities.schema.json`](../config/capabilities.schema.json) is its JSON Schema.
 `validate` enforces the schema's used keywords and semantic constraints without installing a
-validator. All candidates start at `watch` or `ignore`; recommended tiers are priorities for
-future evaluation, not statements that the applications were installed or tested here.
+validator. The seed began at `watch` or `ignore`; later local trials are separate verification
+records. See [setup and commands](capability-setup.md) and [trial results](validation/2026-10-21-capability-setup.md)
+for this machine's seven pinned `sandbox` candidates and comparison adapter kept on `watch`.
+Those local evaluations live at `~/.aos/capability-watch/registry.json`, selected through
+`python tools/stack.py capabilities-local`. The repository seed remains portable and unverified;
+its statuses do not assert an installation or test on another machine. The existing global
+`--registry` option can select any separate reviewed registry explicitly.
 
 Each candidate records discovery time/sources, repository creation and functional-commit dates,
 release information, parent/fork provenance, license, Windows build/execution claims, interface
@@ -95,7 +100,7 @@ After a crash, confirm no process owns the lock before removing it; locks never 
 | [REA list](https://github.com/AIshihzong/awesome-reverse-engineer-anything) | README | Focused discovery; authorship/provenance needs original-source review. |
 | [REA cases](https://github.com/songshikang0111/awesome-REA-cases) | `INDEX.en.md` | Full case list, rather than counting maintenance commits. |
 | [Glama](https://glama.ai/mcp/reference/list-mcp-servers) | `https://glama.ai/api/mcp/v1/servers` | Recorded but disabled/blocked: API needs authentication; anonymous probe returned 401. No secret loading adapter is included. Use manual directory review. |
-| npm | `rea-agents/latest`, `logisheets/latest` | Package version separate from source release. |
+| npm | `rea-agents/latest`, `logisheets/latest`, `logisheets-mcp/latest` | Engine and MCP adapter versions are separate from source releases. |
 | PyPI | `audacity-mcp-server/json` | Optional, disabled until publishing identity/repo mapping is checked. Guessed `blender-agent-sdk` package returned 404 and was not configured. |
 | Original GitHub repositories | API metadata, raw README, latest release, explicit extra paths | Final source-review leads. No published release (404 on latest-release endpoint) is recorded as null; other fetch errors remain failures. |
 
@@ -150,8 +155,8 @@ execution or native plugins can exceed an application's apparent filesystem boun
 
 ## Recommended evaluation tiers
 
-These are reconciled research priorities, not additional installed software. Use the registry's
-per-candidate source and limitations before planning a trial.
+These are reconciled research priorities. The subsequent setup pass installed a bounded selection;
+use the registry's current verification records and limitations before planning a task.
 
 | Tier | Candidate | Acceptance / existing-route comparison |
 |---|---|---|
@@ -197,7 +202,9 @@ independent render inspection and permissions. Do not rank adapters by advertise
 9. Checkpoint, make a failed or stale edit, and verify rollback/uncertain completion behavior.
 10. Attach to a live Windows GUI, observe a human edit and enforce allowed output paths.
 
-No Blender benchmark or candidate application execution is claimed by implementing this registry.
+The registry implementation alone established no application behavior. The later
+[setup trial report](validation/2026-10-21-capability-setup.md) records the partial Blender comparison,
+actual executions, failures and untested benchmark rows; it does not claim full ten-task parity.
 
 ## Verification
 

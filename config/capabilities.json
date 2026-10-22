@@ -11,6 +11,7 @@
     {"id":"glama","kind":"json","role":"discovery","url":"https://glama.ai/api/mcp/v1/servers?first=50&sort=added-at%3Adesc","enabled":false,"tool":null,"notes":"API requires authentication (401 observed). No credentials loaded. Use manual directory review until a separate authorized adapter exists."},
     {"id":"rea-npm","kind":"npm","role":"release","url":"https://registry.npmjs.org/rea-agents/latest","enabled":true,"tool":"rea","notes":"Package version is separate from repository release and source verification."},
     {"id":"logisheets-npm","kind":"npm","role":"release","url":"https://registry.npmjs.org/logisheets/latest","enabled":true,"tool":"logisheets","notes":"Compare package/source versions before adoption."},
+    {"id":"logisheets-mcp-npm","kind":"npm","role":"release","url":"https://registry.npmjs.org/logisheets-mcp/latest","enabled":true,"tool":"logisheets","notes":"MCP adapter release; separate from the LogiSheets engine package and repo."},
     {"id":"audacity-pypi","kind":"pypi","role":"release","url":"https://pypi.org/pypi/audacity-mcp-server/json","enabled":false,"tool":"audacity-file-mcp","notes":"Report references this package; publishing identity and mapping to this repository need verification."}
   ],
   "tools": [

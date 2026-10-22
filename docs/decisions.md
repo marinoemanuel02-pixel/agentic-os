@@ -3,6 +3,33 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-21 - Install selected capability engines explicitly and retain trial limits
+
+- **Setup.** The operator requested continued implementation and tools setup. Pin original release
+  artifacts by SHA-256 and install them under the home folder through `capability-setup`, with a
+  no-write preview and explicit apply. Reuse Blender, Node and Python. Keep each application profile
+  and package runtime separate. No agent configuration, global PATH, service or default association.
+- **Selection.** REA/Ghidra/JDK, PdfCraft, Blender Agent SDK, LogiSheets MCP, FilmCraft, PhotoCraft
+  and Agent Desktop completed bounded local workflows. Prefer SDK over the tested blender-mcp
+  headless path, which lost state and generated an invalid render script. Keep that adapter as a
+  benchmark. ANIS requires Linux upstream; MCP-PC duplicates the chosen fallback and requires a
+  separate .NET build. Remaining candidates stay demand-driven.
+- **Admission.** Installed does not mean production. Record source/build/execution/artifact results
+  separately from unknown license and full security admission. Seven candidates remain `sandbox`;
+  the comparator stays `watch`. Ordinary output tasks still prefer existing artifact/media routes.
+  Host-specific records live in `~/.aos/capability-watch/registry.json` through the existing
+  `--registry` option and `capabilities-local` alias; keep the committed seed portable/unverified.
+- **Controls.** Validate receipt pins and entrypoint containment for installs, checks, launches and
+  dependencies. Refuse direct Windows batch launches, including npm shims; use Node's npm CLI.
+  Test archive traversal/link rejection and repeat installs. Child profiles and filtered environment
+  variables do not create an OS sandbox. npm/Python transitive packages need their own upgrade review.
+- **Evidence.** See [commands](capability-setup.md), [trial report](validation/2026-10-21-capability-setup.md)
+  and [installation inventory](research/2026-10-21-capability-installation.json). Other-vendor review
+  was initially quota-blocked; after reset it completed and identified numeric Blender selection
+  and archive-error handling defects, now covered by failing-then-passing regressions. Earlier
+  same-vendor review found batch/receipt defects that were also fixed. Preserve incomplete files
+  for inspection rather than adopting the review's automatic-cleanup suggestion. No vendor-home/PATH writes.
+
 ## 2026-10-21 - Monitor capability transitions before adopting more applications
 
 - **Scope.** Reconcile both uploaded software audits and the harness-additions recommendations

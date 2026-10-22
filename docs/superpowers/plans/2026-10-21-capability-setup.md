@@ -50,3 +50,21 @@ global PATH changes, default file associations or replacing existing workflows.
   not a similarly named package. Source material is untrusted input, never execution instructions.
 - A per-tool workspace is not an OS sandbox. Keep application scoping claims separate from tested
   boundaries and do not promote unrestricted bridges to unattended production.
+
+## Execution outcome
+
+- Installed and repeat-checked ten pinned components. Seven application routes completed bounded
+  artifact workflows; the comparison adapter exposed state loss and a render-script error.
+- Preserve machine admissions in the home-relative local registry, exposed by `capabilities-local`.
+  The repository seed stays unverified and portable. Reports and sanitized inventories preserve
+  exact versions, source/download hashes, package inventories and artifact/evaluation evidence.
+- Blender comparison is explicitly partial. SDK is selected for demonstrated headless state,
+  recovery and rendering; animation, full geometry/material parity and Windows GUI attach remain
+  unproven. ANIS and MCP-PC have documented platform/selection outcomes; no second desktop stack.
+- Same-vendor review found and confirmed fixes for batch argument interpretation and incomplete
+  receipt validation, including the false-ready dependency case. Other-vendor quota initially
+  blocked review; the later completed review identified numeric Blender selection and corrupt
+  archive error handling. Both were fixed; retain explicit incomplete-install inspection/recovery.
+- Final focused setup tests: 16 passed; root Python: 127 passed; `aos test`: 535 passed under each
+  Windows shell, zero failures/skips. Schema, syntax and whitespace checks passed. See
+  `docs/validation/2026-10-21-capability-setup.md` for failed prior runs and exact scope/omissions.

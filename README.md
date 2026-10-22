@@ -104,6 +104,9 @@ The [capability registry](docs/capability-watch.md) tracks candidate application
 adopted tools. Use `python tools/stack.py capabilities validate` and `capabilities refresh` to
 preview discoveries, or `capabilities refresh --tool pdfcraft --apply` to retain upstream signals.
 Refresh never installs a tool or promotes a candidate; local evidence and status changes are explicit.
+The [capability setup guide](docs/capability-setup.md) covers pinned optional installations and
+the tested PDF, Blender, workbook, binary-analysis, timeline, layered-image and Windows routes.
+Use `python tools/stack.py capability-setup install <tool>` to preview, then add `--apply` to install.
 
 Tools, clones and keys live under your home folder, not AppData: both desktop apps are MSIX
 packages, and a folder they (or the agents in them) create under AppData can stay private to that app.

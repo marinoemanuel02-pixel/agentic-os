@@ -65,6 +65,19 @@ original repository, and `--apply` retains observations under `~/.aos/capability
 matches as unverified leads. Evidence import and status changes are explicit; nothing installs or
 starts a candidate. See `docs/capability-watch.md` for tiers and comparisons with existing routes.
 
+Candidate setup is explicit: `python tools/stack.py capability-setup install <tool>` previews the
+pinned download; `--apply` installs under `~/.aos/tools/capabilities`. Installed commands are
+`rea`, `pdfcraft`, `blender-agent-sdk`, `logisheets`, `filmcraft`, `photocraft`, `agent-desktop`.
+They start only when called; none is registered globally. Use scoped task copies and the examples
+in `docs/capability-setup.md`. Blender SDK is the preferred tested headless adapter;
+`blender-mcp-benchmark` retains the comparison with observed state/render defects. These remain
+evaluation tools, not unrestricted production integrations. Existing artifact/media skills stay
+the first route for ordinary documents, sheets, images and video; use these when persistent
+application state adds value. ANIS is Linux-only upstream; MCP-PC remains the unselected fallback.
+Use `python tools/stack.py capabilities-local list` for this machine's actual pins, trial results
+and admission statuses. Ordinary `capabilities` reads the portable seed; installation does not
+promote either registry automatically.
+
 Optional stack additions use `python tools/stack.py <tool> ...` from this repo; `list` shows routes.
 AnyDoc converts local documents (hosted OCR refused); Repomix exports selected files; RTK OSS
 filters explicit commands while preserving their failures. Graphify uses code-only extraction with
