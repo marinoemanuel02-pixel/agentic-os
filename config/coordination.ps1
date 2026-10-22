@@ -464,7 +464,7 @@ function Invoke-AosCoordControl([string[]]$Arguments) {
     if (Invoke-AosTuningControl $Arguments) { return }
     $sub = @($Arguments)[0]
     $rest = @($Arguments | Select-Object -Skip 1)
-    $p = ConvertFrom-AosCliArgs $rest @() @('as','task','parent','kind','workers','handle','evidence','process','started','state','text','to','reply-to','seconds') @('ack')
+    $p = ConvertFrom-AosCliArgs $rest @('active') @('as','vendor','task','parent','kind','workers','handle','evidence','process','started','state','text','to','reply-to','seconds') @('ack')
     $id = @($p.Pos)[0]
     switch ($sub) {
         'reserve' {
@@ -475,7 +475,19 @@ function Invoke-AosCoordControl([string[]]$Arguments) {
             $global:LASTEXITCODE=0; if (-not $r.Ok) { $global:LASTEXITCODE=1 }
             Write-Host (ConvertTo-Json -InputObject $r -Depth 10)
         }
-        'actors' { Write-Host (ConvertTo-Json -InputObject @(Get-AosActors) -Depth 10); $global:LASTEXITCODE=0 }
+        'actors' {
+            if ($p.Opts.ContainsKey('vendor') -and $p.Opts['vendor'] -notin @('claude','codex')) {
+                throw 'vendor must be claude or codex'
+            }
+            $actors = @(Get-AosActors | Where-Object {
+                (-not $p.Opts['active'] -or (Test-AosActorActive (ConvertTo-AosHashtable $_))) -and
+                (-not $p.Opts.ContainsKey('vendor') -or $_.vendor -eq $p.Opts['vendor']) -and
+                (-not $p.Opts.ContainsKey('task') -or $_.task -eq $p.Opts['task'])
+            })
+            if ($actors.Count -eq 0) { Write-Host '[]' }
+            else { Write-Host (ConvertTo-Json -InputObject $actors -Depth 10) }
+            $global:LASTEXITCODE=0
+        }
         'reconcile' { Write-Host (ConvertTo-Json -InputObject @(Resolve-AosActors) -Depth 10); $global:LASTEXITCODE=0 }
         'send' {
             $r=Send-AosTaskMessage -From $id -To $p.Opts['to'] -Text $p.Opts['text'] -ReplyTo $p.Opts['reply-to']

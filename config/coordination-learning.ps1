@@ -208,7 +208,7 @@ function Invoke-AosTuningControl([string[]]$Arguments) {
     $sub=@($Arguments)[0]
     if ($sub -notin @('task','report','annotate','checkpoint','continuation','procedure','capabilities','roles','native','steer')) { return $false }
     $rest=@($Arguments | Select-Object -Skip 1)
-    $p=ConvertFrom-AosCliArgs $rest @('include-stale','dry-run') @('repo','next-check','class','text','corrections','integration-seconds','review-seconds','turn','from','to') @('task','evidence','file')
+    $p=ConvertFrom-AosCliArgs $rest @('include-stale','dry-run') @('as','repo','next-check','class','text','corrections','integration-seconds','review-seconds','turn','from','to') @('task','evidence','file')
     $first=@($p.Pos)[0];$second=@($p.Pos)[1];$repo=$p.Opts['repo'];if (-not $repo) {$repo=(Get-Location).ProviderPath}
     $result=$null;$ok=$true
     switch ($sub) {
