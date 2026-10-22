@@ -95,7 +95,7 @@ class NativeRenderTests(unittest.TestCase):
             source = Path(folder) / 'project.mlt'
             source.write_text('<mlt root="media"><producer id="clip"/></mlt>')
             root = render.ET.fromstring(render.checked_xml(source, set()))
-            self.assertEqual(Path(root.get('root')), source.parent / 'media')
+            self.assertEqual(Path(root.get('root')).resolve(), (source.parent / 'media').resolve())
             self.assertIn('root="media"', source.read_text())
 
     def test_selects_exported_timeline_and_refuses_unknown_services(self):
