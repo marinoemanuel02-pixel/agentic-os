@@ -3168,6 +3168,8 @@ function Invoke-AosDelegate {
         [string[]]$Allow, [string[]]$Setup, [int]$TimeoutMinutes = 30, [string]$Repo, [int]$IdleMinutes = 15,
         [string]$Tier = 'standard', [string]$Effort, [string]$Parent, [ValidateRange(0,1)][int]$Workers = 0,
         [string]$ContractFile,[string]$Transport='exec')
+    # The command line hands an absent repeated option over as @($null); count only the values that were given.
+    $Needs = @($Needs | Where-Object { $_ }); $Allow = @($Allow | Where-Object { $_ }); $Setup = @($Setup | Where-Object { $_ })
     $refuse = {
         param($m)
         Write-AosWarn "delegate refused: $m"
