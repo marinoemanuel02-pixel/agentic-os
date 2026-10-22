@@ -1951,7 +1951,7 @@ aos - agentic-os control
   aos ready [<path>] [--json]   readiness gate before cross-vendor work: repo, claims, both vendors' capacity, actor slots, task paths, unpushed commits.
   aos delegate codex|claude --task <file> [--write [--verify <cmd>] [--allow <glob>]...] [--contract <json>]
                 [--tier light|standard|deep] [--effort <e>] [--parent <lead-id>] [--workers 0|1] [--repo <path>]
-                [--needs <cmd>] [--setup <cmd>] [--timeout <min>] [--idle <min>] [--transport exec|app-server]
+                [--model <m>] [--needs <cmd>] [--setup <cmd>] [--timeout <min>] [--idle <min>] [--transport exec|app-server]
                              hand a task to the other vendor; receipt in ~\.aos\coord (ls [--last N] | show <id> | clean <id> [--force])
   aos coord <command>        reserve|observe|finish|actors|reconcile (actors), send|inbox|ack|wait (messages), status|cancel|steer (runs),
                              task|report|annotate|capabilities|roles|native|checkpoint|procedure|continuation (tuning);

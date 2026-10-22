@@ -19,8 +19,8 @@ don't rewrite the old one: the record of what was rejected is the part that ages
   commits warn. It was built jointly as the rehearsal of a conjoined task: the Claude lead wrote the failing
   specification and the shared cap constant, Codex implemented under a write contract with a host verifier,
   the lead integrated and re-verified. A limited vendor fails rather than warns because a conjoined task needs both.
-- **Procedure learned.** A lead must watch its inbox while a worker runs (a question waits 45 seconds twice
-  before the worker returns `blocked`); a changed contract needs a new task id; keep the packet under 12,000
+- **Procedure learned.** A lead must watch its inbox while a worker runs (a worker waits about 30 seconds
+  for an answer, then returns `blocked`); a changed contract needs a new task id; keep the packet under 12,000
   characters; one native-worker allowance and the lead fill a vendor's two slots. Codex's weekly allowance, not
   its 5-hour window, is the scarce resource, so give it narrow, well-specified writes.
 - **Open for the operator.** The coordination and swarm work lives on `codex/capability-watch`, 190+ commits

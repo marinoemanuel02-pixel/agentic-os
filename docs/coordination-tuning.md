@@ -53,8 +53,9 @@ Notes on that sequence, each of which has refused a real first attempt:
 - Every contract needs a `verify` command, also for a read-only run; the host runs it, not the worker.
 - Keep `context` small: the whole packet is limited to 12,000 characters, and a larger one is refused before
   launch with `narrow context references`. A changed contract needs a new task id.
-- While a worker runs, watch your inbox (`aos coord inbox <lead-id>`): a worker that asks a question waits at
-  most 45 seconds twice, then returns `blocked`.
+- While a worker runs, watch your inbox (`aos coord inbox <lead-id>`): the worker prompt tells a worker that asks
+  a question to wait about 30 seconds (the helper allows at most 45 per wait) and then return `blocked`, so an
+  unwatched question costs a run. A background loop on `aos coord inbox` that exits on the first message works.
 
 Packets contain accepted input references, at most eight context ranges of at most 120 lines each,
 and up to three relevant verified procedures. The entire packet is limited to 12,000 characters;

@@ -99,7 +99,7 @@ It 'tells the user plainly and exits 1 when a write contract has no scope, witho
     Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
 }
 
-It 'does not register or touch a worktree when the scope conflict is refused' {
+It 'does not create a worktree when the scope conflict is refused' {
     InModuleScope aos -Parameters @{ T = $task; R = $repo; C = $contract } {
         param($T, $R, $C)
         Invoke-AosCoordCommand -Command 'delegate' -Arguments @('codex', '--task', $T, '--contract', $C, '--repo', $R, '--write', '--allow', 'elsewhere/**') *>&1 | Out-Null
