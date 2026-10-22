@@ -3168,6 +3168,8 @@ function Invoke-AosDelegate {
         [string[]]$Allow, [string[]]$Setup, [int]$TimeoutMinutes = 30, [string]$Repo, [int]$IdleMinutes = 15,
         [string]$Tier = 'standard', [string]$Effort, [string]$Parent, [ValidateRange(0,1)][int]$Workers = 0,
         [string]$ContractFile,[string]$Transport='exec')
+    # The command line hands an absent repeated option over as @($null); count only the values that were given.
+    $Needs = @($Needs | Where-Object { $_ }); $Allow = @($Allow | Where-Object { $_ }); $Setup = @($Setup | Where-Object { $_ })
     $refuse = {
         param($m)
         Write-AosWarn "delegate refused: $m"
@@ -3200,7 +3202,7 @@ function Invoke-AosDelegate {
             $c=$contractRow.contract
             if (-not $c['verify']) { throw 'contract requires a host verification command' }
             if ($Verify -and $Verify -ne $c['verify']) { throw 'verification conflicts with contract' }
-            if (@($Allow).Count -and @($c['allow']).Count -and ($Allow -join '|') -ne ($c['allow'] -join '|')) { throw 'write scope conflicts with contract' }
+            if (@($Allow).Count -and @($c['allow']).Count -and (@($Allow | Sort-Object -Unique) -join '|') -ne (@($c['allow'] | Sort-Object -Unique) -join '|')) { throw 'write scope conflicts with contract' }
             $Verify=[string]$c['verify'];$Allow=@($c['allow'])
             if ($c['budget'] -and $c['budget']['timeout_minutes']) { $TimeoutMinutes=[Math]::Min($TimeoutMinutes,[int]$c['budget']['timeout_minutes']) }
             $ready=Test-AosTaskReady -Id $contractRow.id -Repo $repoDir

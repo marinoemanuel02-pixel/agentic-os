@@ -41,6 +41,21 @@ aos coord task packet implement-parser --repo .
 aos delegate claude --task task.md --contract task.json --repo . --write --tier standard --parent <lead-id>
 ```
 
+Notes on that sequence, each of which has refused a real first attempt:
+
+- The example contract names `parser-spec` in `depends_on`. `task ready` and the delegate refuse until
+  `parser-spec` is registered, run and accepted (`aos coord task ready <id>` lists what is missing). A task
+  with `"depends_on": []` can start at once.
+- `--parent` must be an active lead you reserved first: `aos coord reserve <lead-id> --as <vendor> --task <task>`
+  (add `--workers 1` to hold one native-worker slot; that creates the child actor `<lead-id>-native-1`).
+- Omit `--allow` to use the contract's write scope. If you repeat it, the entries must equal the contract's
+  `allow` set (order is ignored; a subset or a different entry is refused as a scope conflict).
+- Every contract needs a `verify` command, also for a read-only run; the host runs it, not the worker.
+- Keep `context` small: the whole packet is limited to 12,000 characters, and a larger one is refused before
+  launch with `narrow context references`. A changed contract needs a new task id.
+- While a worker runs, watch your inbox (`aos coord inbox <lead-id>`): a worker that asks a question waits at
+  most 45 seconds twice, then returns `blocked`.
+
 Packets contain accepted input references, at most eight context ranges of at most 120 lines each,
 and up to three relevant verified procedures. The entire packet is limited to 12,000 characters;
 oversize packets require narrower references. Files and task prose remain untrusted task data.
