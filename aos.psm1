@@ -13,6 +13,7 @@ $script:OptInLayers = @('media')   # big downloads: installed only when named, n
 . (Join-Path $PSScriptRoot 'config\task-contracts.ps1')
 . (Join-Path $PSScriptRoot 'config\coordination-learning.ps1')
 . (Join-Path $PSScriptRoot 'config\native-coordination.ps1')
+. (Join-Path $PSScriptRoot 'config\readiness.ps1')
 
 # Windows PowerShell 5.1 serializes some arrays as {"value":[...],"Count":n} unless this is removed.
 if ($PSVersionTable.PSVersion.Major -lt 6) { Remove-TypeData -TypeName System.Array -ErrorAction SilentlyContinue }
@@ -1572,7 +1573,7 @@ function Invoke-AosTest {
     $root = $script:Root
     $failed = $false
     Write-AosStep 'Static checks'
-    foreach ($f in @('aos.psm1', 'bootstrap.ps1', 'tests\Run-Tests.ps1', 'config\coordination.ps1', 'config\task-contracts.ps1', 'config\coordination-learning.ps1', 'config\native-coordination.ps1', 'tools\coordination-eval.ps1', 'tools\coord.ps1', 'tools\coordination-smoke.ps1')) {
+    foreach ($f in @('aos.psm1', 'bootstrap.ps1', 'tests\Run-Tests.ps1', 'config\coordination.ps1', 'config\task-contracts.ps1', 'config\coordination-learning.ps1', 'config\native-coordination.ps1', 'config\readiness.ps1', 'tools\coordination-eval.ps1', 'tools\coord.ps1', 'tools\coordination-smoke.ps1')) {
         $path = Join-Path $root $f
         $tokens = $null
         $errors = $null
@@ -1947,6 +1948,7 @@ aos - agentic-os control
   aos claim|release [<path>] --as <agent>   hold or free a checkout (edits claim automatically via hooks)
   aos note <text> --as <agent>              leave a message other agents see in aos who
   aos capacity [set <vendor> <pct> ...]    each vendor's known window left (R34); set what the app's usage card shows
+  aos ready [<path>] [--json]   readiness gate before cross-vendor work: repo, claims, both vendors' capacity, actor slots, task paths, unpushed commits.
   aos delegate codex|claude --task <file> [--write --verify <cmd>] [--needs <cmd>] [--allow <glob>]
                              hand a task to the other vendor; receipt in ~\.aos\coord (ls | show <id> | clean <id>)
 '@
@@ -1981,6 +1983,7 @@ function aos {
         'who'     { Invoke-AosCoordCommand -Command 'who' -Arguments @($Rest) }
         'note'    { Invoke-AosCoordCommand -Command 'note' -Arguments @($Rest) }
         'capacity' { Invoke-AosCapacity -Arguments @($Rest) }
+        'ready' { Invoke-AosReady -Arguments @($Rest) }
         'coord' { Invoke-AosCoordControl -Arguments @($Rest) }
         'delegate' { Invoke-AosCoordCommand -Command 'delegate' -Arguments @($Rest) }
         'guard'   { Invoke-AosGuardHook -Agent $a1 -Event $a2 }
