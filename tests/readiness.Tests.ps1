@@ -300,6 +300,14 @@ Context 'command' {
         try { InModuleScope aos { Invoke-AosReady -Arguments @() *>&1 | Out-Null } } finally { Pop-Location }
         $global:ReadyTestPath | Should -Be (Resolve-Path -LiteralPath $repo).ProviderPath
     }
+    It 'reports a path that does not exist plainly and exits 1, with or without --json' {
+        $missing = Join-Path $caseRoot 'nope'
+        foreach ($extra in @(@(), @('--json'))) {
+            $out = InModuleScope aos -Parameters @{ P = $missing; X = $extra } { param($P, $X) Invoke-AosReady -Arguments (@($P) + $X) *>&1 | Out-String }
+            $out | Should -Match 'path not found'
+            $global:LASTEXITCODE | Should -Be 1
+        }
+    }
     It 'rejects an unknown option with a usage line and exit code 1' {
         $out = InModuleScope aos { Invoke-AosReady -Arguments @('--bogus') *>&1 | Out-String }
         $out | Should -Match 'usage: aos ready'

@@ -24,7 +24,8 @@ don't rewrite the old one: the record of what was rejected is the part that ages
   characters; one native-worker allowance and the lead fill a vendor's two slots. Codex's weekly allowance, not
   its 5-hour window, is the scarce resource, so give it narrow, well-specified writes.
 - **Open for the operator.** The coordination and swarm work lives on `codex/capability-watch`, 190+ commits
-  ahead of `main` and not on the remote. Merging and pushing is the operator's call; `aos ready` warns about it.
+  ahead of `main`, 111 of them on no remote at all (`aos ready` reports this as a warning). Merging and
+  pushing is the operator's call.
 
 ## 2026-10-21 - Install selected capability engines explicitly and retain trial limits
 

@@ -1949,8 +1949,13 @@ aos - agentic-os control
   aos note <text> --as <agent>              leave a message other agents see in aos who
   aos capacity [set <vendor> <pct> ...]    each vendor's known window left (R34); set what the app's usage card shows
   aos ready [<path>] [--json]   readiness gate before cross-vendor work: repo, claims, both vendors' capacity, actor slots, task paths, unpushed commits.
-  aos delegate codex|claude --task <file> [--write --verify <cmd>] [--needs <cmd>] [--allow <glob>]
-                             hand a task to the other vendor; receipt in ~\.aos\coord (ls | show <id> | clean <id>)
+  aos delegate codex|claude --task <file> [--write [--verify <cmd>] [--allow <glob>]...] [--contract <json>]
+                [--tier light|standard|deep] [--effort <e>] [--parent <lead-id>] [--workers 0|1] [--repo <path>]
+                [--needs <cmd>] [--setup <cmd>] [--timeout <min>] [--idle <min>] [--transport exec|app-server]
+                             hand a task to the other vendor; receipt in ~\.aos\coord (ls [--last N] | show <id> | clean <id> [--force])
+  aos coord <command>        reserve|observe|finish|actors|reconcile (actors), send|inbox|ack|wait (messages), status|cancel|steer (runs),
+                             task|report|annotate|capabilities|roles|native|checkpoint|procedure|continuation (tuning);
+                             a lead reserves itself first: aos coord reserve <id> --as <vendor> --task <t>  (docs/coordination-tuning.md)
 '@
 }
 
@@ -3677,7 +3682,7 @@ function Invoke-AosCoordCommand([string]$Command, [string[]]$Arguments) {
                     'clean' { $p = ConvertFrom-AosCliArgs $rest @('force') @() @(); Remove-AosDelegation -Id ($p.Pos | Select-Object -First 1) -Force:([bool]$p.Opts['force']) }
                     { $_ -in @('codex', 'claude') } {
                         $p = ConvertFrom-AosCliArgs $rest @('write') @('task', 'model', 'tier', 'effort', 'parent', 'workers', 'verify', 'timeout', 'idle', 'repo','contract','transport') @('needs', 'allow', 'setup')
-                        if (-not $p.Opts['task']) { throw 'usage: aos delegate <codex|claude> --task <file> [--write --verify <cmd>] [--model <m>] [--needs <cmd>]... [--allow <glob>]... [--setup <cmd>]... [--timeout <min>] [--idle <min, 0 = off>] [--repo <path>]' }
+                        if (-not $p.Opts['task']) { throw 'usage: aos delegate <codex|claude> --task <file> [--write --verify <cmd>] [--model <m>] [--needs <cmd>]... [--allow <glob>]... [--setup <cmd>]... [--timeout <min>] [--idle <min, 0 = off>] [--repo <path>] [--contract <json>] [--tier light|standard|deep] [--effort <e>] [--parent <lead-id>] [--workers 0|1] [--transport exec|app-server]' }
                         $t = 30
                         if ($p.Opts['timeout']) { $t = [int]$p.Opts['timeout'] }
                         $idle = 15

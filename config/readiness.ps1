@@ -136,6 +136,11 @@ function Invoke-AosReady([string[]]$Arguments) {
             return
         } else { $path = $argument; $hasPath = $true }
     }
+    if (-not (Test-Path -LiteralPath $path -PathType Container)) {
+        Write-AosWarn "path not found: $path"
+        $global:LASTEXITCODE = 1
+        return
+    }
     $resolved = (Resolve-Path -LiteralPath $path -ErrorAction Stop).ProviderPath
     $checks = @(Get-AosReadinessChecks -Path $resolved)
     $verdict = Get-AosReadinessVerdict $checks
