@@ -9,6 +9,12 @@ The agent the user starts is the lead. It owns the goal, chooses the work split,
 and gives the user one verified answer. It may delegate automatically within the existing
 subscriptions; do not ask for a separate delegation decision on every task.
 
+Before a task that both vendors will work on, run `aos ready <repo>`: it fails on a limited vendor, a full
+actor cap, a checkout another session holds or task paths that cannot resolve, and warns on stale capacity
+or commits that exist only on this machine. Fix or re-split first. While a worker runs, keep watching your
+inbox (`aos coord inbox <lead-id>`): a question waits at most 45 seconds twice before the worker returns
+`blocked`.
+
 ## Choose the route
 
 Keep a small, reversible task inline when one agent can finish it efficiently. For substantial work,

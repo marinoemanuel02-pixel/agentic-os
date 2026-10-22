@@ -3,6 +3,29 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-22 - Gate cross-vendor work with a readiness check; fix what a real run exposed
+
+- **Why.** With Claude's quota restored, both vendors re-verified the coordination layer and every tool
+  (see the [validation report](validation/2026-10-22-cross-vendor-verification.md)). Running the documented
+  paths for real exposed defects that function-level tests had not: task contracts, packets, checkpoints and
+  procedures failed in OneDrive-hosted checkouts (a cloud placeholder was treated as a link); waited time was
+  inflated by the UTC offset under PowerShell 7; `aos delegate --contract --write` was refused from the command
+  line unless `--allow` was repeated (an absent option arrived as `@($null)`); `--allow` compared in order.
+  Each has a regression test seen failing first. Cloud placeholders are accepted only by their exact reparse
+  tag; any other reparse point, or an unreadable tag, stays refused.
+- **Readiness gate.** `aos ready [<path>] [--json]` is read-only and checks the repository, the checkout claim,
+  both vendors' capacity, free actor slots, task-path resolution and commits that exist only on this machine.
+  A limited vendor, a full actor cap or refused task paths fail it (exit 1); stale capacity and unpushed
+  commits warn. It was built jointly as the rehearsal of a conjoined task: the Claude lead wrote the failing
+  specification and the shared cap constant, Codex implemented under a write contract with a host verifier,
+  the lead integrated and re-verified. A limited vendor fails rather than warns because a conjoined task needs both.
+- **Procedure learned.** A lead must watch its inbox while a worker runs (a question waits 45 seconds twice
+  before the worker returns `blocked`); a changed contract needs a new task id; keep the packet under 12,000
+  characters; one native-worker allowance and the lead fill a vendor's two slots. Codex's weekly allowance, not
+  its 5-hour window, is the scarce resource, so give it narrow, well-specified writes.
+- **Open for the operator.** The coordination and swarm work lives on `codex/capability-watch`, 190+ commits
+  ahead of `main` and not on the remote. Merging and pushing is the operator's call; `aos ready` warns about it.
+
 ## 2026-10-21 - Install selected capability engines explicitly and retain trial limits
 
 - **Setup.** The operator requested continued implementation and tools setup. Pin original release
