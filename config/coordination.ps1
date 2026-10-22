@@ -1,5 +1,8 @@
 # Internal aos coordination helpers. Dot-sourced into the aos module; PS 5.1 and ASCII only.
 
+# Active actors one vendor may have at once, its lead and native workers included (cooperative admission policy).
+$script:AosActorCapPerVendor = 2
+
 function Resolve-AosTaskRoute {
     param([string]$Vendor, [string]$Tier = 'standard', [string]$Model, [string]$Effort)
     if ($Vendor -notin @('claude', 'codex')) { throw 'routing needs claude or codex' }
@@ -118,7 +121,7 @@ function Reserve-AosActor {
             }
             elseif ($Kind -eq 'native') { throw 'native work requires an active parent' }
             $active = @($rows.Values | Where-Object { $_['vendor'] -eq $Vendor -and (Test-AosActorActive $_) }).Count
-            if ($active + 1 + $Workers -gt 2) { throw "busy: $Vendor has insufficient actor slots" }
+            if ($active + 1 + $Workers -gt $script:AosActorCapPerVendor) { throw "busy: $Vendor has insufficient actor slots" }
             $childId = $Id + '-native-1'
             if ($Workers) {
                 Assert-AosCoordId $childId
