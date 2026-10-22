@@ -159,7 +159,8 @@ is not required for every task. The shared state lives in `~\.aos\coord` (outsid
   checks the repository (branch, clean), whether another session holds the checkout, each vendor's
   capacity and free actor slots, that task-contract paths resolve in this checkout (they did not in
   OneDrive-hosted ones before `9baee18`), and whether commits exist only on this machine. `ok` and `warn`
-  exit 0; any `fail` (for example a limited vendor, a full actor cap or refused task paths) exits 1.
+  exit 0; any `fail` (for example a limited vendor, a full actor cap or refused task paths) exits 1. The
+  step-by-step procedure for a real task is [docs/first-conjoined-task.md](docs/first-conjoined-task.md).
 - **Claims.** The first edit in a checkout claims it for that session (a hook in both agents); another
   session's edits there are blocked with the holder's name until the claim ends (session end) or
   expires (60 minutes without edits). `aos who` lists claims and recent events; `aos note <text> --as

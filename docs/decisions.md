@@ -21,8 +21,16 @@ don't rewrite the old one: the record of what was rejected is the part that ages
   the lead integrated and re-verified. A limited vendor fails rather than warns because a conjoined task needs both.
 - **Procedure learned.** A lead must watch its inbox while a worker runs (a worker waits about 30 seconds
   for an answer, then returns `blocked`); a changed contract needs a new task id; keep the packet under 12,000
-  characters; one native-worker allowance and the lead fill a vendor's two slots. Codex's weekly allowance, not
-  its 5-hour window, is the scarce resource, so give it narrow, well-specified writes.
+  characters; one native-worker allowance and the lead fill a vendor's two slots. The operator resets Codex's
+  weekly allowance after the work, so only its 5-hour window limits it: give it real writes, two at once.
+- **Rehearsal result.** The first real chain ran against the OneDrive-hosted checkout: a Claude worker wrote
+  failing specifications, two Codex writers implemented in parallel under contracts, and one depended on the
+  accepted specification. Four more defects surfaced and were fixed: a dependent task could never start because
+  the receipt hashed LF bytes while the checkout held CRLF (text artifacts now compare modulo line endings, binary
+  stay byte-exact); `aos delegate` swallowed a stray positional (`--write true`); `aos coord actors` could not
+  filter (`--active`, `--vendor`, `--task`) and the tuning commands rejected `--as`; and a Windows PowerShell 5.1
+  child of PowerShell 7 lost built-in cmdlets through the inherited module path, which made the host verifier
+  reject a correct implementation. The [runbook](first-conjoined-task.md) records the procedure.
 - **Open for the operator.** The coordination and swarm work lives on `codex/capability-watch`, 190+ commits
   ahead of `main`, 111 of them on no remote at all (`aos ready` reports this as a warning). Merging and
   pushing is the operator's call.

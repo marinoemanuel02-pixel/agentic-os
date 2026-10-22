@@ -117,5 +117,6 @@ The read-only check needs current source-limit evidence, known positive target c
 
 - PowerShell 7 children inherit `PSModulePath`; a Windows PowerShell 5.1 child can then lose cmdlets such as Get-FileHash. tests\Run-Focused.ps1 clears it for its 5.1 child.
 - Put delegate worktrees outside OneDrive. The setup handles OneDrive-hosted repos, but heavy caches do not belong there.
+- The first executable of a contract's `verify` must be visible in a Codex worker's sandbox: `powershell` and `cmd` are, `python` is not (the run ends `preflight-failed: verify needs 'python'`). A Claude worker that cannot run its own tests returns `blocked` and is rejected; declare the executable with `--needs`.
 - Pass Windows paths to pwsh and python. Write source with file tools, not long shell heredocs.
 - The swarm drain command prints the whole queue. The [swarm pool](swarm.md), nar (`nar_choose`, `nar_classify`) and capability tools are for bounded, checkable candidates only. Never accept their results without a lead-authored verifier.
