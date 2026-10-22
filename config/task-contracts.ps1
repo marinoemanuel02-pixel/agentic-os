@@ -74,11 +74,39 @@ function Resolve-AosTaskFile([string]$Repo,[string]$Path) {
     return $full
 }
 
+function Get-AosArtifactHashes([string]$Path) {
+    $bytes=[IO.File]::ReadAllBytes($Path)
+    $sha=[Security.Cryptography.SHA256]::Create()
+    try {
+        $hashes=[ordered]@{sha256=([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','')}
+        if ([Array]::IndexOf($bytes,[byte]0,0,[Math]::Min(8000,$bytes.Length)) -lt 0) {
+            # Hash byte ranges without CR in CRLF pairs; preserve every other byte.
+            $sha.Initialize()
+            $start=0;$scan=0
+            while ($scan -lt $bytes.Length) {
+                $cr=[Array]::IndexOf($bytes,[byte]13,$scan)
+                if ($cr -lt 0) { break }
+                if ($cr+1 -lt $bytes.Length -and $bytes[$cr+1] -eq 10) {
+                    $null=$sha.TransformBlock($bytes,$start,$cr-$start,$bytes,$start)
+                    $start=$cr+1
+                }
+                $scan=$cr+1
+            }
+            $null=$sha.TransformFinalBlock($bytes,$start,$bytes.Length-$start)
+            $hashes['sha256_text']=([BitConverter]::ToString($sha.Hash)).Replace('-','')
+        }
+        return $hashes
+    } finally { $sha.Dispose() }
+}
+
 function Get-AosArtifactManifest([string]$Repo,[string[]]$Files) {
     $rows=@(foreach ($name in @($Files)) {
         $path=Resolve-AosTaskFile $Repo $name
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "missing artifact: $name" }
-        [ordered]@{path=$name.Replace('\','/');sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash}
+        $hashes=Get-AosArtifactHashes $path
+        $row=[ordered]@{path=$name.Replace('\','/');sha256=$hashes['sha256']}
+        if ($hashes.Contains('sha256_text')) { $row['sha256_text']=$hashes['sha256_text'] }
+        $row
     })
     return $rows
 }
@@ -88,8 +116,13 @@ function Test-AosArtifactManifest([string]$Repo,$Artifacts) {
         try {
             $path=Resolve-AosTaskFile $Repo ([string]$artifact['path'])
             if ($artifact['missing']) { if (Test-Path -LiteralPath $path) {return $false};continue }
-            if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
-                (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne $artifact['sha256']) { return $false }
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $false }
+            $hashes=Get-AosArtifactHashes $path
+            if ($hashes['sha256'] -eq $artifact['sha256']) { continue }
+            if (-not $hashes.Contains('sha256_text')) { return $false }
+            $expected=$artifact['sha256_text']
+            if (-not $artifact.Contains('sha256_text')) { $expected=$artifact['sha256'] }
+            if ($hashes['sha256_text'] -ne $expected) { return $false }
         } catch { return $false }
     }
     return $true
