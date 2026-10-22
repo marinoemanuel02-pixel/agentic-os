@@ -187,6 +187,16 @@ def install(tool, entry, root, *, apply=False, fetch=download, execute=subproces
         return receipt
 
 
+def find_blender(program_files):
+    if not program_files:
+        return None
+    candidates = (Path(program_files) / 'Blender Foundation').glob('Blender */blender.exe')
+    def version(path):
+        match = re.match(r'Blender (\d+(?:\.\d+)*)', path.parent.name)
+        return tuple(int(n) for n in match[1].split('.')) if match else ()
+    return max(candidates, key=version, default=None)
+
+
 def launch_plan(receipt, entry, arguments, dependencies=None):
     if Path(receipt['entrypoint']).suffix.lower() in ('.bat', '.cmd'):
         raise ValueError('Direct Windows batch launch is refused; use the REA Ghidra provider')
@@ -194,10 +204,11 @@ def launch_plan(receipt, entry, arguments, dependencies=None):
     env = environment(runtime)
     values = {'home': str(Path.home()), 'runtime': str(runtime), 'repo': str(REPO)}
     values.update(dependencies or {})
-    program_files = os.environ.get('ProgramFiles')
-    blender = sorted((Path(program_files) / 'Blender Foundation').glob('Blender */blender.exe')) if program_files else []
+    blender = find_blender(os.environ.get('ProgramFiles'))
     if blender:
-        values['blender'] = str(blender[-1])
+        values['blender'] = str(blender)
+    elif any('{blender}' in value for value in entry.get('env', {}).values()):
+        raise ValueError('Blender was not found under ProgramFiles; install it before launching this adapter')
     env.update({k: v.format_map(values) for k, v in entry.get('env', {}).items()})
     prefix = [shutil.which('node') or 'node'] if entry['kind'] == 'npm' else []
     return prefix + [receipt['entrypoint']] + entry.get('arguments', []) + list(arguments), env
@@ -248,7 +259,7 @@ def main(argv=None):
                 return subprocess.run(command, env=env, cwd=receipt['runtime'], shell=False).returncode
         print(json.dumps(result, indent=2))
         return 0
-    except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError, tarfile.TarError, zipfile.BadZipFile) as exc:
         print('Capability setup failed: ' + str(exc), file=sys.stderr)
         return 2
 

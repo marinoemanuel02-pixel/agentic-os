@@ -205,6 +205,37 @@ class SetupTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 module.safe_path(name)
 
+    def test_blender_discovery_uses_numeric_versions(self):
+        module = self.module()
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for version in ('4.9', '4.10', '10.0'):
+                executable = root / 'Blender Foundation' / ('Blender ' + version) / 'blender.exe'
+                executable.parent.mkdir(parents=True)
+                executable.touch()
+            self.assertEqual(module.find_blender(root).parent.name, 'Blender 10.0')
+            (root / 'Blender Foundation/Blender 10.0/blender.exe').unlink()
+            self.assertEqual(module.find_blender(root).parent.name, 'Blender 4.10')
+            with patch.dict(module.os.environ, {'ProgramFiles': str(root / 'missing')}):
+                with self.assertRaisesRegex(ValueError, 'Blender was not found'):
+                    module.launch_plan({'runtime':str(root),'entrypoint':'fixture.exe'},
+                                       dict(self.entry(self.archive()), env={'BLENDER':'{blender}'}), [])
+
+    def test_corrupt_pinned_archive_returns_a_controlled_failure(self):
+        module = self.module()
+        payload = b'not an archive, but the expected pinned bytes'
+        entry = self.entry(payload)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / 'config').mkdir()
+            (root / 'config/capability-tools.json').write_text(json.dumps({'tools':{'fixture':entry}}))
+            def fetch(url, path): path.write_bytes(payload)
+            original = module.install
+            def install(*args, **kwargs): return original(*args, **kwargs, fetch=fetch)
+            with patch.object(module, 'REPO', root), patch.object(module, 'install', side_effect=install):
+                self.assertEqual(module.main(['--root',str(root),'install','fixture','--apply']),2)
+            self.assertFalse(list((root / 'fixture').rglob('receipt.json')))
+
 
 if __name__ == '__main__':
     unittest.main()
