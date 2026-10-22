@@ -3682,6 +3682,7 @@ function Invoke-AosCoordCommand([string]$Command, [string[]]$Arguments) {
                     'clean' { $p = ConvertFrom-AosCliArgs $rest @('force') @() @(); Remove-AosDelegation -Id ($p.Pos | Select-Object -First 1) -Force:([bool]$p.Opts['force']) }
                     { $_ -in @('codex', 'claude') } {
                         $p = ConvertFrom-AosCliArgs $rest @('write') @('task', 'model', 'tier', 'effort', 'parent', 'workers', 'verify', 'timeout', 'idle', 'repo','contract','transport') @('needs', 'allow', 'setup')
+                        if ($p.Pos.Count -gt 0) { throw "unexpected argument: $($p.Pos[0])" }
                         if (-not $p.Opts['task']) { throw 'usage: aos delegate <codex|claude> --task <file> [--write --verify <cmd>] [--model <m>] [--needs <cmd>]... [--allow <glob>]... [--setup <cmd>]... [--timeout <min>] [--idle <min, 0 = off>] [--repo <path>] [--contract <json>] [--tier light|standard|deep] [--effort <e>] [--parent <lead-id>] [--workers 0|1] [--transport exec|app-server]' }
                         $t = 30
                         if ($p.Opts['timeout']) { $t = [int]$p.Opts['timeout'] }
