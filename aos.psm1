@@ -3202,7 +3202,7 @@ function Invoke-AosDelegate {
             $c=$contractRow.contract
             if (-not $c['verify']) { throw 'contract requires a host verification command' }
             if ($Verify -and $Verify -ne $c['verify']) { throw 'verification conflicts with contract' }
-            if (@($Allow).Count -and @($c['allow']).Count -and ($Allow -join '|') -ne ($c['allow'] -join '|')) { throw 'write scope conflicts with contract' }
+            if (@($Allow).Count -and @($c['allow']).Count -and (@($Allow | Sort-Object -Unique) -join '|') -ne (@($c['allow'] | Sort-Object -Unique) -join '|')) { throw 'write scope conflicts with contract' }
             $Verify=[string]$c['verify'];$Allow=@($c['allow'])
             if ($c['budget'] -and $c['budget']['timeout_minutes']) { $TimeoutMinutes=[Math]::Min($TimeoutMinutes,[int]$c['budget']['timeout_minutes']) }
             $ready=Test-AosTaskReady -Id $contractRow.id -Repo $repoDir

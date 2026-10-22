@@ -42,7 +42,8 @@ Goal: the next agent resumes from `HANDOFF.md` alone, with no chat history.
 
 ## A vendor quota interrupted the work
 
-Preserve the original failure receipt and record only the observed limit/reset in `aos capacity`.
+Preserve the original failure receipt and record only the observed limit/reset in `aos capacity`
+(`aos capacity set <claude|codex> <percent left> --resets <HH:MM|ISO> --note <text>`).
 Inspect in-flight workers and partial changes first. Do not mark actors stopped or release their
 claims merely because a model returned a quota error. Finish them only with actual termination
 evidence. Preserve required ignored/untracked material separately and retain the source checkout.

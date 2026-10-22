@@ -71,6 +71,34 @@ It 'still refuses an explicit --allow that differs from the contract scope, befo
     Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
 }
 
+It 'compares explicit --allow entries with the contract scope as a set, ignoring their order' {
+    Write-CliFile $contract ('{"version":1,"id":"' + $id + '","objective":"Write two files","task_class":"implementation","depends_on":[],"allow":["src/a.txt","src/b.txt"],"verify":"git diff --check","artifacts":[],"context":[],"route_reason":"command line path","review":"lead","budget":{"timeout_minutes":3,"max_turns":4}}')
+    $reordered = InModuleScope aos -Parameters @{ T = $task; R = $repo; C = $contract } {
+        param($T, $R, $C)
+        Invoke-AosCoordCommand -Command 'delegate' -Arguments @('codex', '--task', $T, '--contract', $C, '--repo', $R, '--write', '--allow', 'src/b.txt', '--allow', 'src/a.txt') *>&1 | Out-String
+    }
+    $reordered | Should -Not -Match 'conflicts with contract'
+    Should -Invoke Test-AosDelegatePreflight -ModuleName aos -Times 1 -Exactly
+    $subset = InModuleScope aos -Parameters @{ T = $task; R = $repo; C = $contract } {
+        param($T, $R, $C)
+        Invoke-AosCoordCommand -Command 'delegate' -Arguments @('codex', '--task', $T, '--contract', $C, '--repo', $R, '--write', '--allow', 'src/a.txt') *>&1 | Out-String
+    }
+    $subset | Should -Match 'write scope conflicts with contract'
+    Should -Invoke Test-AosDelegatePreflight -ModuleName aos -Times 1 -Exactly
+}
+
+It 'tells the user plainly and exits 1 when a write contract has no scope, without launching' {
+    Write-CliFile $contract ('{"version":1,"id":"' + $id + '","objective":"No scope","task_class":"implementation","depends_on":[],"allow":[],"verify":"git diff --check","artifacts":[],"context":[],"route_reason":"command line path","review":"lead","budget":{"timeout_minutes":3,"max_turns":4}}')
+    $out = InModuleScope aos -Parameters @{ T = $task; R = $repo; C = $contract } {
+        param($T, $R, $C)
+        Invoke-AosCoordCommand -Command 'delegate' -Arguments @('codex', '--task', $T, '--contract', $C, '--repo', $R, '--write') *>&1 | Out-String
+    }
+    $out | Should -Match 'write contract needs a nonempty allow scope'
+    $global:LASTEXITCODE | Should -Be 1
+    Should -Invoke Test-AosDelegatePreflight -ModuleName aos -Times 0 -Exactly
+    Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
+}
+
 It 'does not register or touch a worktree when the scope conflict is refused' {
     InModuleScope aos -Parameters @{ T = $task; R = $repo; C = $contract } {
         param($T, $R, $C)
