@@ -57,6 +57,18 @@ after the harness confirms termination, `finish --evidence <completion-ref>` fre
 The coordinator must relay these observations to the host when its own metadata route is read-only.
 Do not finish a coordinator while a launched child remains unconfirmed.
 
+## Free resources first (`pool` MCP tools)
+
+The local model and the free API pool are part of every run, not an option for when the user asks.
+Before you or a native worker read, extract, sort, summarize, brainstorm options or check claims over
+supplied material, send that step to the `pool` tools: `pool_extract`, `pool_triage`, `pool_variants`,
+`pool_crosscheck`, `pool_summarize`. Default `privacy` is `private` (local model only); pass `public`
+only for material that is already public or meant for release, which also lets the free API pool vote.
+A `pass` verdict means the built-in checks held, not that the result is right: spot-check before relying
+on it, then call `pool_feedback` with accepted true/false so acceptance per tool is measured. Skip the pool
+only for trivial work, repository edits, live retrieval and consequential decisions, and say why in the
+report. The tools do not replace native workers; they shrink what native workers must read.
+
 ## Bounded free API candidates
 
 For small supplied-context work with a cheap objective check, consider the shared API pool

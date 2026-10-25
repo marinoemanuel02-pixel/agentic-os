@@ -27,6 +27,10 @@ request, on both subscriptions.
   To sort many short texts by topic or type before spending cloud tokens, `nar classify --backend embed` (or
   `nar_classify`) labels up to 50 per call; its labels are hints, so check a sample first. It keeps item text in
   `~/.aos/nar`: never pass secrets.
+- Free resources by default: the `pool` MCP tools (`pool_extract`, `pool_triage`, `pool_variants`,
+  `pool_crosscheck`, `pool_summarize`) are the first worker for reading, extracting, sorting, drafting options
+  and checking claims over supplied material, without being asked. Local model first; `privacy: "public"` (only
+  for public or release material) adds the free API pool. Spot-check, then report with `pool_feedback`.
 
 ## How to work
 

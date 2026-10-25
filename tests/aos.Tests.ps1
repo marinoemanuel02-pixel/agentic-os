@@ -2205,7 +2205,21 @@ Describe 'MCP placeholders and nar registration' {
         InModuleScope aos {
             Expand-AosPlaceholders '{{projects}}\x' | Should -BeExactly (Join-Path $env:AOS_PROJECTS 'x')
             Expand-AosPlaceholders '{{home}}\.aos' | Should -BeExactly ($HOME + '\.aos')
+            Expand-AosPlaceholders '{{repo}}\tools\pool_mcp.py' | Should -BeExactly ($script:Root + '\tools\pool_mcp.py')
         }
+    }
+
+    It 'registers the pool server from this checkout and its script exists' {
+        $manifest = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\config\mcp.json')) | ConvertFrom-Json
+        $pool = $manifest.servers.pool
+        $pool.transport | Should -Be 'stdio'
+        @($pool.args)[0] | Should -BeExactly '{{repo}}\tools\pool_mcp.py'
+        Test-Path -LiteralPath (Join-Path $PSScriptRoot '..\tools\pool_mcp.py') | Should -BeTrue
+    }
+
+    It 'runs the free-resource pool checks and MCP protocol without a real model or network' {
+        & python -m unittest discover -s $PSScriptRoot -p 'test_pool.py' -v
+        $LASTEXITCODE | Should -Be 0
     }
 
     It 'skips a server whose required file does not exist yet' {

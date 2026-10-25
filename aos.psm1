@@ -550,7 +550,8 @@ function Get-AosMcpManifest { return Read-AosJson (Join-Path $script:Root 'confi
 
 function Expand-AosPlaceholders([string]$Text) {
     # Repo files hold no absolute paths; these resolve on the machine at run time.
-    return $Text.Replace('{{projects}}', (Get-AosProjectsDir)).Replace('{{home}}', $HOME)
+    # {{repo}} is this checkout, for servers whose code lives in the repo itself.
+    return $Text.Replace('{{repo}}', $script:Root).Replace('{{projects}}', (Get-AosProjectsDir)).Replace('{{home}}', $HOME)
 }
 
 function Test-AosMcpCurrent($Result, [string[]]$Needles) {

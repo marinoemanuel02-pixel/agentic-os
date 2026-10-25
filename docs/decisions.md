@@ -3,6 +3,24 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-26 - Make the local model and the free API pool a default worker (`pool` MCP)
+
+- **Why.** The swarm and the local model existed but went unused: the swarm needs a packet and a lead-written
+  verifier per task, the local model was exposed only for scoring and sorting, and the contract said "consider".
+  The operator asked for them to be used by default, as tools the orchestration reaches for on its own.
+- **What.** One stdlib MCP server (`tools/pool_mcp.py`, core in `tools/pool_core.py`) with five task-shaped tools
+  and a feedback tool, registered for both agents. Local model first; the existing swarm second, only with
+  `privacy: "public"`. Each tool carries its own checks (schema, grounding in the source, quotes in the cited
+  source, numbers in summaries) and returns `pass`/`review`. A short rule in the shared contract and the
+  coordination skill makes it the first worker for reading, extraction, sorting, options and claim checks.
+  `config/mcp.json` gains a `{{repo}}` placeholder for servers whose code lives in this checkout.
+- **Rejected.** Hooks that reroute subagents or prompts to a cheaper model (llm-router style, PreToolUse on the
+  Agent tool): automatic, but they swap a strong model for a weak one with no check the user can see. A proxy
+  for the agents' own traffic (claude-code-router style): built for pay-per-token API use, not these
+  subscriptions, and free models handle tools poorly. A generic "ask a model" tool: nothing to verify against.
+- **Open.** Acceptance per tool is measured by `pool_feedback`, not assumed; revisit routing after about twenty
+  judged results per tool. The 6 GB GPU swaps models (about a minute cold).
+
 ## 2026-10-22 - Gate cross-vendor work with a readiness check; fix what a real run exposed
 
 - **Why.** With Claude's quota restored, both vendors re-verified the coordination layer and every tool
