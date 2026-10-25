@@ -1,4 +1,4 @@
-# Free-resource layer (`pool`)
+# Free-resource layer (`aos-pool`)
 
 One MCP server, registered for Claude and Codex by `aos sync`, that makes the local model and the free
 API pool a default worker in every run. It is a thin task-shaped front over what already exists: Ollama

@@ -1,4 +1,4 @@
-Describe 'aos isolated suite' {
+﻿Describe 'aos isolated suite' {
 # Run with tests/Run-Tests.ps1 (Pester 5.5+); all filesystem fixtures are disposable.
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot '..\aos.psm1') -Force -DisableNameChecking
@@ -2211,7 +2211,7 @@ Describe 'MCP placeholders and nar registration' {
 
     It 'registers the pool server from this checkout and its script exists' {
         $manifest = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\config\mcp.json')) | ConvertFrom-Json
-        $pool = $manifest.servers.pool
+        $pool = $manifest.servers.'aos-pool'
         $pool.transport | Should -Be 'stdio'
         @($pool.args)[0] | Should -BeExactly '{{repo}}\tools\pool_mcp.py'
         Test-Path -LiteralPath (Join-Path $PSScriptRoot '..\tools\pool_mcp.py') | Should -BeTrue

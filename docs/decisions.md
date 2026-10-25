@@ -3,7 +3,7 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
-## 2026-10-26 - Make the local model and the free API pool a default worker (`pool` MCP)
+## 2026-10-26 - Make the local model and the free API pool a default worker (`aos-pool` MCP)
 
 - **Why.** The swarm and the local model existed but went unused: the swarm needs a packet and a lead-written
   verifier per task, the local model was exposed only for scoring and sorting, and the contract said "consider".

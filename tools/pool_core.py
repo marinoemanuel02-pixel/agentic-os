@@ -13,6 +13,7 @@ import statistics
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 
@@ -56,6 +57,10 @@ class Backends:
         self.config = local_config()
 
     def _post(self, path, body, timeout=300):
+        # "private" means this machine: refuse any endpoint that is not loopback.
+        host = urllib.parse.urlsplit(self.config['url']).hostname or ''
+        if host not in ('127.0.0.1', 'localhost', '::1'):
+            raise RouteError('local model endpoint must be loopback, not ' + host)
         request = urllib.request.Request(self.config['url'] + path, data=json.dumps(body).encode('utf-8'),
                                          headers={'Content-Type': 'application/json'})
         try:
@@ -124,7 +129,8 @@ def parse_json(text):
 
 
 def schema_errors(value, schema, path='$'):
-    """A small JSON-Schema subset: type (incl. lists), properties, required, items, enum."""
+    """A JSON-Schema subset: type (incl. lists), properties, required, additionalProperties: false, items, enum.
+    Other keywords (pattern, minLength, ...) are not checked."""
     errors = []
     kinds = schema.get('type')
     if kinds:
@@ -144,6 +150,8 @@ def schema_errors(value, schema, path='$'):
         for key, sub in schema.get('properties', {}).items():
             if key in value:
                 errors += schema_errors(value[key], sub, path + '.' + key)
+        if schema.get('additionalProperties') is False:
+            errors += [path + '.' + key + ': not allowed' for key in value if key not in schema.get('properties', {})]
     if isinstance(value, list) and isinstance(schema.get('items'), dict):
         for index, item in enumerate(value):
             errors += schema_errors(item, schema['items'], path + '[' + str(index) + ']')
@@ -173,6 +181,14 @@ def numbers_missing(summary, source):
     plain = re.sub(r'(?<=\d)[.\s](?=\d{3}\b)', '', source)
     return sorted({n for n in re.findall(r'\d+(?:[.,]\d+)?', summary)
                    if n not in source and n not in plain})
+
+
+def key_terms(claim):
+    """Numbers and capitalised names in a claim (not its first word): the parts a quote must carry."""
+    words = re.findall(r"[\w'’]+", claim)
+    terms = set(re.findall(r'\d+(?:[.,]\d+)?', claim))
+    terms |= {w for w in words[1:] if w[:1].isupper() and len(w) > 2}
+    return sorted(terms)
 
 
 def cosine(a, b):
@@ -249,7 +265,12 @@ def extract(backends, source, fields=None, schema=None, privacy='private', groun
         return {'data': data, 'meta': meta, 'checks': {'json': True, 'schema_errors': errors, 'ungrounded': loose},
                 'score': len(errors) * 3 + len(loose)}
 
-    tries = [attempt(lambda: backends.local_chat(prompt, schema=schema))]
+    try:
+        tries = [attempt(lambda: backends.local_chat(prompt, schema=schema))]
+    except RouteError as error:
+        if not cloud:
+            raise
+        tries = [{'data': None, 'meta': {'route': 'local'}, 'checks': {'local_error': str(error)}, 'score': 99}]
     if tries[0]['score'] and cloud:
         try:
             tries.append(attempt(lambda: backends.cloud_text(prompt + '\nReturn JSON only.')))
@@ -357,6 +378,11 @@ def crosscheck(backends, claims, sources, privacy='private'):
         answer['quote_found'] = bool(quote) and normalize(quote) in normalize(source_text)
         if answer['verdict'] != 'not_found' and not answer['quote_found']:
             answer.update(verdict='not_found', downgraded='quote is not in the cited source')
+        elif answer['verdict'] == 'supported':
+            # A real sentence that does not carry the claim's numbers and names does not support it.
+            missing = [t for t in key_terms(claim) if normalize(t) not in normalize(quote)]
+            if missing:
+                answer.update(verdict='unclear', terms_not_in_quote=missing)
         answer['model'] = meta.get('model')
         return answer
 

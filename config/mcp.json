@@ -19,7 +19,7 @@
       "requires": "{{home}}\\.aos\\venvs\\nar-tools\\Scripts\\nar-mcp.exe",
       "why": "Local, calibrated single-pass (non-autoregressive) scoring of options; agents call it only when a choice among known alternatives benefits from it."
     },
-    "pool": {
+    "aos-pool": {
       "transport": "stdio",
       "command": "python",
       "args": ["{{repo}}\\tools\\pool_mcp.py"],

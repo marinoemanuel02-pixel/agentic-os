@@ -11,6 +11,9 @@ import traceback
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pool_core as core
 
+# Versions whose tool surface this server implements (tools/list, tools/call, ping); newest first.
+VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']
+
 PRIVACY = {'type': 'string', 'enum': ['private', 'public'], 'default': 'private',
            'description': 'private = local model only (default; use for anything not already public). '
                           'public = the free API pool may also be used (published sources, scripts meant for release).'}
@@ -25,7 +28,9 @@ TOOLS = [
          'source': {'type': 'string', 'description': 'The text to extract from (under 40,000 chars).'},
          'fields': {'type': 'object', 'additionalProperties': {'type': 'string'},
                     'description': 'Field name -> what it means. Values come back as strings or null.'},
-         'schema': {'type': 'object', 'description': 'A JSON schema instead of fields, for nested or typed results.'},
+         'schema': {'type': 'object', 'description': 'A JSON schema instead of fields, for nested or typed results. '
+                    'Checked keywords: type, properties, required, additionalProperties false, items, enum; '
+                    'others (pattern, minLength, ...) are not checked.'},
          'grounded': {'type': 'boolean', 'default': True,
                       'description': 'Check that every value appears in the source (turn off for derived values).'},
          'privacy': PRIVACY}}},
@@ -48,7 +53,8 @@ TOOLS = [
     {'name': 'pool_crosscheck',
      'description': 'Default first pass on whether supplied sources support specific claims (fact checks, script '
                     'claims, citations). Each verdict needs an exact quote found in the cited source or it is '
-                    'downgraded to not_found; with privacy public the free API pool votes independently and '
+                    'downgraded to not_found, and a "supported" quote must carry the claim\'s numbers and names or '
+                    'it becomes "unclear"; with privacy public the free API pool votes independently and '
                     'disagreements come back as "disputed". You still decide.',
      'inputSchema': {'type': 'object', 'required': ['claims', 'sources'], 'properties': {
          'claims': {'type': 'array', 'items': {'type': 'string'}, 'description': '1..20 claims.'},
@@ -89,12 +95,14 @@ def call_tool(name, args, backends):
 
 def handle(message, backends):
     method, mid = message.get('method'), message.get('id')
-    if mid is None:
+    if 'id' not in message:
         return None                                   # notification
     if method == 'initialize':
-        version = (message.get('params') or {}).get('protocolVersion') or '2025-06-18'
+        version = (message.get('params') or {}).get('protocolVersion')
+        if version not in VERSIONS:
+            version = VERSIONS[0]
         result = {'protocolVersion': version, 'capabilities': {'tools': {}},
-                  'serverInfo': {'name': 'pool', 'version': '1.0.0'}}
+                  'serverInfo': {'name': 'aos-pool', 'version': '1.0.0'}}
     elif method == 'ping':
         result = {}
     elif method == 'tools/list':

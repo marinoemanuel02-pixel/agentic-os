@@ -9,6 +9,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 import pool_core as core
@@ -94,6 +95,39 @@ class PoolTests(unittest.TestCase):
         self.assertEqual(row['verdict'], 'not_found')
         self.assertIn('downgraded', row['local'])
 
+    def test_crosscheck_real_but_irrelevant_quote_is_not_supported(self):
+        source = 'The report is dated Monday.'
+        fake = Fake(local=['{"verdict": "supported", "source_id": "s1", "quote": "The report is dated Monday."}'])
+        result = core.crosscheck(fake, ['The report was published in 2020'], [{'id': 's1', 'text': source}])
+        self.assertEqual(result['claims'][0]['verdict'], 'unclear')
+        self.assertEqual(result['claims'][0]['local']['terms_not_in_quote'], ['2020'])
+        self.assertEqual(result['verdict'], 'review')
+
+    def test_private_refuses_non_loopback_endpoint(self):
+        os.environ['AOS_OLLAMA_URL'] = 'https://ollama.example.com'
+        try:
+            with patch.object(core.urllib.request, 'urlopen') as opened:
+                with self.assertRaises(core.RouteError):
+                    core.Backends().local_chat('hello')
+                opened.assert_not_called()
+        finally:
+            os.environ.pop('AOS_OLLAMA_URL')
+
+    def test_public_extract_survives_local_outage(self):
+        class Down(Fake):
+            def local_chat(self, *a, **k):
+                raise core.RouteError('down')
+        fake = Down(cloud=['{"citta": "Verona", "casse": "42", "data_rilascio": null}'])
+        self.assertEqual(core.extract(fake, SOURCE, FIELDS, privacy='public')['verdict'], 'pass')
+        with self.assertRaises(core.RouteError):
+            core.extract(Down(), SOURCE, FIELDS, privacy='private')
+
+    def test_additional_properties_false_is_enforced(self):
+        schema = {'type': 'object', 'additionalProperties': False, 'properties': {'citta': {'type': 'string'}}}
+        fake = Fake(local=['{"citta": "Verona", "extra": "Verona"}'])
+        result = core.extract(fake, SOURCE, schema=schema)
+        self.assertEqual(result['checks']['schema_errors'], ['$.extra: not allowed'])
+
     def test_crosscheck_public_disagreement_is_disputed(self):
         fake = Fake(local=['{"verdict": "supported", "source_id": "s1", "quote": "Il deposito di Verona ha 42 casse."}'],
                     cloud=['{"verdict": "contradicted", "source_id": "s1", "quote": "Il deposito di Verona ha 42 casse."}'])
@@ -157,13 +191,14 @@ class McpProtocolTests(unittest.TestCase):
             env = dict(os.environ, AOS_POOL_DIR=tmp, AOS_OLLAMA_URL='http://127.0.0.1:%d' % server.server_port,
                        PYTHONUTF8='1')
             messages = [
-                {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {'protocolVersion': '2025-06-18'}},
+                {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {'protocolVersion': '2099-01-01'}},
                 {'jsonrpc': '2.0', 'method': 'notifications/initialized'},
                 {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'},
                 {'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call',
                  'params': {'name': 'pool_extract', 'arguments': {'source': SOURCE, 'fields': FIELDS}}},
                 {'jsonrpc': '2.0', 'id': 4, 'method': 'tools/call',
                  'params': {'name': 'pool_extract', 'arguments': {'source': SOURCE, 'privacy': 'cloud'}}},
+                {'jsonrpc': '2.0', 'id': None, 'method': 'ping'},
                 'not json',
             ]
             stdin = '\n'.join(m if isinstance(m, str) else json.dumps(m) for m in messages) + '\n'
@@ -172,14 +207,16 @@ class McpProtocolTests(unittest.TestCase):
                                   text=True, encoding='utf-8', env=env, timeout=60)
         server.shutdown()
         replies = [json.loads(line) for line in done.stdout.splitlines()]
-        self.assertEqual([r['id'] for r in replies], [1, 2, 3, 4, None])
-        self.assertEqual(replies[0]['result']['serverInfo']['name'], 'pool')
+        self.assertEqual([r['id'] for r in replies], [1, 2, 3, 4, None, None])
+        self.assertEqual(replies[0]['result']['serverInfo']['name'], 'aos-pool')
+        self.assertEqual(replies[0]['result']['protocolVersion'], '2025-11-25')
+        self.assertEqual(replies[4]['result'], {})
         names = {t['name'] for t in replies[1]['result']['tools']}
         self.assertIn('pool_crosscheck', names)
         call = json.loads(replies[2]['result']['content'][0]['text'])
         self.assertEqual(call['verdict'], 'pass')
         self.assertTrue(replies[3]['result']['isError'])
-        self.assertEqual(replies[4]['error']['code'], -32700)
+        self.assertEqual(replies[5]['error']['code'], -32700)
 
 
 if __name__ == '__main__':
