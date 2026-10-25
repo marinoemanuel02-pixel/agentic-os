@@ -2217,6 +2217,17 @@ Describe 'MCP placeholders and nar registration' {
         Test-Path -LiteralPath (Join-Path $PSScriptRoot '..\tools\pool_mcp.py') | Should -BeTrue
     }
 
+    It 'approves aos-pool tools for delegated Codex runs only when the server is registered' {
+        InModuleScope aos {
+            Mock Get-AosCodexConfigText { "[mcp_servers.nar]`ncommand = 'x'`n[mcp_servers.aos-pool]`ncommand = 'python'`n" }
+            $on = @(Get-AosCodexPoolArgs)
+            $on.Count | Should -Be 2
+            $on[1] | Should -BeExactly 'mcp_servers.aos-pool.default_tools_approval_mode="approve"'
+            Mock Get-AosCodexConfigText { "[mcp_servers.nar]`ncommand = 'x'`n" }
+            @(Get-AosCodexPoolArgs).Count | Should -Be 0
+        }
+    }
+
     It 'runs the free-resource pool checks and MCP protocol without a real model or network' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_pool.py' -v
         $LASTEXITCODE | Should -Be 0

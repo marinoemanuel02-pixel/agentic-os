@@ -323,6 +323,16 @@ function Get-AosCodexConfigText {
     return ''
 }
 
+function Get-AosCodexPoolArgs {
+    # codex exec never approves MCP calls, so a delegated Codex could not use the aos-pool tools.
+    # Approve them for this run only, and only when the server is registered (a bare override
+    # would create a server entry with no command). config.toml itself is not written.
+    if ((Get-AosCodexConfigText) -match '(?m)^\[mcp_servers\.aos-pool\]') {
+        return @('-c', 'mcp_servers.aos-pool.default_tools_approval_mode="approve"')
+    }
+    return @()
+}
+
 function Get-AosCodexPlugins {
     # Enabled Codex plugin ids. `codex plugin list` is authoritative: plugins from a remote catalog
     # (superpowers@openai-curated-remote) never appear in config.toml. The config.toml tables
@@ -3389,6 +3399,7 @@ function Invoke-AosDelegate {
             '-C', $workdir, '--sandbox', $mode, '--skip-git-repo-check')
         if ($Effort) { $codexArgs += @('-c', ('model_reasoning_effort="' + $Effort + '"')) }
         if ($Workers) { $codexArgs+=@('-c','agents.max_threads=1') }
+        $codexArgs += @(Get-AosCodexPoolArgs)
         $codexArgs += '-'
         $modelExe='codex.exe'
         if ($Transport -eq 'app-server') {
