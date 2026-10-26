@@ -3,6 +3,25 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-26 - Video learning is longitudinal: a craft frontier replaces quoted verdicts
+
+- **Why.** The operator observed that past critiques of videos ("shape-like", "too snappy", "stiff") were being
+  read back as limits of the pipeline: `aos video preflight` pasted raw verdicts into the first file every new film
+  reads, `video-rules.md` had grown into an append-only incident log with taste frozen into rules (R17, R18, R28)
+  and quoted user words in their provenance, and agent memories stored the verdict sentences as status.
+- **Decision.** Three layers. Raw verdicts stay in the ledger for audit only (`aos video preflight <name>
+  --verdicts`; never written to PREFLIGHT.md). `video-rules.md` keeps technical and process invariants; rules keep
+  their ids, lose quoted verdicts and stop prescribing taste. `agents-home/video/frontier.md` holds, per craft
+  dimension, the best exemplar so far, how it was made, the next target and what to try; the retro rewrites it
+  (never appends) and turns each verdict into a kit change. The look gate compares new frames with the frontier's
+  best, judged blind by both vendors.
+- **How it was built.** Codex wrote the failing preflight tests first (split authorship); Claude implemented.
+  The branch also merges `video-assets` and `video-blender-shorts`, which had never reached `main`, so the
+  template carries the latest capabilities. Their delegate `--max-input` budget did not survive the merge with the
+  newer supervisor: a Codex port attempt was rejected by its host verifier and the max-input tests stay red until
+  it is redone; 32 coordination tests fail on this branch for that reason and because video-assets' task-file
+  requirement collides with main's delegate tests. Merging to `main` waits for that port.
+
 ## 2026-10-22 - Gate cross-vendor work with a readiness check; fix what a real run exposed
 
 - **Why.** With Claude's quota restored, both vendors re-verified the coordination layer and every tool
