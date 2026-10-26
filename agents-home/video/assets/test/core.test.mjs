@@ -7,6 +7,9 @@ import {mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync} from 'n
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
+
+// CI runners have no ffmpeg; the tests that build clips are skipped there, as the template's pacing tests are.
+const NO_FFMPEG = spawnSync('ffmpeg', ['-version']).status !== 0 && 'ffmpeg is not on PATH';
 import {budgetFor, reserve, charge} from '../lib/budget.mjs';
 import {fetchHttp} from '../lib/fetch.mjs';
 import {measureMedia} from '../lib/measure.mjs';
@@ -121,7 +124,7 @@ test('withFilmLock serializes and releases', async () => {
   assert.deepEqual(order, [1, 2, 3]);
 });
 
-test('measureMedia reads the real duration of a cut excerpt', () => {
+test('measureMedia reads the real duration of a cut excerpt', {skip: NO_FFMPEG}, () => {
   const f = clip(mkdtempSync(join(tmpdir(), 'm-')), ['-f', 'lavfi', '-i', 'testsrc=d=2.4:s=160x90:r=30', '-c:v', 'libx264']);
   const m = measureMedia(f);
   assert.ok(Math.abs(m.duration - 2.4) < 0.05, `duration ${m.duration}`);
@@ -129,7 +132,7 @@ test('measureMedia reads the real duration of a cut excerpt', () => {
   assert.equal(m.width, 160);
 });
 
-test('makeProxy writes a silent 1080p30 H.264 file and returns its hash and settings', () => {
+test('makeProxy writes a silent 1080p30 H.264 file and returns its hash and settings', {skip: NO_FFMPEG}, () => {
   const dir = mkdtempSync(join(tmpdir(), 'p-'));
   const f = clip(dir, ['-f', 'lavfi', '-i', 'testsrc=d=1:s=320x180:r=25', '-f', 'lavfi', '-i', 'sine=d=1', '-shortest']);
   const out = join(dir, 'assets', 'a01.mp4');
@@ -142,7 +145,7 @@ test('makeProxy writes a silent 1080p30 H.264 file and returns its hash and sett
   assert.match(p.ffmpeg, /-crf 18/);
 });
 
-test('makeAudio cuts one use\'s sound into its own WAV', () => {
+test('makeAudio cuts one use\'s sound into its own WAV', {skip: NO_FFMPEG}, () => {
   const dir = mkdtempSync(join(tmpdir(), 'a-'));
   const f = clip(dir, ['-f', 'lavfi', '-i', 'testsrc=d=3:s=160x90:r=30', '-f', 'lavfi', '-i', 'sine=d=3', '-shortest']);
   const out = join(dir, 'a01.u1.wav');
@@ -171,7 +174,7 @@ test('creditsBlock lists required credits once and the Poly Haven line', () => {
   assert.match(t, /Source: Lab, 2026-09-09/);
 });
 
-test('proxyFilm writes a silent proxy and one WAV per audio-subject use, with hashes in the ledger', async () => {
+test('proxyFilm writes a silent proxy and one WAV per audio-subject use, with hashes in the ledger', {skip: NO_FFMPEG}, async () => {
   const {proxyFilm} = await import('../asset.mjs');
   const d = film();
   const src = clip(mkdtempSync(join(tmpdir(), 'pf-')), ['-f', 'lavfi', '-i', 'testsrc=d=3:s=320x180:r=30', '-f', 'lavfi', '-i', 'sine=d=3', '-shortest']);
