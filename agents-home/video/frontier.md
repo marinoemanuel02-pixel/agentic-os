@@ -6,13 +6,15 @@ starts from each `best`, compares its look-lab frames against it side by side, a
 both vendors, blind, judge the new frame better. A gap is written as a target, not as a fault.
 
 ## Characters and acting
-- best: pauseai-it (2026-10-26), a 2D cast in Remotion: `src/lib/Person.tsx` (lids, pupils with catch-lights, brows,
-  mouth shapes, jointed arms, `handPos()` so props and leashes attach to hands) and `src/lib/Mind.tsx` (one-eyed
-  creature with breathing lobes and an unreadable inside). Judged better than alignment-3's Pip blind by Codex and by
-  Claude (interaction and acting read in stills).
-- how: SVG rig as pure functions of the frame, poses as props, blinks/breathe/lag from motion.ts.
-- next: characters that change shape language with emotion (squash, stretch, overlap) and hands that grip.
-- try: a pose library per character and a two-character contact helper (holding, pulling, handing over).
+- best: pauseai-it v9 (2026-10-26) humans in `src/lib/Person.tsx`: adult proportions (head about a quarter of the
+  height), no ears (hair frames the face), small dark eyes with a catch-light, every limb one continuous tube from
+  shoulder to wrist and hip to ankle (round joins, so elbows and knees never show seams), a relaxed bend at rest,
+  mitten hands that hold props in hand space (`hold`), company names on shirts as literal child text. Preferred
+  blind by Codex over the v8 cast on matched frames (proportions, faces, appeal). The one-eyed `Mind` stays as is.
+- how: a bone chain per limb (shoulder, elbow, wrist; hip, knee, ankle) drawn as a single stroked path, like the bone
+  hierarchy that drives SVG paths in Google's Pose Animator; face features authored once and scaled with the head.
+- next: hands that visibly grip (a rope passing through the fist), and expressive silhouettes in action poses.
+- try: a fist/grip hand variant and a pose library per action (run, reach, press, hold), judged blind on stills.
 ## Motion
 - best: alignment-3 onward: every move through `src/lib/motion.ts` (soft in-out curves, minimum move length,
   settle, breathe); `tools/checks/motion.mjs` reports snaps and expo curves.
