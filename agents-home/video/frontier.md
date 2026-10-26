@@ -6,15 +6,21 @@ starts from each `best`, compares its look-lab frames against it side by side, a
 both vendors, blind, judge the new frame better. A gap is written as a target, not as a fault.
 
 ## Characters and acting
-- best: pauseai-it v9 (2026-10-26) humans in `src/lib/Person.tsx`: adult proportions (head about a quarter of the
-  height), no ears (hair frames the face), small dark eyes with a catch-light, every limb one continuous tube from
-  shoulder to wrist and hip to ankle (round joins, so elbows and knees never show seams), a relaxed bend at rest,
-  mitten hands that hold props in hand space (`hold`), company names on shirts as literal child text. Preferred
-  blind by Codex over the v8 cast on matched frames (proportions, faces, appeal). The one-eyed `Mind` stays as is.
-- how: a bone chain per limb (shoulder, elbow, wrist; hip, knee, ankle) drawn as a single stroked path, like the bone
-  hierarchy that drives SVG paths in Google's Pose Animator; face features authored once and scaled with the head.
-- next: hands that visibly grip (a rope passing through the fist), and expressive silhouettes in action poses.
-- try: a fist/grip hand variant and a pose library per action (run, reach, press, hold), judged blind on stills.
+- best: pauseai-it v10 (2026-10-26) cast, now the template kit `src/lib/cast/` (review sheets `CastSheet`,
+  `CastTrio`, `CastFaces`, `CastHands`). Built in head units (about 5.5H, a neck of about 0.12H that starts inside
+  the jaw and ends in the collar), one tapered torso shape per garment (t-shirt, sweater, collared shirt, suit, lab
+  coat), three builds and a child body, three head shapes, eight hair styles, faces that vary per character (eye
+  spacing and size, jaw, nose). Limbs are filled tapered outlines with a rounded joint and fabric creases; hands
+  are an eight-pose library drawn as one silhouette each (union outline); shoes have heel, toe box and sole, the
+  near foot foreshortened in 3/4; eleven mouth shapes plus `talk()`; coloured outlines lighter on internal details.
+  Codex, blind against the v9 cast: "a large improvement in general quality".
+- how: research first (studio styles, Disney appeal, 2D rigs: RubberHose, Duik, Spine, Rive, Character Animator),
+  turned into a numbered spec in head units; then a cast sheet at film scale and at close-up, judged by both
+  vendors before any shot; geometry under test (`tools/checks/cast.test.mts`).
+- next: acting, not construction: poses with a line of action, weight shifts, overlapping action on hands and hair
+  in motion; faces that read at a quarter-screen height.
+- try: key poses per beat taken from `POSES` and blended, a dynamic line-of-action lean, blink and gaze offsets per
+  character; judge in motion (a 3 s clip per character), not only on stills.
 ## Motion
 - best: alignment-3 onward: every move through `src/lib/motion.ts` (soft in-out curves, minimum move length,
   settle, breathe); `tools/checks/motion.mjs` reports snaps and expo curves.

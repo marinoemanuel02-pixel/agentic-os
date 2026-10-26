@@ -25,6 +25,9 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
 - Review sheet of chosen frames (the director's main loop): `bash tools/frames.sh <sheet> S01:20 S02:140 ...`
 - Stills: `bash tools/still.sh <frame> <CompositionId>...`; verify a checkout: `node --no-warnings tools/verify.mjs S01 S02 ...`
   (bundles, renders first/middle/last frame per shot, writes a contact sheet)
+- People in 2D films: `src/lib/cast/` (`Person`, `POSES`, `walk`, `talk`, `handPos`; colours in `palette.ts`). Review
+  the cast before it goes into shots and after any kit change: `bash tools/still.sh 0 CastSheet CastTrio CastFaces
+  CastHands`; geometry tests `node --no-warnings --test tools/checks/cast.test.mts`
 - Soundtrack stems: `node --no-warnings tools/audio.mts`; full build: `bash tools/build.sh v1`
 - QA: `bash tools/qa.sh exports/{{name}}.mp4 exports/{{name}}.srt` (length from `qa.env`; includes the motion
   check on a texture-free proxy, report `qa/motion.md`), then `node tools/screen.mjs` (on-screen text)
