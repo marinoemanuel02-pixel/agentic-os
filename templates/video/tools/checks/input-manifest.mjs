@@ -18,6 +18,14 @@ const normalize = label => {
   return name;
 };
 
+const isPlaceholder = (file) => {
+  try {
+    return path.resolve(fs.realpathSync.native(file)).toLowerCase() === path.resolve(file).toLowerCase() && fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+};
+
 export function snapshot(options) {
   const entries = [];
   const seen = new Set();
@@ -30,7 +38,9 @@ export function snapshot(options) {
   function walk(dir, prefix) {
     for (const item of fs.readdirSync(dir, {withFileTypes: true})) {
       const full = path.join(dir, item.name); const name = `${prefix}/${item.name}`;
-      if (item.isSymbolicLink()) throw new Error(`Undeclared linked input: ${name}`);
+      // OneDrive keeps synced files as cloud placeholders, which Node reports as symbolic links; a placeholder resolves
+      // to itself, a real link resolves elsewhere and stays refused.
+      if (item.isSymbolicLink() && !isPlaceholder(full)) throw new Error(`Undeclared linked input: ${name}`);
       if (item.isDirectory()) walk(full, name);
       else add(name, full);
     }
