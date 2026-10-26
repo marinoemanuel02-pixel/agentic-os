@@ -1690,7 +1690,7 @@ function New-AosVideo([string]$Name) {
     else { Write-AosWarn "shared Remotion install not found at ${mods}: install it once (about 480 MB; ask first), then run aos video new $Name again" }
     # The preflight report is made once here; afterwards it is refreshed only on request (aos video preflight).
     if (-not (Test-Path -LiteralPath (Join-Path $full 'PREFLIGHT.md'))) { $null = Write-AosVideoPreflight -Name $Name }
-    Write-AosInfo 'Next: read PREFLIGHT.md (rules and past verdicts), then fill brief.md and rubric.md.'
+    Write-AosInfo 'Next: read PREFLIGHT.md (invariant rules and the craft frontier), then fill brief.md and rubric.md.'
 }
 
 # Video learning loop: the user's verdicts and stage timings go to the coordination ledger (append-safe, outside
@@ -2002,7 +2002,7 @@ aos - agentic-os control
   aos video new <name>       new video project in Desktop\1-Projects\videos (video template + render app in ~\.aos\video)
   aos video verdict <name> <words>         record the user's verdict on a video, verbatim (coordination ledger)
   aos video log <name> <stage> <min> [note] record how long a stage took (brief|look|structure|production|qa|...)
-  aos video preflight <name> rules + past verdicts + stage times -> the project's PREFLIGHT.md
+  aos video preflight <name> [--verdicts]  rules + craft frontier + stage times -> PREFLIGHT.md (--verdicts: audit, output only)
   aos asset <search|fetch|capture|proxy|registry|credits|budget>   import real material into a film (rights ledger, budget)
   aos place ls [--json]      list shared places, including missing folders
   aos place add <folder> [--name <n>] [--kind repo|vault|folder]   add a place, then sync
@@ -3321,6 +3321,7 @@ function Invoke-AosDelegate {
     if ($Vendor -notin @('codex', 'claude')) { return (& $refuse "unknown vendor '$Vendor' (codex or claude)") }
     if ($env:AOS_DELEGATE_ID) { return (& $refuse 'a delegated worker cannot launch another CLI delegate; use its reserved native allowance') }
     if ($Transport -notin @('exec','app-server') -or ($Transport -eq 'app-server' -and $Vendor -ne 'codex')) { return (& $refuse 'transport must be exec, or app-server for Codex') }
+    if ($MaxInput -gt 0 -and $Transport -ne 'exec') { return (& $refuse 'max-input is enforced on the exec transport only; drop --max-input or use --transport exec') }
     try { $route = Resolve-AosTaskRoute -Vendor $Vendor -Tier $Tier -Model $Model -Effort $Effort }
     catch { return (& $refuse $_.Exception.Message) }
     $Model = $route.Model

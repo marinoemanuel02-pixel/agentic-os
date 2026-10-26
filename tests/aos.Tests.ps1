@@ -3692,6 +3692,13 @@ Describe 'aos delegate' {
             Should -Invoke Write-AosWarn -ModuleName aos -ParameterFilter { $Text -match 'Read only:.*Done =' }
             Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly
         }
+        It 'refuses a max-input budget on the app-server transport, which cannot enforce it' {
+            Mock Invoke-AosProcess -ModuleName aos { throw 'unexpected process' }
+            $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R -MaxInput 1000 -Transport 'app-server' }
+            $r.outcome | Should -Be 'refused'
+            $r.error.message | Should -Match 'max-input'
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
+        }
         It 'does not install a watch when max-input is zero' {
             Mock Invoke-AosProcess -ModuleName aos {
                 $Watch | Should -BeNullOrEmpty
