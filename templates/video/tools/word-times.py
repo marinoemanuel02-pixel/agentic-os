@@ -47,7 +47,8 @@ for line in lines:
     entry = next(v for v in voice if v["id"] == line["id"])
     wav = vo_dir / Path(entry["file"]).name if vo_dir else public / entry["file"]
     meta[line["id"]] = hashlib.sha256(wav.read_bytes()).hexdigest()
-    segments, _ = model.transcribe(pcm16k(wav), language="en", beam_size=5, word_timestamps=True)
+    # the narration language (AOS_VO_LANG, default en): forcing English on Italian speech mistranscribes words
+    segments, _ = model.transcribe(pcm16k(wav), language=os.environ.get("AOS_VO_LANG", "en"), beam_size=5, word_timestamps=True)
     words = [[w.word.strip(), round(w.start, 2), round(w.end, 2)] for s in segments for w in s.words]
     out[line["id"]] = words
     print(line["id"], len(words), "words")
