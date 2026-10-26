@@ -154,7 +154,14 @@ export const armJoints = (bd: Body, side: -1 | 1, a: [number, number]) => {
 /** where a held prop sits, along the hand from the wrist (hand units) */
 export const GRIP = 13;
 
-/** Where a hand grips, in the parent's coordinates (same maths as the arm), so props and leashes attach to it. */
+/** Degrees a hand turns away from the forearm's line: a relaxed hand hangs toward the body, the others follow the arm. */
+export const handTilt = (hand: HandPose, side: -1 | 1) => (hand === "relaxed" ? side * 10 : 0);
+
+/**
+ * Where a hand grips, in the parent's coordinates (same maths as the arm, the hand's tilt and the pose's squash), so
+ * props and leashes attach to it. Pass the person's `hand` pose when it is not gripping; breathing (under 1 unit) is
+ * not included.
+ */
 export const handPos = (
   side: -1 | 1,
   a: [number, number],
@@ -163,13 +170,14 @@ export const handPos = (
   scale = 1,
   facing: 1 | -1 = 1,
   lean = 0,
-  opts: { build?: Build; child?: boolean } = {},
+  opts: { build?: Build; child?: boolean; hand?: HandPose; squash?: number } = {},
 ): [number, number] => {
   const bd = body(opts.build, opts.child);
   const j = armJoints(bd, side, a);
-  const [hx, hy] = polar(j.wx, j.wy, GRIP * bd.hand, j.d2);
-  const lx = hx * facing;
-  const ly = hy;
+  const [hx, hy] = polar(j.wx, j.wy, GRIP * bd.hand, j.d2 + handTilt(opts.hand ?? "grip", side));
+  const sq = opts.squash ?? 0;
+  const lx = hx * facing * (1 + sq);
+  const ly = hy * (1 - sq);
   const r = (lean * Math.PI) / 180;
   return [x + scale * (lx * Math.cos(r) - ly * Math.sin(r)), y + scale * (lx * Math.sin(r) + ly * Math.cos(r))];
 };

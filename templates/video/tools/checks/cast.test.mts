@@ -2,7 +2,7 @@
 // lip-sync and per-character faces. Pure maths, so a regression shows here before it shows in a frame.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { armJoints, body, faceFor, GRIP, H_UNIT, handPos, limbPath, polar, talk, walk } from "../../src/lib/cast/geom.ts";
+import { armJoints, body, faceFor, GRIP, H_UNIT, handPos, handTilt, limbPath, polar, talk, walk } from "../../src/lib/cast/geom.ts";
 
 type Seg = { cmd: string; n: number[] };
 const parse = (d: string): Seg[] =>
@@ -87,6 +87,22 @@ test("handPos is the grip point of the drawn arm, mirrored by facing and scaled"
   assert.notEqual(cx, gx, "a child's arm is shorter");
 });
 
+test("handPos follows the drawn hand: a relaxed hand's tilt toward the body, and the pose's squash (Codex review)", () => {
+  const a: [number, number] = [20, 10];
+  const b = body();
+  for (const side of [-1, 1] as const) {
+    const j = armJoints(b, side, a);
+    const [gx, gy] = polar(j.wx, j.wy, GRIP * b.hand, j.d2 + handTilt("relaxed", side));
+    const [hx, hy] = handPos(side, a, 0, 0, 1, 1, 0, { hand: "relaxed" });
+    assert.ok(Math.abs(hx - gx) < 1e-9 && Math.abs(hy - gy) < 1e-9, `side ${side}`);
+  }
+  assert.notEqual(handTilt("relaxed", 1), 0);
+  assert.equal(handTilt("grip", 1), 0, "a gripping hand follows the forearm");
+  const [px, py] = handPos(1, a, 0, 0);
+  const [sx, sy] = handPos(1, a, 0, 0, 1, 1, 0, { squash: 0.1 });
+  assert.ok(Math.abs(sx - px * 1.1) < 1e-9 && Math.abs(sy - py * 0.9) < 1e-9, "squash scales x by 1+s and y by 1-s");
+});
+
 test("walk: legs swing opposite, the swinging knee lifts, arms counter-swing", () => {
   const p = walk(0.25, 20);
   assert.equal(p.legL, 20);
@@ -96,6 +112,15 @@ test("walk: legs swing opposite, the swinging knee lifts, arms counter-swing", (
     assert.ok((q.kneeL ?? 0) >= 6 && (q.kneeR ?? 0) >= 6, "knees never lock straight");
   }
   assert.ok((walk(0).kneeL ?? 0) > (walk(0).kneeR ?? 0), "the leg moving forward is the one that lifts");
+  // arm angles are "raised outward": + on the left arm (side -1) swings it back, + on the right arm swings it forward,
+  // so each arm swings opposite to the leg on its own side
+  for (const ph of [0.25, 0.75]) {
+    const q = walk(ph, 20);
+    const back = (q.armL?.[0] ?? 0) - 8;
+    const fwd = (q.armR?.[0] ?? 0) - 8;
+    assert.ok(Math.sign(back) === Math.sign(q.legL ?? 0) && back !== 0, `left arm back while the left leg is forward (phase ${ph})`);
+    assert.ok(Math.sign(fwd) === Math.sign(q.legL ?? 0) && fwd !== 0, `right arm forward with the left leg (phase ${ph})`);
+  }
 });
 
 test("talk is deterministic, changes every few frames and varies with the seed", () => {

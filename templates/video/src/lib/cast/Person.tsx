@@ -20,7 +20,7 @@
 import React from "react";
 import { CAST as P } from "./palette";
 import { Cel, Contact } from "./Draw2d";
-import { armJoints, bandPath, type Body, body, type Build, capsule, ellipse, f2, type Face, faceFor, FOOT, GRIP, type Hair, hairFront, type HandPose, headPath, type HeadShape, ink, limbPath, mix, type MouthShape, nrm, type Outfit, type PersonPose, polar, type Pt, rrect, sub } from "./geom";
+import { armJoints, bandPath, handTilt, type Body, body, type Build, capsule, ellipse, f2, type Face, faceFor, FOOT, GRIP, type Hair, hairFront, type HandPose, headPath, type HeadShape, ink, limbPath, mix, type MouthShape, nrm, type Outfit, type PersonPose, polar, type Pt, rrect, sub } from "./geom";
 
 export { POSES, walk, talk, handPos, crowdSpec, limbPath, faceFor } from "./geom";
 export type { Outfit, Hair, HandPose, MouthShape, Build, HeadShape, PersonPose } from "./geom";
@@ -231,7 +231,7 @@ const Arm: React.FC<{
   return (
     <g>
       {/* the hand first, so the cuff overlaps the wrist */}
-      <g transform={`translate(${j.wx} ${j.wy}) rotate(${j.d2 - 90 + (hand === "relaxed" ? side * 10 : 0)})`}>
+      <g transform={`translate(${j.wx} ${j.wy}) rotate(${j.d2 - 90 + handTilt(hand, side)})`}>
         <Hand pose={hand} skin={skin} mirror={side < 0} k={bd.hand} hold={hold} detail={detail} />
       </g>
       {sleeve === "jacket" ? <path d={bandPath(at(W, u2, -9), at(W, u2, 1), 6.5 * w, 6.5 * w)} fill="#f2efe8" stroke={ink("#f2efe8")} strokeWidth={LINE_IN} /> : null}
