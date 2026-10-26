@@ -20,6 +20,7 @@ import os
 import re
 import subprocess
 import sys
+import unicodedata
 import wave
 from pathlib import Path
 
@@ -35,7 +36,10 @@ CHAIN = "highpass=f=70"
 
 
 def norm(w: str) -> str:
-    return re.sub(r"[^a-z0-9']", "", w.lower().replace("’", "'"))
+    # accents fold to their base letter ("È" -> "e"): stripping them dropped one-letter words such as Italian "è",
+    # so a line starting with one was cut after it
+    w = unicodedata.normalize("NFKD", w.lower().replace("’", "'"))
+    return re.sub(r"[^a-z0-9']", "", "".join(c for c in w if not unicodedata.combining(c)))
 
 
 def ff(*args) -> subprocess.CompletedProcess:
@@ -72,7 +76,8 @@ def write_wav(p: Path, x: np.ndarray) -> None:
 def whisper_words(wav: Path, prompt: str, model):
     pcm = subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(wav), "-f", "f32le", "-ac", "1", "-ar", "16000", "-"],
                          capture_output=True, check=True).stdout
-    seg, _ = model.transcribe(np.frombuffer(pcm, dtype=np.float32), language="en", beam_size=8, word_timestamps=True,
+    # the narration language (AOS_VO_LANG, default en), as in word-times.py: English forced on Italian takes heard nothing
+    seg, _ = model.transcribe(np.frombuffer(pcm, dtype=np.float32), language=os.environ.get("AOS_VO_LANG", "en"), beam_size=8, word_timestamps=True,
                               condition_on_previous_text=False, initial_prompt=prompt or None)
     return [(w.word.strip(), w.start, w.end) for s in seg for w in s.words]
 
