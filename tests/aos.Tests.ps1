@@ -880,28 +880,55 @@ Describe 'aos video verdict and log' {
 }
 
 Describe 'aos video preflight' {
+    BeforeAll {
+        function Write-PreflightTestLedger {
+            $lines = @(
+                '{"ts":"2026-09-01T10:00:00Z","type":"video-verdict","video":"alignment-3","text":"first"}',
+                '{"ts":"2026-09-02T10:00:00Z","type":"video-verdict","video":"alignment","text":"second"}',
+                '{"ts":"2026-09-03T10:00:00Z","type":"video-verdict","video":"Alignment-v2","text":"third"}',
+                '{"ts":"2026-09-04T10:00:00Z","type":"video-verdict","video":"other-1","text":"drop me"}',
+                '{"ts":"2026-09-05T10:00:00Z","type":"video-verdict","video":"other-2","text":"keep 1"}',
+                '{"ts":"2026-09-06T10:00:00Z","type":"video-verdict","video":"other-3","text":"keep 2"}',
+                '{"ts":"2026-09-07T10:00:00Z","type":"video-verdict","video":"other-4","text":"keep 3"}',
+                '{"ts":"2026-09-08T10:00:00Z","type":"video-verdict","video":"other-5","text":"keep 4"}',
+                '{"ts":"2026-09-09T10:00:00Z","type":"video-verdict","video":"other-6","text":"keep 5"}',
+                '{"ts":"2026-09-10T10:00:00Z","type":"video-stage","video":"other-1","stage":"production","minutes":10,"note":""}',
+                '{"ts":"2026-09-11T10:00:00Z","type":"video-stage","video":"alignment","stage":"production","minutes":42,"note":""}',
+                '{"ts":"2026-09-12T10:00:00Z","type":"video-stage","video":"alignment-3","stage":"production","minutes":50,"note":""}',
+                '{"ts":"2026-09-13T10:00:00Z","type":"video-stage","video":"alignment","stage":"qa","minutes":10,"note":""}',
+                '{"ts":"2026-09-14T10:00:00Z","type":"video-stage","video":"alignment","stage":"qa","minutes":20,"note":""}',
+                '{"ts":"2026-09-15T10:00:00Z","type":"delegate","outcome":"accepted"}',
+                '{"ts":"2026-09-16T10:00:00Z","type":"delegate","outcome":"accepted"}',
+                '{"ts":"2026-09-17T10:00:00Z","type":"delegate","outcome":"rejected"}'
+            )
+            # The report must read beyond Get-AosLedger's default 20-event window.
+            for ($i = 0; $i -lt 21; $i++) {
+                $lines += '{"ts":"2026-09-18T10:00:00Z","type":"note","text":"unrelated"}'
+            }
+            Write-TestFile (Join-Path $env:AOS_COORD 'ledger.jsonl') ($lines -join "`n")
+        }
+    }
     BeforeEach {
-        $savedPreflight = @{ C = $env:AOS_COORD; P = $env:AOS_PROJECTS; R = $env:AOS_VIDEO_RULES }
+        $savedPreflight = @{ C = $env:AOS_COORD; P = $env:AOS_PROJECTS; R = $env:AOS_VIDEO_RULES; F = $env:AOS_VIDEO_FRONTIER }
         $env:AOS_COORD = Join-Path $caseRoot 'coord'
         $env:AOS_PROJECTS = New-TestFolder (Join-Path $caseRoot 'projects')
         $env:AOS_VIDEO_RULES = Join-Path $caseRoot 'rules.md'
+        $env:AOS_VIDEO_FRONTIER = Join-Path $caseRoot 'frontier.md'
+        $frontierBody = "`n## Movement`n`n- best: sample-2, shot 03`n- next: richer acting`n`n### Try`n  Keep **formatting**.`n# A later title stays`n"
+        Write-TestFile $env:AOS_VIDEO_FRONTIER ("# Craft frontier`n" + $frontierBody)
         Write-TestFile $env:AOS_VIDEO_RULES "# Video rules`n- R01 [manual] Approve the brief.`n- R02 [check: frozen-frames] Check the timeline.`n"
     }
     AfterEach {
-        $env:AOS_COORD = $savedPreflight.C; $env:AOS_PROJECTS = $savedPreflight.P; $env:AOS_VIDEO_RULES = $savedPreflight.R
+        $env:AOS_COORD = $savedPreflight.C; $env:AOS_PROJECTS = $savedPreflight.P; $env:AOS_VIDEO_RULES = $savedPreflight.R; $env:AOS_VIDEO_FRONTIER = $savedPreflight.F
     }
 
     It 'returns a report for a missing project without creating its folder' {
+        Write-TestFile $env:AOS_VIDEO_FRONTIER "# Craft frontier`n- next: richer acting`n"
         $report = aos video preflight align-1 | Out-String
         $report | Should -Match '^# Preflight: align-1'
-        $headings = @('## Rules', '## Verdicts on align', '## Other recent verdicts',
-            '## Stage minutes', '## Delegations')
-        $last = -1
-        foreach ($heading in $headings) {
-            $position = $report.IndexOf($heading, [StringComparison]::Ordinal)
-            $position | Should -BeGreaterThan $last
-            $last = $position
-        }
+        $headings = @([regex]::Matches($report, '(?m)^#{1,2} .+\r?$') | ForEach-Object { $_.Value.TrimEnd("`r") })
+        ($headings -join "`n") | Should -BeExactly "# Preflight: align-1`n## Invariants`n## Frontier`n## Stage minutes`n## Delegations"
+        $report | Should -Not -Match '(?m)^## (Rules|Verdicts on .+|Other recent verdicts|Verdicts \(audit only\))\r?$'
         $report | Should -Match 'R01.*manual'
         $report | Should -Match 'R02.*check: frozen-frames.*tools/checks/frozen-frames\.mjs'
         $report | Should -Match '(?s)## Stage minutes.*?- none recorded.*?## Delegations.*?- none recorded'
@@ -911,37 +938,33 @@ Describe 'aos video preflight' {
     It 'keeps the rules grouped by stage and asks for the capacity split (R34, R40)' {
         Write-TestFile $env:AOS_VIDEO_RULES "# Video rules`n`n## Brief`n`n- R01 [manual] Approve the brief.`n`n## QA`n`n- R02 [check: frozen-frames] Check the timeline.`n"
         $report = aos video preflight align-1 | Out-String
-        $report | Should -Match '(?s)## Rules.*### Brief.*R01.*### QA.*R02.*## Capacity and split'
+        $report | Should -Match '(?s)## Invariants.*### Brief.*R01.*### QA.*R02.*## Delegations.*### Capacity and split'
         $report | Should -Match 'aos capacity'
         $report | Should -Match 'aos note'
     }
 
-    It 'reports family verdicts, five other verdicts, medians and delegation outcomes' {
-        $lines = @(
-            '{"ts":"2026-09-01T10:00:00Z","type":"video-verdict","video":"alignment-3","text":"first"}',
-            '{"ts":"2026-09-02T10:00:00Z","type":"video-verdict","video":"alignment","text":"second"}',
-            '{"ts":"2026-09-03T10:00:00Z","type":"video-verdict","video":"Alignment-v2","text":"third"}',
-            '{"ts":"2026-09-04T10:00:00Z","type":"video-verdict","video":"other-1","text":"drop me"}',
-            '{"ts":"2026-09-05T10:00:00Z","type":"video-verdict","video":"other-2","text":"keep 1"}',
-            '{"ts":"2026-09-06T10:00:00Z","type":"video-verdict","video":"other-3","text":"keep 2"}',
-            '{"ts":"2026-09-07T10:00:00Z","type":"video-verdict","video":"other-4","text":"keep 3"}',
-            '{"ts":"2026-09-08T10:00:00Z","type":"video-verdict","video":"other-5","text":"keep 4"}',
-            '{"ts":"2026-09-09T10:00:00Z","type":"video-verdict","video":"other-6","text":"keep 5"}',
-            '{"ts":"2026-09-10T10:00:00Z","type":"video-stage","video":"other-1","stage":"production","minutes":10,"note":""}',
-            '{"ts":"2026-09-11T10:00:00Z","type":"video-stage","video":"alignment","stage":"production","minutes":42,"note":""}',
-            '{"ts":"2026-09-12T10:00:00Z","type":"video-stage","video":"alignment-3","stage":"production","minutes":50,"note":""}',
-            '{"ts":"2026-09-13T10:00:00Z","type":"video-stage","video":"alignment","stage":"qa","minutes":10,"note":""}',
-            '{"ts":"2026-09-14T10:00:00Z","type":"video-stage","video":"alignment","stage":"qa","minutes":20,"note":""}',
-            '{"ts":"2026-09-15T10:00:00Z","type":"delegate","outcome":"accepted"}',
-            '{"ts":"2026-09-16T10:00:00Z","type":"delegate","outcome":"accepted"}',
-            '{"ts":"2026-09-17T10:00:00Z","type":"delegate","outcome":"rejected"}'
-        )
-        # The report must read beyond Get-AosLedger's default 20-event window.
-        for ($i = 0; $i -lt 21; $i++) {
-            $lines += '{"ts":"2026-09-18T10:00:00Z","type":"note","text":"unrelated"}'
-        }
-        Write-TestFile (Join-Path $env:AOS_COORD 'ledger.jsonl') ($lines -join "`n")
-        $report = aos video preflight 'ALIGNMENT-4' | Out-String
+    It 'appends audit verdicts in family order then five recent others beyond twenty events' {
+        Write-PreflightTestLedger
+        $plain = aos video preflight ALIGNMENT-4 | Out-String
+        $report = aos video preflight ALIGNMENT-4 --verdicts | Out-String
+        $position = $report.IndexOf('## Verdicts (audit only)', [StringComparison]::Ordinal)
+        $position | Should -BeGreaterThan $report.IndexOf('## Delegations', [StringComparison]::Ordinal)
+        $report.Substring(0, $position).TrimEnd([char[]]@("`r", "`n")) | Should -BeExactly $plain.TrimEnd([char[]]@("`r", "`n"))
+        $audit = $report.Substring($position).TrimEnd([char[]]@("`r", "`n"))
+        $expected = @(
+            '- 2026-09-01 alignment-3: "first"',
+            '- 2026-09-02 alignment: "second"',
+            '- 2026-09-03 Alignment-v2: "third"',
+            '- 2026-09-05 other-2: "keep 1"',
+            '- 2026-09-06 other-3: "keep 2"',
+            '- 2026-09-07 other-4: "keep 3"',
+            '- 2026-09-08 other-5: "keep 4"',
+            '- 2026-09-09 other-6: "keep 5"'
+        ) -join "`n"
+        $verdictLines = @($audit -split '\r?\n' | Where-Object { $_ -like '- *' })
+        ($verdictLines -join "`n") | Should -BeExactly $expected
+        @([regex]::Matches($audit, '(?m)^## ')).Count | Should -Be 1
+        $report | Should -Not -Match '## Verdicts on |## Other recent verdicts'
         $report | Should -Match '(?m)^- 2026-09-01 alignment-3: "first"\r?$'
         $report | Should -Match '(?m)^- 2026-09-02 alignment: "second"\r?$'
         $report | Should -Match '(?m)^- 2026-09-03 Alignment-v2: "third"\r?$'
@@ -964,6 +987,93 @@ Describe 'aos video preflight' {
         $stored = [System.IO.File]::ReadAllText($path)
         $stored.TrimEnd([char[]]@("`r", "`n")) | Should -BeExactly $report.TrimEnd([char[]]@("`r", "`n"))
         $stored | Should -Match '^# Preflight: align-1'
+    }
+
+    It 'lists exact invariant lines with the executable-check suffix' {
+        $report = aos video preflight align-1 | Out-String
+        $invariants = [regex]::Match($report, '(?s)## Invariants\r?\n\r?\n(.*?)\r?\n## Frontier').Groups[1].Value.TrimEnd([char[]]@("`r", "`n"))
+        $invariants.Replace("`r`n", "`n") | Should -BeExactly ("- R01 [manual] Approve the brief.`n" +
+            '- R02 [check: frozen-frames] Check the timeline. (runs tools/checks/frozen-frames.mjs from tools/qa.sh)')
+    }
+
+    It 'inserts the overridden frontier verbatim dropping only the first title' {
+        $report = aos video preflight align-1 | Out-String
+        $report | Should -Match ([regex]::Escape("## Frontier`n`n" + $frontierBody))
+        $report | Should -Not -Match '# Craft frontier'
+    }
+
+    It 'keeps a frontier without a title intact' {
+        $body = "Intro without a title.`n`n- next: expressive poses`n"
+        Write-TestFile $env:AOS_VIDEO_FRONTIER $body
+        $report = aos video preflight align-1 | Out-String
+        $report | Should -Match ([regex]::Escape("## Frontier`n`n" + $body))
+    }
+
+    It 'reads the default frontier from the repo root when the override is absent' {
+        $env:AOS_VIDEO_FRONTIER = $null
+        $repo = New-TestFolder (Join-Path $caseRoot 'repo')
+        Write-TestFile (Join-Path $repo 'agents-home\video\frontier.md') "# Default frontier`n- next: default frontier fixture`n"
+        $report = InModuleScope aos -Parameters @{ Repo = $repo } {
+            param($Repo)
+            $savedRoot = $script:Root
+            try {
+                $script:Root = $Repo
+                aos video preflight align-1
+            }
+            finally { $script:Root = $savedRoot }
+        } | Out-String
+        $report | Should -Match '(?m)^- next: default frontier fixture\r?$'
+        $report | Should -Not -Match '# Default frontier'
+    }
+
+    It 'reports a missing rules file under Invariants' {
+        Remove-Item -LiteralPath $env:AOS_VIDEO_RULES
+        $report = aos video preflight align-1 | Out-String
+        $report | Should -Match ([regex]::Escape("## Invariants`n`n- rules file not found: $env:AOS_VIDEO_RULES`n"))
+    }
+
+    It 'reports a missing frontier file under Frontier' {
+        Remove-Item -LiteralPath $env:AOS_VIDEO_FRONTIER
+        $report = aos video preflight align-1 | Out-String
+        $report | Should -Match ([regex]::Escape("## Frontier`n`n- frontier file not found: $env:AOS_VIDEO_FRONTIER`n"))
+    }
+
+    It 'omits all family and other verdict text by default' {
+        Write-PreflightTestLedger
+        $report = aos video preflight ALIGNMENT-4 | Out-String
+        foreach ($text in @('first', 'second', 'third', 'drop me', 'keep 1', 'keep 2', 'keep 3', 'keep 4', 'keep 5')) {
+            $report | Should -Not -Match ([regex]::Escape($text))
+        }
+        $report | Should -Not -Match '(?m)^## .*Verdicts'
+    }
+
+    It 'overwrites PREFLIGHT with the plain report and never stores audit verdicts' {
+        Write-PreflightTestLedger
+        $folder = New-TestFolder (Join-Path $env:AOS_PROJECTS 'videos\ALIGNMENT-4')
+        $path = Join-Path $folder 'PREFLIGHT.md'
+        Write-TestFile $path 'stale report with verdict text'
+        $plain = aos video preflight ALIGNMENT-4 | Out-String
+        $storedPlain = [System.IO.File]::ReadAllText($path)
+        Write-TestFile $path 'stale report with verdict text'
+        $audit = aos video preflight ALIGNMENT-4 --verdicts | Out-String
+        $stored = [System.IO.File]::ReadAllText($path)
+        foreach ($text in @('first', 'second', 'third', 'drop me', 'keep 1', 'keep 2', 'keep 3', 'keep 4', 'keep 5', 'stale report')) {
+            $storedPlain | Should -Not -Match ([regex]::Escape($text))
+            $stored | Should -Not -Match ([regex]::Escape($text))
+        }
+        $stored | Should -Not -Match '## Verdicts'
+        $stored | Should -BeExactly $storedPlain
+        $stored.TrimEnd([char[]]@("`r", "`n")) | Should -BeExactly $plain.TrimEnd([char[]]@("`r", "`n"))
+        $audit | Should -Match '## Verdicts \(audit only\)'
+    }
+
+    It 'preserves stage medians and delegation counts beyond twenty events' {
+        Write-PreflightTestLedger
+        $report = aos video preflight ALIGNMENT-4 | Out-String
+        $report | Should -Match '(?m)^- production: median 42 min \(3 runs\)\r?$'
+        $report | Should -Match '(?m)^- qa: median 15 min \(2 runs\)\r?$'
+        $report | Should -Match '(?m)^- accepted: 2\r?$'
+        $report | Should -Match '(?m)^- rejected: 1\r?$'
     }
 }
 
