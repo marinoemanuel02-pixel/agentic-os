@@ -1744,6 +1744,8 @@ function Write-AosVideoPreflight([string]$Name) {
     $rulesPath = Get-AosVideoRulesPath
     if (Test-Path -LiteralPath $rulesPath) {
         foreach ($line in [System.IO.File]::ReadAllLines($rulesPath)) {
+            # Stage headings in the rules file become sub-headings here, so the report reads stage by stage.
+            if ($line -match '^## (.+)$') { [void]$sb.Append("$nl### $($Matches[1])$nl$nl"); continue }
             if ($line -notmatch '^- R\d{2} ') { continue }
             $out = $line
             if ($line -match '\[check: ([a-z-]+)\]') { $out += " (runs tools/checks/$($Matches[1]).mjs from tools/qa.sh)" }
@@ -1751,6 +1753,10 @@ function Write-AosVideoPreflight([string]$Name) {
         }
     }
     else { [void]$sb.Append("- rules file not found: $rulesPath$nl") }
+    [void]$sb.Append("$nl## Capacity and split$nl$nl")
+    [void]$sb.Append("- At the start and at every gate: ``aos capacity`` (both vendors' windows and resets) and ``aos who`` (claims, notes).$nl")
+    [void]$sb.Append("- Write the split (who builds what until when) in an ``aos note`` and HANDOFF.md; a limited vendor's next task goes to the other one at once (R34).$nl")
+    [void]$sb.Append("- Codex delegations: a task file with Read only: and Done = lines (R40).$nl")
     $fmt = { param($e) '- ' + ([string]$e['ts']).Substring(0, 10) + ' ' + $e['video'] + ': "' + $e['text'] + '"' }
     $verdicts = @($events | Where-Object { $_['type'] -eq 'video-verdict' -and $_['video'] })
     $mine = @($verdicts | Where-Object { (Get-AosVideoFamily ([string]$_['video'])) -eq $family })
@@ -1919,6 +1925,50 @@ function Start-AosRemote([string]$Dir, [switch]$DryRun) {
 }
 
 #endregion
+#region video assets ----------------------------------------------------------------------
+# aos asset: the shared Node tool in agents-home/video/assets (rule R35). API keys reach the child only as
+# environment variables (never arguments, files or logs); a missing key just makes its search source skip.
+
+$script:AssetKeys = @('pexels', 'pixabay', 'freesound')
+
+function Get-AosAssetEnv {
+    $vars = @{}
+    $have = @(Get-AosSecretNames)
+    foreach ($k in $script:AssetKeys) {
+        if ($have -contains $k) {
+            $v = Get-AosSecret $k
+            if ($v) { $vars['AOS_KEY_' + $k.ToUpperInvariant()] = $v }
+        }
+    }
+    return $vars
+}
+
+function Invoke-AosAsset([string[]]$Arguments) {
+    if (-not $Arguments -or $Arguments.Count -eq 0) { throw 'usage: aos asset <search|fetch|capture|proxy|registry|credits|budget> ...' }
+    if ($Arguments[0] -eq 'budget' -and ($Arguments -contains '--approve') -and -not ($Arguments -contains '--by-user')) {
+        throw 'aos asset budget --approve records the user''s approval: add --by-user only after the user approved the amount'
+    }
+    $tool = Join-Path $script:Root 'agents-home\video\assets\asset.mjs'
+    # Invoke-AosProcess hands output back through files only; show both, then drop them.
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-asset-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    try {
+        $outFile = Join-Path $tmp 'out.txt'
+        $errFile = Join-Path $tmp 'err.txt'
+        $r = Invoke-AosProcess -Exe 'node' -Arguments (@('--no-warnings', $tool) + $Arguments) -WorkingDirectory (Get-Location).ProviderPath `
+            -TimeoutSeconds 3600 -Environment (Get-AosAssetEnv) -StdoutFile $outFile -StderrFile $errFile
+        foreach ($f in @($outFile, $errFile)) {
+            if (Test-Path -LiteralPath $f) {
+                $text = [System.IO.File]::ReadAllText($f)
+                if ($text.Trim()) { Write-Host $text.TrimEnd() }
+            }
+        }
+        $global:LASTEXITCODE = $r.Code
+    }
+    finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+#endregion
 #region the aos command ------------------------------------------------------------------
 
 function Show-AosHelp {
@@ -1936,6 +1986,7 @@ aos - agentic-os control
   aos video verdict <name> <words>         record the user's verdict on a video, verbatim (coordination ledger)
   aos video log <name> <stage> <min> [note] record how long a stage took (brief|look|structure|production|qa|...)
   aos video preflight <name> rules + past verdicts + stage times -> the project's PREFLIGHT.md
+  aos asset <search|fetch|capture|proxy|registry|credits|budget>   import real material into a film (rights ledger, budget)
   aos place ls [--json]      list shared places, including missing folders
   aos place add <folder> [--name <n>] [--kind repo|vault|folder]   add a place, then sync
   aos refs                   clone/pull the reference repos in refs/repos.json (into ~\.aos\refs)
@@ -1977,6 +2028,7 @@ function aos {
         'test'    { Invoke-AosTest }
         'new'     { New-AosProject -Path $a1 }
         'video'   { Invoke-AosVideo -Arguments @($Rest) }
+        'asset'   { Invoke-AosAsset -Arguments @($Rest) }
         'place'   { Invoke-AosPlace -Arguments @($Rest) -DryRun:$DryRun }
         'refs'    { Sync-AosRefs -DryRun:$DryRun }
         'secret'  { Invoke-AosSecret -Action $a1 -Name $a2 }
@@ -3185,6 +3237,49 @@ function Invoke-AosCapacity([string[]]$Arguments) {
     }
 }
 
+function Read-AosRolloutUsage {
+    param([string]$ThreadId, [long]$FromOffset = 0)
+    $usage = @{ Found = $false; Offset = $FromOffset; Input = [long]0; Cached = [long]0; Output = [long]0 }
+    if (-not $ThreadId) { return $usage }
+    $root = Join-Path (Get-AosCodexHome) 'sessions'
+    if (-not (Test-Path -LiteralPath $root)) { return $usage }
+    $file = Get-ChildItem -LiteralPath $root -Recurse -File -Filter 'rollout-*.jsonl' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name.EndsWith('-' + $ThreadId + '.jsonl', [StringComparison]::Ordinal) } | Select-Object -First 1
+    if (-not $file) { return $usage }
+    $fs = $null
+    $reader = $null
+    try {
+        $fs = [IO.File]::Open($file.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+        $from = [Math]::Max([long]0, $FromOffset)
+        if ($from -gt $fs.Length) { $from = 0 }
+        [void]$fs.Seek($from, [IO.SeekOrigin]::Begin)
+        $reader = New-Object IO.StreamReader($fs, $script:Utf8NoBom)
+        $text = $reader.ReadToEnd()
+        # Keep an incomplete final event for the next poll; offsets are bytes, not UTF-16 characters.
+        $end = $text.LastIndexOf("`n")
+        $tail = $text.Substring($end + 1)
+        if ($tail.Trim()) {
+            try { $null = ConvertFrom-Json -InputObject $tail -ErrorAction Stop; $end = $text.Length - 1 } catch { }
+        }
+        if ($end -lt 0) { return $usage }
+        $complete = $text.Substring(0, $end + 1)
+        $usage.Offset = $from + $script:Utf8NoBom.GetByteCount($complete)
+        foreach ($line in ($complete -split "`n")) {
+            try { $e = ConvertFrom-Json -InputObject $line -ErrorAction Stop } catch { continue }
+            if ($e.type -ne 'event_msg' -or $e.payload.type -ne 'token_count') { continue }
+            $u = $e.payload.info.total_token_usage
+            if ($null -eq $u) { continue }
+            $usage.Found = $true
+            $usage.Input = [long]$u.input_tokens
+            $usage.Cached = [long]$u.cached_input_tokens
+            $usage.Output = [long]$u.output_tokens
+        }
+    }
+    catch { } # Missing, rotating or temporarily locked rollouts are best-effort observations.
+    finally { if ($reader) { $reader.Dispose() } elseif ($fs) { $fs.Dispose() } }
+    return $usage
+}
+
 function Invoke-AosDelegate {
     param([string]$Vendor, [string]$TaskFile, [switch]$Write, [string]$Model, [string[]]$Needs, [string]$Verify,
         [string[]]$Allow, [string[]]$Setup, [int]$TimeoutMinutes = 30, [string]$Repo, [int]$IdleMinutes = 15,
@@ -3193,10 +3288,10 @@ function Invoke-AosDelegate {
     # The command line hands an absent repeated option over as @($null); count only the values that were given.
     $Needs = @($Needs | Where-Object { $_ }); $Allow = @($Allow | Where-Object { $_ }); $Setup = @($Setup | Where-Object { $_ })
     $refuse = {
-        param($m)
+        param($m, $category = 'usage')
         Write-AosWarn "delegate refused: $m"
         $global:LASTEXITCODE = 1
-        return [pscustomobject]@{ accepted = $false; outcome = 'refused'; error = [ordered]@{ category = 'usage'; message = $m } }
+        return [pscustomobject]@{ accepted = $false; outcome = 'refused'; error = [ordered]@{ category = $category; message = $m } }
     }
     if ($Vendor -notin @('codex', 'claude')) { return (& $refuse "unknown vendor '$Vendor' (codex or claude)") }
     if ($env:AOS_DELEGATE_ID) { return (& $refuse 'a delegated worker cannot launch another CLI delegate; use its reserved native allowance') }
@@ -3214,6 +3309,9 @@ function Invoke-AosDelegate {
     }
     if (-not $TaskFile -or -not (Test-Path -LiteralPath $TaskFile)) { return (& $refuse "task file not found: $TaskFile") }
     $taskText = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $TaskFile).ProviderPath)
+    if ($taskText -notmatch '(?m)^Read only:' -or $taskText -notmatch '(?m)^Done =') {
+        return (& $refuse 'task file needs lines starting Read only: and Done =' 'task-file')
+    }
     $repoDir = $Repo
     if (-not $repoDir) { $repoDir = (Get-Location).ProviderPath }
     $repoDir = Get-AosCheckout $repoDir

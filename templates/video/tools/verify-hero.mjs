@@ -6,8 +6,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
+import { mediaRoot as resolveMediaRoot } from "./media-root.mjs";
 
-const PROJECT = "{{name}}";
 const FPS = 30, WIDTH = 1920, HEIGHT = 1080, CONCURRENCY = 2;
 const KEY_FRAMES = {};
 const stillsArg = process.argv.indexOf("--stills");
@@ -32,7 +32,7 @@ const here = path.resolve(sh("git", ["rev-parse", "--show-toplevel"], { cwd: scr
 const branch = sh("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: here }).trim();
 const slug = branch.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "detached";
 
-const mediaRoot = process.env.AOS_VIDEO_MEDIA_ROOT || path.join(os.homedir(), ".aos", "video", PROJECT);
+const mediaRoot = resolveMediaRoot(here);
 const root = path.join(mediaRoot, "hero-verify", slug);
 const app = path.join(root, "app");
 const bundle = path.join(root, "bundle");

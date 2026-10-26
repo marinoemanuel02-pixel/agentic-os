@@ -9,9 +9,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
+import { mediaRoot } from "./media-root.mjs";
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const H = process.env.AOS_VIDEO_MEDIA_ROOT || path.join(os.homedir(), ".aos", "video", "{{name}}");
+const H = mediaRoot(here);
 // The shared Remotion + three.js install (about 480 MB, made once); aos video new links every project to it.
 const shared = process.env.AOS_REMOTION_MODULES || path.join(os.homedir(), ".aos", "scratch", "video-agi-race", "node_modules");
 const name = path.basename(here);

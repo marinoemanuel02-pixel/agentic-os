@@ -37,6 +37,27 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
   `node --test tools/checks/input-manifest.test.mjs` exercises the guard. An isolated caller may select its private
   runner for this check with `AOS_VIDEO_MEDIA_ROOT`; this does not relocate the other build scripts automatically.
 
+## Imported material (rules R35, R39)
+
+Films use real material found for each shot's need, from any source: first the subject's own (its paper, launch or
+demo video, live page capture), then coverage excerpts, then open libraries, then built. `shots.md` records each
+shot's need and source; the brief's Sourcing section establishes the channel's policy and the download budget the user
+approved, and `sourcing.json` records them for the tools. Permission to import is not permission to mix media: R18 and
+R28 still decide how many practices the film uses, and imported material appears in the hero next to a built practice.
+
+- Search: `aos asset search "<words>" --kind clip|photo|model|hdri|texture|sfx [--source <id>]` (Pexels, Pixabay,
+  Openverse, Wikimedia, NASA, Internet Archive, Poly Haven, ambientCG, Freesound; keys via `aos secret set`).
+- Fetch any URL: `aos asset fetch --film . --id a07 --url <url> --kind clip --basis <license|cc0|public-domain|fair-use|capture|own>
+  --acquisition <api|direct-file|platform-feature|download-tool> --platform <p> --why "<need>" [--source-in s --source-out s]`;
+  live pages: `aos asset capture --film . --id a08 --url <url> --mode shot|scroll|record`.
+- Then add each row's `uses` (shot, shotFrom, mediaFrom, mediaTo, audio, rationale) to `assets.json`, and run
+  `aos asset proxy --film .`, `aos asset registry --film .` and `aos asset credits --film .` (paste into description.md).
+- Shots use media only through `src/lib/media/` components and an asset id (`<Clip asset="a07" use="u1" look={look} />`,
+  `Photo`, `Capture`, `Model`, `Environment`, `GlTransition`); never a path. Transitions: `src/lib/transitions`.
+- `aos asset budget --film .` shows the budget; `--approve <MB> --by-user` only after the user approved the amount.
+- The gate (`tools/checks/assets.mjs`, run by build and QA) checks policy, not law; `qa/assets.md` lists the human
+  checks: the narration comments on each excerpt, every source tag is legible, no excerpt takes more than it needs.
+
 ## The learning loop (rule R20)
 
 - After each stage: `aos video log {{name}} <brief|look|structure|production|qa|delivery|retro|revision> <minutes> [note]`.

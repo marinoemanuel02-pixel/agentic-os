@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "fairUse": true,
+  "acquisition": {
+    "youtube": [
+      "api",
+      "platform-feature"
+    ],
+    "*": [
+      "api",
+      "direct-file",
+      "platform-feature",
+      "download-tool"
+    ]
+  },
+  "budget": {
+    "approvedMB": 2000,
+    "approvedAt": "2026-10-07T09:00:00+02:00",
+    "approvedBy": "user"
+  }
+}

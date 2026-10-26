@@ -23,6 +23,7 @@ subscriptions (Claude and ChatGPT).
 | `ui-ux-pro-max` | offline searchable UX, accessibility, style and design-system reference data |
 | `penpot-local` | Penpot design work through its local MCP server, started only when needed |
 | `research` | cited web research with the agents' own free web search and fetch |
+| `video-references` | a reference pack for a film's niche: strong channels watched in the browser without downloading, notes per beat |
 | `caveman` | opt-in terse replies, only on an explicit `/caveman` (about a quarter fewer visible tokens in a 3-prompt Haiku test; total tokens did not fall); not for reports or prose |
 | `tool-catalog` | this list |
 
@@ -115,6 +116,10 @@ Use `verify --output <new-home-folder> --live` for repeatable checks of all four
 products; keep VoiceStudio open for speech. Live mode permits Composio discovery and one free
 OmniRoute request. Skips, blockers and failures remain explicit. See
 `docs/research/2026-10-21-stack-integration.md` for current integration evidence.
+`aos` itself: `status`, `sync`, `test`, `new`, `video new` (a video project from the template), `who` (claims), `note`, `delegate codex|claude` (hand a task to the other
+vendor, `--max-input` caps its tokens), `secret` (keys; never print them), `place` (known folders), `install <layer>`,
+`asset search|fetch|capture|proxy|registry|credits|budget` (real clips, photos, captures and models for a film, with a
+rights ledger; rule R35).
 
 ## Other agents
 
