@@ -38,7 +38,8 @@ test('the template contract names the asset commands and the human checks', () =
 test('the reference-pack skill exists with frontmatter', () => {
   const skill = join(TEMPLATE, '..', '..', 'agents-home', 'skills', 'video-references', 'SKILL.md');
   assert.ok(existsSync(skill));
-  const text = readFileSync(skill, 'utf8');
+  // a Windows checkout may hold CRLF line endings; the frontmatter shape is what is under test
+  const text = readFileSync(skill, 'utf8').replace(/\r\n/g, '\n');
   assert.match(text, /^---\nname: video-references\ndescription: .{40,}\n---/);
   assert.match(text, /without downloading/);
 });

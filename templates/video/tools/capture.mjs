@@ -7,11 +7,12 @@ import { createHash } from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { mediaRoot } from "./media-root.mjs";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(path.join(os.homedir(), ".npm-global/node_modules/playwright"));
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
-const media = process.env.AOS_VIDEO_MEDIA_ROOT ?? path.join(os.homedir(), ".aos/video/{{name}}");
+const media = mediaRoot(root); // one resolver for every tool: AOS_VIDEO_MEDIA_ROOT, film folder, worktrees
 const out = path.join(media, "app/public/captures");
 fs.mkdirSync(out, { recursive: true });
 
