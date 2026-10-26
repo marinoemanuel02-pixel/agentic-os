@@ -1,8 +1,8 @@
 # {{name}} (video)
 
 Instructions for Claude Code and Codex; `CLAUDE.md` imports this file. Made with `aos video new {{name}}`.
-Read `PREFLIGHT.md` first (the rules with their ids, the user's past verdicts on this kind of video, how long each
-stage took before); refresh it with `aos video preflight {{name}}`. Read `~/.agents/video/video-rules.md` before
+Read `PREFLIGHT.md` first (the invariant rules with their ids, the craft frontier with the best exemplar per
+dimension to start from and beat, how long each stage took before); refresh it with `aos video preflight {{name}}`. Read `~/.agents/video/video-rules.md` before
 every stage.
 
 ## What this is
@@ -49,8 +49,8 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
 Films use real material found for each shot's need, from any source: first the subject's own (its paper, launch or
 demo video, live page capture), then coverage excerpts, then open libraries, then built. `shots.md` records each
 shot's need and source; the brief's Sourcing section establishes the channel's policy and the download budget the user
-approved, and `sourcing.json` records them for the tools. Permission to import is not permission to mix media: R18 and
-R28 still decide how many practices the film uses, and imported material appears in the hero next to a built practice.
+approved, and `sourcing.json` records them for the tools. Permission to import is not permission to mix media: R28
+decides how practices mix, and imported material appears in the hero next to a built practice.
 
 - Search: `aos asset search "<words>" --kind clip|photo|model|hdri|texture|sfx [--source <id>]` (Pexels, Pixabay,
   Openverse, Wikimedia, NASA, Internet Archive, Poly Haven, ambientCG, Freesound; keys via `aos secret set`).
@@ -68,13 +68,19 @@ R28 still decide how many practices the film uses, and imported material appears
 ## The learning loop (rule R20)
 
 - After each stage: `aos video log {{name}} <brief|look|structure|production|qa|delivery|retro|revision> <minutes> [note]`.
-- Every verdict the user gives, verbatim: `aos video verdict {{name}} <their words>`.
-- Motion: every move goes through `src/lib/motion.ts` (soft in-out curves, moves >= MIN_MOVE_FRAMES, `settle`,
-  `breathe`); expo-out and back-out curves fail the motion check. Shots are long and dissolve (`plan.ts`).
+- Every verdict the user gives, verbatim: `aos video verdict {{name}} <their words>`. It goes to the ledger for
+  audit only (`aos video preflight {{name}} --verdicts` shows it); no agent works from raw verdicts.
+- Motion: every move goes through `src/lib/motion.ts`; the motion check reports snaps and expo curves.
 - nar (rule R21): when choosing among style frames, `nar_choose` is a second signal; keep its call_id and the
   candidates in `retro.md`, and send `nar_feedback` only if the user compares those same candidates.
-- The retrospective adds rules to `~/.agents/video/video-rules.md` with the next free id, as `[check: x]` with a
-  script in `tools/checks/x.mjs` called from `tools/qa.sh` whenever a script can catch the failure.
+- The retrospective converts, it does not accumulate. For each verdict: (1) close the gap in the kit (template,
+  `src/lib`, an asset or rig library, a tool or a check) with a test or a rendered exemplar; (2) rewrite that
+  dimension's entry in `~/.agents/video/frontier.md` (new `best`, `how`, `next`, `try`; a gap is written as a
+  target). A new rule in `~/.agents/video/video-rules.md` only for a technical or process guard, as `[check: x]`
+  with a script in `tools/checks/x.mjs` called from `tools/qa.sh` whenever a script can catch it; taste never
+  becomes a rule.
+- Look gate: the look lab renders the frontier's `best` frames next to the new ones on the same beats; a dimension
+  passes when both vendors, blind, judge the new frame better.
 
 ## Done means
 
