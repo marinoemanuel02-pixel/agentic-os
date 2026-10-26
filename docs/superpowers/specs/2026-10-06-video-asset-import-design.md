@@ -216,7 +216,7 @@ in `~/.aos/refs-cache/`, never in a repo. No niche is built in; the brief picks.
 
 - `aos delegate --max-input <tokens>`, a **best-effort** limit, not a hard ceiling (Codex finding 7). The delegate
   binds to the one Codex rollout file created after its start whose `cwd` is its worktree, reads the cumulative
-  `input_tokens` of its `token_count` events (cached input recorded separately and not counted), and when the count
+  `input_tokens` of its `token_count` events (cached input included; revised 2026-10-06 after measuring a run of 3.5 M input, 3.4 M cached, that took 35 % of Codex's 5 h window: a non-cached budget would not have stopped it; cached tokens are still recorded separately), and when the count
   passes the budget kills the whole process tree (`taskkill /T /F`) and writes a receipt with the last count, the
   overshoot and outcome `over-budget`. Missing or delayed events: after `--idle` minutes without an event the
   existing no-progress kill applies; the receipt says the budget was unobserved. Descendant runs started by the

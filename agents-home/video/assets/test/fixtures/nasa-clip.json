@@ -1,0 +1,25 @@
+{
+ "collection": {
+  "items": [
+   {
+    "href": "https://images-assets.nasa.gov/video/KSC-20260301-launch/collection.json",
+    "data": [
+     {
+      "nasa_id": "KSC-20260301-launch",
+      "title": "Title KSC-20260301-launch",
+      "center": "KSC",
+      "date_created": "2026-03-01T00:00:00Z",
+      "media_type": "video",
+      "description": "A launch."
+     }
+    ],
+    "links": [
+     {
+      "href": "https://images-assets.nasa.gov/video/KSC-20260301-launch/KSC-20260301-launch~thumb.jpg",
+      "rel": "preview"
+     }
+    ]
+   }
+  ]
+ }
+}

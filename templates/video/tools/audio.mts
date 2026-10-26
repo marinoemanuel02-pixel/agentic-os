@@ -7,6 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
+import { mediaRoot } from "./media-root.mjs";
 import { buildLines, buildShots, totalBeats } from "../src/data/plan.ts";
 import { BEAT, FPS } from "../src/lib/look.ts";
 import { buildEvents, type SfxEvent } from "../src/shots/events.ts";
@@ -15,7 +16,7 @@ import { makeCues, type WordTimes } from "../src/lib/cue-core.ts";
 
 const SR = 48000;
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const MEDIA = process.env.AOS_VIDEO_MEDIA_ROOT || path.join(os.homedir(), ".aos/video/{{name}}");
+const MEDIA = mediaRoot(ROOT);
 const OUT = path.join(MEDIA, "audio");
 const PUBLIC = path.join(MEDIA, "app/public");
 fs.mkdirSync(OUT, { recursive: true });

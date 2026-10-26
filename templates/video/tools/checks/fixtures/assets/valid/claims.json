@@ -1,0 +1,26 @@
+{
+  "sources": {},
+  "lines": [],
+  "screen": [
+    {
+      "texts": [
+        "Source: Example Lab launch demo, 2026-09-09"
+      ],
+      "kind": "label",
+      "asset": "a05",
+      "sources": [],
+      "reviewed": false,
+      "generated": true
+    },
+    {
+      "texts": [
+        "Source: product.example, captured 2026-10-07"
+      ],
+      "kind": "label",
+      "asset": "a06",
+      "sources": [],
+      "reviewed": false,
+      "generated": true
+    }
+  ]
+}

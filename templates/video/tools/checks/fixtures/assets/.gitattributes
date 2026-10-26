@@ -1,0 +1,2 @@
+# The stand-in media are hashed in assets.json: never let git rewrite their bytes.
+valid/public/** binary

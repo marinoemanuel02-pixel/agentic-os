@@ -67,8 +67,8 @@ const main = async () => {
   if (!video) { console.error("usage: node --no-warnings tools/review-sheets.mts <video.mp4> [out-dir] [--dry]"); process.exit(2); }
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const { buildShots } = await import("file:///" + path.join(root, "src/data/plan.ts").replace(/\\/g, "/"));
-  const name = JSON.parse(fs.readFileSync(path.join(root, "tools/package.json"), "utf8")).name;
-  const media = path.resolve(process.env.AOS_VIDEO_MEDIA_ROOT || path.join(os.homedir(), ".aos", "video", name));
+  const { mediaRoot } = await import("file:///" + path.join(root, "tools/media-root.mjs").replace(/\\/g, "/"));
+  const media = mediaRoot(root);
   const outDir = resolveOutDir(media, root, outArg, path.basename(video, path.extname(video)));
   let plan = sampleFrames(buildShots());
   if (!dry || fs.existsSync(video)) {

@@ -734,6 +734,20 @@ Describe 'New-AosVideo' {
         [System.IO.File]::ReadAllText((Join-Path $project 'tools\verify.mjs')) | Should -Not -Match '\{\{name\}\}'
     }
 
+    It 'ships the Blender MCP stage: lib.py bound to the video media root, render, asset, edit and capture tools' {
+        New-AosVideo -Name 'align-1'
+        $project = Join-Path $env:AOS_PROJECTS 'videos\align-1'
+        $lib = [System.IO.File]::ReadAllText((Join-Path $project 'blender\lib.py'))
+        $lib | Should -Match '"video" / "align-1"'
+        $lib | Should -Match 'BLENDER_LIB'
+        foreach ($t in @('tools\render-shot.py', 'tools\polyhaven.py', 'tools\edit.py', 'tools\capture.mjs', 'tools\commons.py', 'tools\detect.py', 'tools\stills.sh', 'tools\ingest-voice.py', 'blender\shots.json', 'src\data\cuts.json', 'research\capture-pages.json')) {
+            Test-Path -LiteralPath (Join-Path $project $t) | Should -BeTrue -Because "$t is part of the Blender/shorts stage"
+        }
+        [System.IO.File]::ReadAllText((Join-Path $project 'tools\render-shot.py')) | Should -Match 'BLENDER_LIB = \{lib!r\}'
+        [System.IO.File]::ReadAllText((Join-Path $project 'tools\render-shot.py')) | Should -Match 'LUMA_MIN, LUMA_MAX'
+        $lib | Should -Match 'def lookdev_sheet\('
+    }
+
     It 'makes the render app outside the project, linked to the shared install and to src' {
         New-AosVideo -Name 'align-1'
         $app = Join-Path $env:AOS_VIDEO_HOME 'align-1\app'
@@ -760,7 +774,7 @@ Describe 'New-AosVideo' {
             New-AosVideo -Name 'align-1'
             $report = Join-Path $env:AOS_PROJECTS 'videos\align-1\PREFLIGHT.md'
             [System.IO.File]::ReadAllText($report) | Should -Match '^# Preflight: align-1'
-            [System.IO.File]::ReadAllText($report) | Should -Match '## Rules'
+            [System.IO.File]::ReadAllText($report) | Should -Match '## Invariants'
             Write-TestFile $report "my preflight`r`n"
             New-AosVideo -Name 'align-1'
             [System.IO.File]::ReadAllText($report) | Should -BeExactly "my preflight`r`n"
@@ -866,60 +880,91 @@ Describe 'aos video verdict and log' {
 }
 
 Describe 'aos video preflight' {
+    BeforeAll {
+        function Write-PreflightTestLedger {
+            $lines = @(
+                '{"ts":"2026-09-01T10:00:00Z","type":"video-verdict","video":"alignment-3","text":"first"}',
+                '{"ts":"2026-09-02T10:00:00Z","type":"video-verdict","video":"alignment","text":"second"}',
+                '{"ts":"2026-09-03T10:00:00Z","type":"video-verdict","video":"Alignment-v2","text":"third"}',
+                '{"ts":"2026-09-04T10:00:00Z","type":"video-verdict","video":"other-1","text":"drop me"}',
+                '{"ts":"2026-09-05T10:00:00Z","type":"video-verdict","video":"other-2","text":"keep 1"}',
+                '{"ts":"2026-09-06T10:00:00Z","type":"video-verdict","video":"other-3","text":"keep 2"}',
+                '{"ts":"2026-09-07T10:00:00Z","type":"video-verdict","video":"other-4","text":"keep 3"}',
+                '{"ts":"2026-09-08T10:00:00Z","type":"video-verdict","video":"other-5","text":"keep 4"}',
+                '{"ts":"2026-09-09T10:00:00Z","type":"video-verdict","video":"other-6","text":"keep 5"}',
+                '{"ts":"2026-09-10T10:00:00Z","type":"video-stage","video":"other-1","stage":"production","minutes":10,"note":""}',
+                '{"ts":"2026-09-11T10:00:00Z","type":"video-stage","video":"alignment","stage":"production","minutes":42,"note":""}',
+                '{"ts":"2026-09-12T10:00:00Z","type":"video-stage","video":"alignment-3","stage":"production","minutes":50,"note":""}',
+                '{"ts":"2026-09-13T10:00:00Z","type":"video-stage","video":"alignment","stage":"qa","minutes":10,"note":""}',
+                '{"ts":"2026-09-14T10:00:00Z","type":"video-stage","video":"alignment","stage":"qa","minutes":20,"note":""}',
+                '{"ts":"2026-09-15T10:00:00Z","type":"delegate","outcome":"accepted"}',
+                '{"ts":"2026-09-16T10:00:00Z","type":"delegate","outcome":"accepted"}',
+                '{"ts":"2026-09-17T10:00:00Z","type":"delegate","outcome":"rejected"}'
+            )
+            # The report must read beyond Get-AosLedger's default 20-event window.
+            for ($i = 0; $i -lt 21; $i++) {
+                $lines += '{"ts":"2026-09-18T10:00:00Z","type":"note","text":"unrelated"}'
+            }
+            Write-TestFile (Join-Path $env:AOS_COORD 'ledger.jsonl') ($lines -join "`n")
+        }
+    }
     BeforeEach {
-        $savedPreflight = @{ C = $env:AOS_COORD; P = $env:AOS_PROJECTS; R = $env:AOS_VIDEO_RULES }
+        $savedPreflight = @{ C = $env:AOS_COORD; P = $env:AOS_PROJECTS; R = $env:AOS_VIDEO_RULES; F = $env:AOS_VIDEO_FRONTIER }
         $env:AOS_COORD = Join-Path $caseRoot 'coord'
         $env:AOS_PROJECTS = New-TestFolder (Join-Path $caseRoot 'projects')
         $env:AOS_VIDEO_RULES = Join-Path $caseRoot 'rules.md'
+        $env:AOS_VIDEO_FRONTIER = Join-Path $caseRoot 'frontier.md'
+        $frontierBody = "`n## Movement`n`n- best: sample-2, shot 03`n- next: richer acting`n`n### Try`n  Keep **formatting**.`n# A later title stays`n"
+        Write-TestFile $env:AOS_VIDEO_FRONTIER ("# Craft frontier`n" + $frontierBody)
         Write-TestFile $env:AOS_VIDEO_RULES "# Video rules`n- R01 [manual] Approve the brief.`n- R02 [check: frozen-frames] Check the timeline.`n"
     }
     AfterEach {
-        $env:AOS_COORD = $savedPreflight.C; $env:AOS_PROJECTS = $savedPreflight.P; $env:AOS_VIDEO_RULES = $savedPreflight.R
+        $env:AOS_COORD = $savedPreflight.C; $env:AOS_PROJECTS = $savedPreflight.P; $env:AOS_VIDEO_RULES = $savedPreflight.R; $env:AOS_VIDEO_FRONTIER = $savedPreflight.F
     }
 
     It 'returns a report for a missing project without creating its folder' {
+        Write-TestFile $env:AOS_VIDEO_FRONTIER "# Craft frontier`n- next: richer acting`n"
         $report = aos video preflight align-1 | Out-String
         $report | Should -Match '^# Preflight: align-1'
-        $headings = @('## Rules', '## Verdicts on align', '## Other recent verdicts',
-            '## Stage minutes', '## Delegations')
-        $last = -1
-        foreach ($heading in $headings) {
-            $position = $report.IndexOf($heading, [StringComparison]::Ordinal)
-            $position | Should -BeGreaterThan $last
-            $last = $position
-        }
+        $headings = @([regex]::Matches($report, '(?m)^#{1,2} .+\r?$') | ForEach-Object { $_.Value.TrimEnd("`r") })
+        ($headings -join "`n") | Should -BeExactly "# Preflight: align-1`n## Invariants`n## Frontier`n## Stage minutes`n## Delegations"
+        $report | Should -Not -Match '(?m)^## (Rules|Verdicts on .+|Other recent verdicts|Verdicts \(audit only\))\r?$'
         $report | Should -Match 'R01.*manual'
         $report | Should -Match 'R02.*check: frozen-frames.*tools/checks/frozen-frames\.mjs'
         $report | Should -Match '(?s)## Stage minutes.*?- none recorded.*?## Delegations.*?- none recorded'
         Test-Path -LiteralPath (Join-Path $env:AOS_PROJECTS 'videos\align-1') | Should -BeFalse
     }
 
-    It 'reports family verdicts, five other verdicts, medians and delegation outcomes' {
-        $lines = @(
-            '{"ts":"2026-09-01T10:00:00Z","type":"video-verdict","video":"alignment-3","text":"first"}',
-            '{"ts":"2026-09-02T10:00:00Z","type":"video-verdict","video":"alignment","text":"second"}',
-            '{"ts":"2026-09-03T10:00:00Z","type":"video-verdict","video":"Alignment-v2","text":"third"}',
-            '{"ts":"2026-09-04T10:00:00Z","type":"video-verdict","video":"other-1","text":"drop me"}',
-            '{"ts":"2026-09-05T10:00:00Z","type":"video-verdict","video":"other-2","text":"keep 1"}',
-            '{"ts":"2026-09-06T10:00:00Z","type":"video-verdict","video":"other-3","text":"keep 2"}',
-            '{"ts":"2026-09-07T10:00:00Z","type":"video-verdict","video":"other-4","text":"keep 3"}',
-            '{"ts":"2026-09-08T10:00:00Z","type":"video-verdict","video":"other-5","text":"keep 4"}',
-            '{"ts":"2026-09-09T10:00:00Z","type":"video-verdict","video":"other-6","text":"keep 5"}',
-            '{"ts":"2026-09-10T10:00:00Z","type":"video-stage","video":"other-1","stage":"production","minutes":10,"note":""}',
-            '{"ts":"2026-09-11T10:00:00Z","type":"video-stage","video":"alignment","stage":"production","minutes":42,"note":""}',
-            '{"ts":"2026-09-12T10:00:00Z","type":"video-stage","video":"alignment-3","stage":"production","minutes":50,"note":""}',
-            '{"ts":"2026-09-13T10:00:00Z","type":"video-stage","video":"alignment","stage":"qa","minutes":10,"note":""}',
-            '{"ts":"2026-09-14T10:00:00Z","type":"video-stage","video":"alignment","stage":"qa","minutes":20,"note":""}',
-            '{"ts":"2026-09-15T10:00:00Z","type":"delegate","outcome":"accepted"}',
-            '{"ts":"2026-09-16T10:00:00Z","type":"delegate","outcome":"accepted"}',
-            '{"ts":"2026-09-17T10:00:00Z","type":"delegate","outcome":"rejected"}'
-        )
-        # The report must read beyond Get-AosLedger's default 20-event window.
-        for ($i = 0; $i -lt 21; $i++) {
-            $lines += '{"ts":"2026-09-18T10:00:00Z","type":"note","text":"unrelated"}'
-        }
-        Write-TestFile (Join-Path $env:AOS_COORD 'ledger.jsonl') ($lines -join "`n")
-        $report = aos video preflight 'ALIGNMENT-4' | Out-String
+    It 'keeps the rules grouped by stage and asks for the capacity split (R34, R40)' {
+        Write-TestFile $env:AOS_VIDEO_RULES "# Video rules`n`n## Brief`n`n- R01 [manual] Approve the brief.`n`n## QA`n`n- R02 [check: frozen-frames] Check the timeline.`n"
+        $report = aos video preflight align-1 | Out-String
+        $report | Should -Match '(?s)## Invariants.*### Brief.*R01.*### QA.*R02.*## Delegations.*### Capacity and split'
+        $report | Should -Match 'aos capacity'
+        $report | Should -Match 'aos note'
+    }
+
+    It 'appends audit verdicts in family order then five recent others beyond twenty events' {
+        Write-PreflightTestLedger
+        $plain = aos video preflight ALIGNMENT-4 | Out-String
+        $report = aos video preflight ALIGNMENT-4 --verdicts | Out-String
+        $position = $report.IndexOf('## Verdicts (audit only)', [StringComparison]::Ordinal)
+        $position | Should -BeGreaterThan $report.IndexOf('## Delegations', [StringComparison]::Ordinal)
+        $report.Substring(0, $position).TrimEnd([char[]]@("`r", "`n")) | Should -BeExactly $plain.TrimEnd([char[]]@("`r", "`n"))
+        $audit = $report.Substring($position).TrimEnd([char[]]@("`r", "`n"))
+        $expected = @(
+            '- 2026-09-01 alignment-3: "first"',
+            '- 2026-09-02 alignment: "second"',
+            '- 2026-09-03 Alignment-v2: "third"',
+            '- 2026-09-05 other-2: "keep 1"',
+            '- 2026-09-06 other-3: "keep 2"',
+            '- 2026-09-07 other-4: "keep 3"',
+            '- 2026-09-08 other-5: "keep 4"',
+            '- 2026-09-09 other-6: "keep 5"'
+        ) -join "`n"
+        $verdictLines = @($audit -split '\r?\n' | Where-Object { $_ -like '- *' })
+        ($verdictLines -join "`n") | Should -BeExactly $expected
+        @([regex]::Matches($audit, '(?m)^## ')).Count | Should -Be 1
+        $report | Should -Not -Match '## Verdicts on |## Other recent verdicts'
         $report | Should -Match '(?m)^- 2026-09-01 alignment-3: "first"\r?$'
         $report | Should -Match '(?m)^- 2026-09-02 alignment: "second"\r?$'
         $report | Should -Match '(?m)^- 2026-09-03 Alignment-v2: "third"\r?$'
@@ -942,6 +987,93 @@ Describe 'aos video preflight' {
         $stored = [System.IO.File]::ReadAllText($path)
         $stored.TrimEnd([char[]]@("`r", "`n")) | Should -BeExactly $report.TrimEnd([char[]]@("`r", "`n"))
         $stored | Should -Match '^# Preflight: align-1'
+    }
+
+    It 'lists exact invariant lines with the executable-check suffix' {
+        $report = aos video preflight align-1 | Out-String
+        $invariants = [regex]::Match($report, '(?s)## Invariants\r?\n\r?\n(.*?)\r?\n## Frontier').Groups[1].Value.TrimEnd([char[]]@("`r", "`n"))
+        $invariants.Replace("`r`n", "`n") | Should -BeExactly ("- R01 [manual] Approve the brief.`n" +
+            '- R02 [check: frozen-frames] Check the timeline. (runs tools/checks/frozen-frames.mjs from tools/qa.sh)')
+    }
+
+    It 'inserts the overridden frontier verbatim dropping only the first title' {
+        $report = aos video preflight align-1 | Out-String
+        $report | Should -Match ([regex]::Escape("## Frontier`n`n" + $frontierBody))
+        $report | Should -Not -Match '# Craft frontier'
+    }
+
+    It 'keeps a frontier without a title intact' {
+        $body = "Intro without a title.`n`n- next: expressive poses`n"
+        Write-TestFile $env:AOS_VIDEO_FRONTIER $body
+        $report = aos video preflight align-1 | Out-String
+        $report | Should -Match ([regex]::Escape("## Frontier`n`n" + $body))
+    }
+
+    It 'reads the default frontier from the repo root when the override is absent' {
+        $env:AOS_VIDEO_FRONTIER = $null
+        $repo = New-TestFolder (Join-Path $caseRoot 'repo')
+        Write-TestFile (Join-Path $repo 'agents-home\video\frontier.md') "# Default frontier`n- next: default frontier fixture`n"
+        $report = InModuleScope aos -Parameters @{ Repo = $repo } {
+            param($Repo)
+            $savedRoot = $script:Root
+            try {
+                $script:Root = $Repo
+                aos video preflight align-1
+            }
+            finally { $script:Root = $savedRoot }
+        } | Out-String
+        $report | Should -Match '(?m)^- next: default frontier fixture\r?$'
+        $report | Should -Not -Match '# Default frontier'
+    }
+
+    It 'reports a missing rules file under Invariants' {
+        Remove-Item -LiteralPath $env:AOS_VIDEO_RULES
+        $report = aos video preflight align-1 | Out-String
+        $report | Should -Match ([regex]::Escape("## Invariants`n`n- rules file not found: $env:AOS_VIDEO_RULES`n"))
+    }
+
+    It 'reports a missing frontier file under Frontier' {
+        Remove-Item -LiteralPath $env:AOS_VIDEO_FRONTIER
+        $report = aos video preflight align-1 | Out-String
+        $report | Should -Match ([regex]::Escape("## Frontier`n`n- frontier file not found: $env:AOS_VIDEO_FRONTIER`n"))
+    }
+
+    It 'omits all family and other verdict text by default' {
+        Write-PreflightTestLedger
+        $report = aos video preflight ALIGNMENT-4 | Out-String
+        foreach ($text in @('first', 'second', 'third', 'drop me', 'keep 1', 'keep 2', 'keep 3', 'keep 4', 'keep 5')) {
+            $report | Should -Not -Match ([regex]::Escape($text))
+        }
+        $report | Should -Not -Match '(?m)^## .*Verdicts'
+    }
+
+    It 'overwrites PREFLIGHT with the plain report and never stores audit verdicts' {
+        Write-PreflightTestLedger
+        $folder = New-TestFolder (Join-Path $env:AOS_PROJECTS 'videos\ALIGNMENT-4')
+        $path = Join-Path $folder 'PREFLIGHT.md'
+        Write-TestFile $path 'stale report with verdict text'
+        $plain = aos video preflight ALIGNMENT-4 | Out-String
+        $storedPlain = [System.IO.File]::ReadAllText($path)
+        Write-TestFile $path 'stale report with verdict text'
+        $audit = aos video preflight ALIGNMENT-4 --verdicts | Out-String
+        $stored = [System.IO.File]::ReadAllText($path)
+        foreach ($text in @('first', 'second', 'third', 'drop me', 'keep 1', 'keep 2', 'keep 3', 'keep 4', 'keep 5', 'stale report')) {
+            $storedPlain | Should -Not -Match ([regex]::Escape($text))
+            $stored | Should -Not -Match ([regex]::Escape($text))
+        }
+        $stored | Should -Not -Match '## Verdicts'
+        $stored | Should -BeExactly $storedPlain
+        $stored.TrimEnd([char[]]@("`r", "`n")) | Should -BeExactly $plain.TrimEnd([char[]]@("`r", "`n"))
+        $audit | Should -Match '## Verdicts \(audit only\)'
+    }
+
+    It 'preserves stage medians and delegation counts beyond twenty events' {
+        Write-PreflightTestLedger
+        $report = aos video preflight ALIGNMENT-4 | Out-String
+        $report | Should -Match '(?m)^- production: median 42 min \(3 runs\)\r?$'
+        $report | Should -Match '(?m)^- qa: median 15 min \(2 runs\)\r?$'
+        $report | Should -Match '(?m)^- accepted: 2\r?$'
+        $report | Should -Match '(?m)^- rejected: 1\r?$'
     }
 }
 
@@ -1087,6 +1219,21 @@ Describe 'Video input provenance' {
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
 
+    It 'resolves the media root from the film folder (worktrees too) and refuses the template (node --test)' {
+        $result = & node --no-warnings --test (Join-Path $PSScriptRoot '..\templates\video\tools\checks\media-root.test.mjs') 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $result
+    }
+
+    It 'keeps the stage documents asking for imported material and the reference-pack skill present (node --test)' {
+        $result = & node --no-warnings --test (Join-Path $PSScriptRoot '..\templates\video\tools\checks\template-text.test.mjs') 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $result
+    }
+
+    It 'refuses imported material without rights, credits, evidence or within fair-use limits (asset gate, node --test)' {
+        $result = & node --no-warnings --test (Join-Path $PSScriptRoot '..\templates\video\tools\checks\assets.test.mjs') 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $result
+    }
+
     It 'rejects changed render inputs and mismatched exports in an isolated fixture' {
         $testFile = Join-Path $PSScriptRoot '..\templates\video\tools\checks\input-manifest.test.mjs'
         $savedScratch = $env:AOS_MANIFEST_TEST_ROOT
@@ -1100,13 +1247,60 @@ Describe 'Video input provenance' {
     }
 }
 
+Describe 'aos asset' {
+    It 'passes arguments to the shared tool and API keys only through the child environment' {
+        Mock Get-AosSecretNames -ModuleName aos { @('pexels') }
+        Mock Get-AosSecret -ModuleName aos { 'KEY-123' }
+        Mock Invoke-AosProcess -ModuleName aos {
+            $global:AosAssetSeen = @{ Exe = $Exe; Args = ($Arguments -join ' '); Env = $Environment }
+            [pscustomobject]@{ Code = 0; TimedOut = $false; KillFailed = $false; Out = ''; Err = '' }
+        }
+        try {
+            InModuleScope aos { Invoke-AosAsset @('search', 'robot arm', '--kind', 'clip') }
+            $global:AosAssetSeen.Exe | Should -Be 'node'
+            $global:AosAssetSeen.Args | Should -Match 'video[\\/]assets[\\/]asset\.mjs search robot arm --kind clip'
+            $global:AosAssetSeen.Args | Should -Not -Match 'KEY-123'
+            $global:AosAssetSeen.Env['AOS_KEY_PEXELS'] | Should -Be 'KEY-123'
+            $global:AosAssetSeen.Env.ContainsKey('AOS_KEY_PIXABAY') | Should -BeFalse
+            $global:LASTEXITCODE | Should -Be 0
+        }
+        finally { Remove-Variable -Name AosAssetSeen -Scope Global -ErrorAction SilentlyContinue }
+    }
+    It 'refuses budget --approve without --by-user before starting anything' {
+        Mock Invoke-AosProcess -ModuleName aos { throw 'must not start' }
+        { InModuleScope aos { Invoke-AosAsset @('budget', '--film', 'x', '--approve', '500') } } | Should -Throw '*--by-user*'
+    }
+    It 'prints usage without a subcommand' {
+        { InModuleScope aos { Invoke-AosAsset @() } } | Should -Throw '*usage: aos asset*'
+    }
+    It 'shows what the tool printed and passes its exit code on' {
+        Mock Get-AosSecretNames -ModuleName aos { @() }
+        Mock Invoke-AosProcess -ModuleName aos {
+            [IO.File]::WriteAllText($StdoutFile, "## Credits`n`n- Video by Ana on Pexels`n")
+            [IO.File]::WriteAllText($StderrFile, 'a warning')
+            [pscustomobject]@{ Code = 3; TimedOut = $false; KillFailed = $false; Stalled = $false }
+        }
+        $shown = InModuleScope aos { Invoke-AosAsset @('credits', '--film', 'x') } 6>&1 | Out-String
+        $shown | Should -Match 'Video by Ana on Pexels'
+        $shown | Should -Match 'a warning'
+        $global:LASTEXITCODE | Should -Be 3
+    }
+    It 'runs the shared asset tool tests (node --test: core, capture, adapters, registry)' {
+        $tests = Join-Path $PSScriptRoot '..\agents-home\video\assets\test\*.test.mjs'
+        $result = & node --no-warnings --test $tests 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $result
+    }
+}
+
 Describe 'Video rules format' {
     It 'has numbered unique rules and wires every check into the video QA script' {
         $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
         $rules = [System.IO.File]::ReadAllLines((Join-Path $root 'agents-home\video\video-rules.md'))
         $qa = [System.IO.File]::ReadAllText((Join-Path $root 'templates\video\tools\qa.sh'))
         $ids = @()
-        foreach ($line in @($rules | Select-Object -Skip 1 | Where-Object { $_.Trim() })) {
+        $stages = @($rules | Where-Object { $_ -match '^## ' } | ForEach-Object { $_.Substring(3) })
+        ($stages -join '|') | Should -Be 'Brief|Look|Structure|Production|QA|Delivery|Orchestration'
+        foreach ($line in @($rules | Select-Object -Skip 1 | Where-Object { $_.Trim() -and $_ -notmatch '^## ' })) {
             $line | Should -Match '^- R\d{2} \[(manual|check: [a-z-]+)\] \S'
             if ($line -match '^- (R\d{2}) \[(?:manual|check: [a-z-]+)\]') { $ids += $Matches[1] }
             if ($line -match '\[check: ([a-z-]+)\]') {
@@ -1119,6 +1313,10 @@ Describe 'Video rules format' {
         }
         $ids.Count | Should -BeGreaterThan 0
         @($ids | Select-Object -Unique).Count | Should -Be $ids.Count
+        # ids never change and none is skipped: R01..Rnn each once, whatever stage they sit under
+        $expected = @(1..$ids.Count | ForEach-Object { 'R' + $_.ToString('00') })
+        (@($ids | Sort-Object) -join ',') | Should -Be ($expected -join ',')
+        $ids.Count | Should -BeGreaterOrEqual 40
     }
 }
 
@@ -3472,9 +3670,131 @@ Describe 'aos delegate' {
         & git -C $repo init -q
         & git -C $repo -c user.name=Fixture -c user.email=fixture@example.invalid commit --allow-empty -qm initial
         $task = Join-Path $caseRoot 'task file.md'
-        Write-TestFile $task 'Write a fixture file'
+        Write-TestFile $task "Write a fixture file`nRead only: none`nDone = the file exists"
         if (InModuleScope aos { Get-Command Test-AosDelegatePreflight -ErrorAction SilentlyContinue }) {
             if (InModuleScope aos { Get-Command Test-AosDelegatePreflight -ErrorAction SilentlyContinue }) { Mock Test-AosDelegatePreflight -ModuleName aos { @{ Ok=$true; Model='fixture-model'; Reasons=@() } } }
+        }
+    }
+    Context 'max-input' {
+        BeforeEach {
+            Mock Get-AosCodexHome -ModuleName aos { Join-Path $caseRoot 'codex' }
+            Mock Get-AosCapacityWarning -ModuleName aos { $null }
+        }
+        It 'warns about missing task boundaries without refusing the delegation' -TestCases @(
+            @{ Text = "Task`nDone = done" }, @{ Text = "Task`nRead only: none" }
+        ) {
+            param($Text)
+            Write-TestFile $task $Text
+            Mock Write-AosWarn -ModuleName aos { }
+            Mock Invoke-AosProcess -ModuleName aos { throw 'fixture process stop' }
+            $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R }
+            $r.outcome | Should -Not -Be 'refused'
+            Should -Invoke Write-AosWarn -ModuleName aos -ParameterFilter { $Text -match 'Read only:.*Done =' }
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly
+        }
+        It 'refuses a max-input budget on the app-server transport, which cannot enforce it' {
+            Mock Invoke-AosProcess -ModuleName aos { throw 'unexpected process' }
+            $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R -MaxInput 1000 -Transport 'app-server' }
+            $r.outcome | Should -Be 'refused'
+            $r.error.message | Should -Match 'max-input'
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
+        }
+        It 'does not install a watch when max-input is zero' {
+            Mock Invoke-AosProcess -ModuleName aos {
+                $Watch | Should -BeNullOrEmpty
+                Write-TestFile $StdoutFile '{"type":"thread.started","thread_id":"thread-1"}'
+                @{ Code=0; TimedOut=$false; KillFailed=$false }
+            }
+            $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R -MaxInput 0 }
+            $r.budget.max_input | Should -Be 0
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly -ParameterFilter { -not $Watch }
+        }
+        It 'reads the last usage event and resumes at complete UTF-8 line boundaries' {
+            $folder = New-TestFolder (Join-Path $caseRoot 'codex/sessions/2026/10/07')
+            $file = Join-Path $folder 'rollout-date-thread-1.jsonl'
+            $line = '{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":22014,"cached_input_tokens":13184,"output_tokens":97}}}}'
+            Write-TestFile $file ($line + "`n" + '{"type":')
+            $r = InModuleScope aos { Read-AosRolloutUsage -ThreadId 'thread-1' -FromOffset 0 }
+            $r.Found | Should -BeTrue
+            $r.Input | Should -Be 22014
+            $r.Cached | Should -Be 13184
+            $r.Output | Should -Be 97
+            $r.Offset | Should -Be ([Text.Encoding]::UTF8.GetByteCount($line + "`n"))
+            [IO.File]::AppendAllText($file, ('"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":90000,"cached_input_tokens":10000,"output_tokens":100}}}}' + "`n"))
+            $next = InModuleScope aos -Parameters @{ Offset=$r.Offset } { param($Offset) Read-AosRolloutUsage -ThreadId 'thread-1' -FromOffset $Offset }
+            $next.Input | Should -Be 90000
+            $next.Offset | Should -Be (Get-Item $file).Length
+        }
+        It 'reads a complete final event before its newline is appended' {
+            $folder = New-TestFolder (Join-Path $caseRoot 'codex/sessions')
+            $file = Join-Path $folder 'rollout-date-thread-1.jsonl'
+            Write-TestFile $file '{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":80000,"cached_input_tokens":0,"output_tokens":1}}}}'
+            $r = InModuleScope aos { Read-AosRolloutUsage -ThreadId 'thread-1' -FromOffset 0 }
+            $r.Found | Should -BeTrue
+            $r.Input | Should -Be 80000
+            $r.Offset | Should -Be (Get-Item $file).Length
+        }
+        It 'bounds only its own rollout: <Scenario>' -TestCases @(
+            @{ Scenario='over'; Expected='over-budget'; Observed=$true; Overshoot=30000 },
+            @{ Scenario='under'; Expected='accepted'; Observed=$true; Overshoot=0 },
+            @{ Scenario='missing'; Expected='accepted'; Observed=$false; Overshoot=0 },
+            @{ Scenario='delayed'; Expected='over-budget'; Observed=$true; Overshoot=30000 },
+            @{ Scenario='other'; Expected='accepted'; Observed=$true; Overshoot=0 }
+        ) {
+            param($Scenario,$Expected,$Observed,$Overshoot)
+            $folder = New-TestFolder (Join-Path $caseRoot 'codex/sessions/2026/10/07')
+            $env:AOS_TEST_ROLLOUT = Join-Path $folder 'rollout-2026-10-07T10-00-00-thread-1.jsonl'
+            $env:AOS_TEST_SCENARIO = $Scenario
+            $env:AOS_TEST_CHILD = Join-Path $caseRoot 'child.pid'
+            Mock Invoke-AosProcess -ModuleName aos {
+                $Watch | Should -Not -BeNullOrEmpty
+                $childScript = {
+                    $ErrorActionPreference = 'Stop'
+                    function Usage($path, $inputCount) {
+                        $event = @{type='event_msg'; payload=@{type='token_count'; info=@{total_token_usage=@{input_tokens=$inputCount; cached_input_tokens=10000; output_tokens=97}}}}
+                        [IO.File]::AppendAllText($path, (($event | ConvertTo-Json -Compress -Depth 6) + "`n"))
+                    }
+                    [Console]::WriteLine('{"type":"thread.started","thread_id":"thread-1"}')
+                    if ($env:AOS_TEST_SCENARIO -eq 'delayed') { Start-Sleep -Seconds 6 }
+                    if ($env:AOS_TEST_SCENARIO -ne 'missing') { Usage $env:AOS_TEST_ROLLOUT 60000 }
+                    if ($env:AOS_TEST_SCENARIO -eq 'other') { Usage ($env:AOS_TEST_ROLLOUT -replace 'thread-1', 'thread-2') 9999999 }
+                    if ($env:AOS_TEST_SCENARIO -in @('over','delayed')) {
+                        $child = Start-Process pwsh -ArgumentList '-NoProfile -Command Start-Sleep -Seconds 60' -WindowStyle Hidden -PassThru
+                        [IO.File]::WriteAllText($env:AOS_TEST_CHILD, [string]$child.Id)
+                        Start-Sleep -Seconds 1
+                        Usage $env:AOS_TEST_ROLLOUT 130000
+                        Start-Sleep -Seconds 60
+                    }
+                    elseif ($env:AOS_TEST_SCENARIO -ne 'missing') { Usage $env:AOS_TEST_ROLLOUT 90000 }
+                    Start-Sleep -Seconds 7
+                    [Console]::WriteLine('{"type":"turn.completed"}')
+                }.ToString()
+                $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childScript))
+                $r = & (Get-Module aos) { param($Encoded, $Callback)
+                    Start-AosProcessCore -Exe pwsh -Arguments @('-NoProfile','-EncodedCommand',$Encoded) -TimeoutSeconds 25 -IdleSeconds 0 -Watch $Callback
+                } $encoded $Watch
+                Write-TestFile $StdoutFile $r.Out
+                Write-TestFile (Join-Path (Split-Path $StdoutFile -Parent) 'result.json') '{"status":"done","summary":"done","files_changed":[],"tests_run":[],"unverified":[]}'
+                $r
+            }
+            try {
+                $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R -MaxInput 100000 }
+                $r.outcome | Should -Be $Expected
+                $r.budget.observed | Should -Be $Observed
+                $r.budget.overshoot | Should -Be $Overshoot
+                if ($Expected -eq 'over-budget') {
+                    $r.error.category | Should -Be 'over-budget'
+                    $r.kill_failed | Should -BeFalse
+                    $r.budget.last_input | Should -Be 130000
+                    $r.budget.last_cached | Should -Be 10000
+                    Get-Process -Id ([int](Get-Content $env:AOS_TEST_CHILD)) -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+                }
+                else { $r.timed_out | Should -BeFalse }
+            }
+            finally {
+                if (Test-Path $env:AOS_TEST_CHILD) { Stop-Process -Id ([int](Get-Content $env:AOS_TEST_CHILD)) -Force -ErrorAction SilentlyContinue }
+                Remove-Item Env:AOS_TEST_ROLLOUT, Env:AOS_TEST_SCENARIO, Env:AOS_TEST_CHILD -ErrorAction SilentlyContinue
+            }
         }
     }
     It 'publishes the exact result schema contract' {
@@ -4065,7 +4385,7 @@ Describe 'Pass A review fixes' {
         & git -C $repo add tracked.txt
         & git -C $repo -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm initial
         $task = Join-Path $caseRoot 'task file.md'
-        Write-TestFile $task 'Write a fixture file'
+        Write-TestFile $task "Write a fixture file`nRead only: none`nDone = the file exists"
     }
     It 'fails a delegate whose process exits nonzero despite a done result (finding 2)' {
         Mock Test-AosDelegatePreflight -ModuleName aos { @{ Ok=$true; Model='fixture-model'; Reasons=@() } }

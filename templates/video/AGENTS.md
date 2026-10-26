@@ -1,8 +1,8 @@
 # {{name}} (video)
 
 Instructions for Claude Code and Codex; `CLAUDE.md` imports this file. Made with `aos video new {{name}}`.
-Read `PREFLIGHT.md` first (the rules with their ids, the user's past verdicts on this kind of video, how long each
-stage took before); refresh it with `aos video preflight {{name}}`. Read `~/.agents/video/video-rules.md` before
+Read `PREFLIGHT.md` first (the invariant rules with their ids, the craft frontier with the best exemplar per
+dimension to start from and beat, how long each stage took before); refresh it with `aos video preflight {{name}}`. Read `~/.agents/video/video-rules.md` before
 every stage.
 
 ## What this is
@@ -29,6 +29,13 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
 - QA: `bash tools/qa.sh exports/{{name}}.mp4 exports/{{name}}.srt` (length from `qa.env`; includes the motion
   check on a texture-free proxy, report `qa/motion.md`), then `node tools/screen.mjs` (on-screen text)
 - Currency gate (R27): `node tools/checks/currency.mjs currency.json --claims claims.json`; export day: `node tools/reverify.mjs currency.json --browser-ok <ids> --evidence research/reverify-<date> --write` (each source gets a proof file: URL, time, SHA-256 of the page, anchor excerpt; a browser row needs one saved from the browser), then rebuild and QA on that local day. Build and QA pass `--export`; the dated ledger is part of the input manifest.
+- Blender sets (R41-R43): look-dev live through the Blender MCP with `BLENDER_LIB = r"<this folder>/blender/lib.py"; SHOT = "<variant>"; exec(open(r"<this folder>/blender/s_<set>.py").read())`, one still per change; finals headless: `python tools/render-shot.py S02 S11 ...` (table in `blender/shots.json`: script, SHOT variant, offset, preroll) -> `app/public/clips/<id>.mp4` and `src/data/media.json`; seconds per frame in `renders/render-log.jsonl`
+- CC0 assets: `python tools/polyhaven.py model|hdri|tex <id> [1k|2k]` (budget `BUDGET_MB` in qa.env, ledger `research/assets.md`); `python tools/polyhaven.py budget`
+- Shorts edit (R44): `python tools/edit.py` cuts on the words named in `src/data/cuts.json` -> `src/data/edit.json`
+- Page captures (R45): `node tools/capture.mjs [name...]` from `research/capture-pages.json` -> `app/public/captures/`, ledger `research/captures.json`
+- Real material (R42, R52): `python tools/commons.py search|info|fetch|ia-search|ia-fetch ...` (Wikimedia Commons / Internet Archive, licence and author into `research/assets.md`, counted against `BUDGET_MB`); real face detection on footage: `~/.aos/venvs/cv/Scripts/python.exe tools/detect.py <video> <start> <dur> <crop x> <shot id> [--pan x2]`
+- Review sheet of the assembled composition: `bash tools/stills.sh <name> S05:0.9 S11:0.5 ...` (one bundle, one still per shot)
+- Human voiceover (R53): `python tools/ingest-voice.py take1.m4a take2.m4a ... [--dry] [--verify]` (takes in script order; needs `AOS_WHISPER_MODEL`) -> `app/public/vo/<id>.wav`, `src/data/vo.json`, `words.json`, `words.sha256.json`; report in `<media>/voice/ingest-report.md`. A loop (R54) is set in `src/data/cuts.json`: `"head"`, `"gap"`, `"outro_frames"`.
 - Pacing report (R29): `node tools/checks/pacing.mjs <film.mp4> --shots src/data/shots.json --claims claims.json --lines src/data/lines.json --out qa/pacing`
 - Render cache (R32, default in build.sh): `bash tools/render-cached.sh`; `AOS_RENDER_CACHE=0` renders Main whole; tests `node --test tools/cache/cache.test.mjs`
 - Motion check alone: `node --no-warnings tools/checks/motion.mjs <proxy.mp4>`; its tests: `node --test tools/checks/`
@@ -37,16 +44,43 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
   `node --test tools/checks/input-manifest.test.mjs` exercises the guard. An isolated caller may select its private
   runner for this check with `AOS_VIDEO_MEDIA_ROOT`; this does not relocate the other build scripts automatically.
 
+## Imported material (rules R35, R39)
+
+Films use real material found for each shot's need, from any source: first the subject's own (its paper, launch or
+demo video, live page capture), then coverage excerpts, then open libraries, then built. `shots.md` records each
+shot's need and source; the brief's Sourcing section establishes the channel's policy and the download budget the user
+approved, and `sourcing.json` records them for the tools. Permission to import is not permission to mix media: R28
+decides how practices mix, and imported material appears in the hero next to a built practice.
+
+- Search: `aos asset search "<words>" --kind clip|photo|model|hdri|texture|sfx [--source <id>]` (Pexels, Pixabay,
+  Openverse, Wikimedia, NASA, Internet Archive, Poly Haven, ambientCG, Freesound; keys via `aos secret set`).
+- Fetch any URL: `aos asset fetch --film . --id a07 --url <url> --kind clip --basis <license|cc0|public-domain|fair-use|capture|own>
+  --acquisition <api|direct-file|platform-feature|download-tool> --platform <p> --why "<need>" [--source-in s --source-out s]`;
+  live pages: `aos asset capture --film . --id a08 --url <url> --mode shot|scroll|record`.
+- Then add each row's `uses` (shot, shotFrom, mediaFrom, mediaTo, audio, rationale) to `assets.json`, and run
+  `aos asset proxy --film .`, `aos asset registry --film .` and `aos asset credits --film .` (paste into description.md).
+- Shots use media only through `src/lib/media/` components and an asset id (`<Clip asset="a07" use="u1" look={look} />`,
+  `Photo`, `Capture`, `Model`, `Environment`, `GlTransition`); never a path. Transitions: `src/lib/transitions`.
+- `aos asset budget --film .` shows the budget; `--approve <MB> --by-user` only after the user approved the amount.
+- The gate (`tools/checks/assets.mjs`, run by build and QA) checks policy, not law; `qa/assets.md` lists the human
+  checks: the narration comments on each excerpt, every source tag is legible, no excerpt takes more than it needs.
+
 ## The learning loop (rule R20)
 
 - After each stage: `aos video log {{name}} <brief|look|structure|production|qa|delivery|retro|revision> <minutes> [note]`.
-- Every verdict the user gives, verbatim: `aos video verdict {{name}} <their words>`.
-- Motion: every move goes through `src/lib/motion.ts` (soft in-out curves, moves >= MIN_MOVE_FRAMES, `settle`,
-  `breathe`); expo-out and back-out curves fail the motion check. Shots are long and dissolve (`plan.ts`).
+- Every verdict the user gives, verbatim: `aos video verdict {{name}} <their words>`. It goes to the ledger for
+  audit only (`aos video preflight {{name}} --verdicts` shows it); no agent works from raw verdicts.
+- Motion: every move goes through `src/lib/motion.ts`; the motion check reports snaps and expo curves.
 - nar (rule R21): when choosing among style frames, `nar_choose` is a second signal; keep its call_id and the
   candidates in `retro.md`, and send `nar_feedback` only if the user compares those same candidates.
-- The retrospective adds rules to `~/.agents/video/video-rules.md` with the next free id, as `[check: x]` with a
-  script in `tools/checks/x.mjs` called from `tools/qa.sh` whenever a script can catch the failure.
+- The retrospective converts, it does not accumulate. For each verdict: (1) close the gap in the kit (template,
+  `src/lib`, an asset or rig library, a tool or a check) with a test or a rendered exemplar; (2) rewrite that
+  dimension's entry in `~/.agents/video/frontier.md` (new `best`, `how`, `next`, `try`; a gap is written as a
+  target). A new rule in `~/.agents/video/video-rules.md` only for a technical or process guard, as `[check: x]`
+  with a script in `tools/checks/x.mjs` called from `tools/qa.sh` whenever a script can catch it; taste never
+  becomes a rule.
+- Look gate: the look lab renders the frontier's `best` frames next to the new ones on the same beats; a dimension
+  passes when both vendors, blind, judge the new frame better.
 
 ## Done means
 

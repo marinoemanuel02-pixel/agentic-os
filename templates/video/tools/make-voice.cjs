@@ -20,7 +20,8 @@ const speed = Number(process.argv[3] ?? 1.0);
 const outDir = process.env.VO_OUT;
 const only = process.argv[4];
 const root = path.join(__dirname, "..");
-const media = process.env.AOS_VIDEO_MEDIA_ROOT || path.join(home, ".aos/video/{{name}}");
+const { mediaRoot } = require("./media-root.cjs"); // same rule as tools/media-root.mjs, worktrees included
+const media = mediaRoot(root);
 const out = outDir || path.join(media, "app/public/vo");
 fs.mkdirSync(out, { recursive: true });
 const lines = JSON.parse(fs.readFileSync(path.join(root, "src/data/lines.json"), "utf8"));

@@ -6,10 +6,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
+import { mediaRoot } from "./media-root.mjs";
 import { execFileSync } from "node:child_process";
 
 const here = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const media = process.env.AOS_VIDEO_MEDIA_ROOT || path.join(os.homedir(), ".aos", "video", "{{name}}");
+const media = mediaRoot(here);
 const dir = path.join(media, "qa", "shots");
 const model = process.env.SCREEN_MODEL || "aos-agent";
 const prompt = `Read all the text visible in this video frame, exactly as written, line by line. Answer ONLY with JSON: {"text_on_screen": "<the text, lines joined with ' / ', or empty>", "garbled_text": true|false}`;
