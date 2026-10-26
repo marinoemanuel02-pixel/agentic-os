@@ -12,14 +12,15 @@ Score each check 0-2 per shot on the contact sheet and once for the whole cut. A
 7. **True and traceable.** Every number and quote matches `script.md` and `sources.md`.
 8. **Upload-clean.** `tools/qa.sh` passes.
 9. **Easy to follow.** One idea per line in everyday words; the picture shows the idea before the words name it.
-10. **Not shapes.** Characters large in frame and acting; sets with props, light, texture and depth.
+10. **Beats the frontier.** Characters, scene and motion judged better than the best exemplars in
+    `~/.agents/video/frontier.md` on the look-lab beats (blind, both vendors).
 11. **Imported material shows its line's specific idea.** A real clip, capture, photo or model earns its place by
     showing this line's own subject (the actual demo, the actual page); a generic clip that could sit under any line
     scores 0. Imported material is graded into the look and credited (`qa/assets.md`).
 12. **A first-time viewer recognises every object and term.** No unreadable props, toy-scale objects or jargon the
-    film does not explain (v9 verdict, retro 45).
+    film does not explain.
 
 ## Anti-slop list (any hit fails the shot)
 
 Generic stock or generated visuals that do not carry their line; AI artifacts; style drift; slideshow pacing; motion
-that goes nowhere; snappy motion (expo starts, many short hard cuts).
+that goes nowhere; motion the motion check flags and a reviewer confirms.
