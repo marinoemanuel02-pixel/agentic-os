@@ -3680,16 +3680,17 @@ Describe 'aos delegate' {
             Mock Get-AosCodexHome -ModuleName aos { Join-Path $caseRoot 'codex' }
             Mock Get-AosCapacityWarning -ModuleName aos { $null }
         }
-        It 'refuses missing task boundaries before starting any process' -TestCases @(
+        It 'warns about missing task boundaries without refusing the delegation' -TestCases @(
             @{ Text = "Task`nDone = done" }, @{ Text = "Task`nRead only: none" }
         ) {
             param($Text)
             Write-TestFile $task $Text
-            Mock Invoke-AosProcess -ModuleName aos { throw 'unexpected process' }
+            Mock Write-AosWarn -ModuleName aos { }
+            Mock Invoke-AosProcess -ModuleName aos { throw 'fixture process stop' }
             $r = InModuleScope aos -Parameters @{ T=$task; R=$repo } { param($T,$R) Invoke-AosDelegate codex -TaskFile $T -Repo $R }
-            $r.outcome | Should -Be 'refused'
-            $r.error.category | Should -Be 'task-file'
-            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
+            $r.outcome | Should -Not -Be 'refused'
+            Should -Invoke Write-AosWarn -ModuleName aos -ParameterFilter { $Text -match 'Read only:.*Done =' }
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly
         }
         It 'does not install a watch when max-input is zero' {
             Mock Invoke-AosProcess -ModuleName aos {
