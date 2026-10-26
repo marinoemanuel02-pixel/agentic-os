@@ -774,7 +774,7 @@ Describe 'New-AosVideo' {
             New-AosVideo -Name 'align-1'
             $report = Join-Path $env:AOS_PROJECTS 'videos\align-1\PREFLIGHT.md'
             [System.IO.File]::ReadAllText($report) | Should -Match '^# Preflight: align-1'
-            [System.IO.File]::ReadAllText($report) | Should -Match '## Rules'
+            [System.IO.File]::ReadAllText($report) | Should -Match '## Invariants'
             Write-TestFile $report "my preflight`r`n"
             New-AosVideo -Name 'align-1'
             [System.IO.File]::ReadAllText($report) | Should -BeExactly "my preflight`r`n"
