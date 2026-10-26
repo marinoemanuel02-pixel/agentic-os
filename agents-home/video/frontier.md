@@ -6,13 +6,21 @@ starts from each `best`, compares its look-lab frames against it side by side, a
 both vendors, blind, judge the new frame better. A gap is written as a target, not as a fault.
 
 ## Characters and acting
-- best: pauseai-it (2026-10-26), a 2D cast in Remotion: `src/lib/Person.tsx` (lids, pupils with catch-lights, brows,
-  mouth shapes, jointed arms, `handPos()` so props and leashes attach to hands) and `src/lib/Mind.tsx` (one-eyed
-  creature with breathing lobes and an unreadable inside). Judged better than alignment-3's Pip blind by Codex and by
-  Claude (interaction and acting read in stills).
-- how: SVG rig as pure functions of the frame, poses as props, blinks/breathe/lag from motion.ts.
-- next: characters that change shape language with emotion (squash, stretch, overlap) and hands that grip.
-- try: a pose library per character and a two-character contact helper (holding, pulling, handing over).
+- best: pauseai-it v10 (2026-10-26) cast, now the template kit `src/lib/cast/` (review sheets `CastSheet`,
+  `CastTrio`, `CastFaces`, `CastHands`). Built in head units (about 5.5H, a neck of about 0.12H that starts inside
+  the jaw and ends in the collar), one tapered torso shape per garment (t-shirt, sweater, collared shirt, suit, lab
+  coat), three builds and a child body, three head shapes, eight hair styles, faces that vary per character (eye
+  spacing and size, jaw, nose). Limbs are filled tapered outlines with a rounded joint and fabric creases; hands
+  are an eight-pose library drawn as one silhouette each (union outline); shoes have heel, toe box and sole, the
+  near foot foreshortened in 3/4; eleven mouth shapes plus `talk()`; coloured outlines lighter on internal details.
+  Codex, blind against the v9 cast: "a large improvement in general quality".
+- how: research first (studio styles, Disney appeal, 2D rigs: RubberHose, Duik, Spine, Rive, Character Animator),
+  turned into a numbered spec in head units; then a cast sheet at film scale and at close-up, judged by both
+  vendors before any shot; geometry under test (`tools/checks/cast.test.mts`).
+- next: acting, not construction: poses with a line of action, weight shifts, overlapping action on hands and hair
+  in motion; faces that read at a quarter-screen height.
+- try: key poses per beat taken from `POSES` and blended, a dynamic line-of-action lean, blink and gaze offsets per
+  character; judge in motion (a 3 s clip per character), not only on stills.
 ## Motion
 - best: alignment-3 onward: every move through `src/lib/motion.ts` (soft in-out curves, minimum move length,
   settle, breathe); `tools/checks/motion.mjs` reports snaps and expo curves.
