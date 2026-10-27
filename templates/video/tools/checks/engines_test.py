@@ -278,4 +278,5 @@ class EngineCommands(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main(verbosity=1)
+    # report on stdout: Windows PowerShell 5.1 turns native stderr into an error record under $ErrorActionPreference Stop
+    unittest.main(testRunner=unittest.TextTestRunner(stream=sys.stdout))
