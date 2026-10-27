@@ -13,7 +13,7 @@ don't rewrite the old one: the record of what was rejected is the part that ages
   that wait for a spike with accounts the operator creates. A re-rendered clip now re-renders only its own segment.
   The look reaches every engine as `engines/look.json` generated from `look.ts`. Rules R55-R57.
 - **Measured.** Demo shots at 1920x1080: Godot 186 frames at about 0.5 s/frame, Manim 426 frames at 0.14 s/frame,
-  both bit-identical over 30 rerun frames.
+  both pixel-identical over 30 rerun frames.
 - **Rejected.** Omniverse (needs an RTX GPU; this one is a GTX); TouchDesigner, Houdini Apprentice, vvvv and Notch
   (free tiers are non-commercial or trials); Rive (exports are paid since 2025-10); Cavalry's CLI renderer (not in
   2.7+); a second asset contract beside Blender's; MCP-driven finals (MCPs stay look-dev only).

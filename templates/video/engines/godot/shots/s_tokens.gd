@@ -1,7 +1,7 @@
 extends "res://lib/aos_shot.gd"
 ## Example shot: tokens flowing through a model's layers. Six layers of eight nodes, each joined to three nodes of the
 ## next layer; 320 tokens follow seeded routes, resting softly on each node. Every position is computed from the frame
-## (no accumulated state), so a rerun is bit-identical. Variants: "wide" (default) and "close".
+## (no accumulated state), so a rerun is pixel-identical. Variants: "wide" (default) and "close".
 
 const LAYERS := 6
 const PER_LAYER := 8

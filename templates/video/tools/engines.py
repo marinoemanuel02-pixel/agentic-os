@@ -5,7 +5,7 @@ Blender keeps its own path in render-shot.py (blender/shots.json). Other engines
 Engines: godot (Movie Maker), manim (png frames), unreal (Movie Render Queue), unity (Recorder via
 engines/unity/Editor/AosRender.cs), cmd (any command that writes numbered frames: Autograph, scripts), import (a clip
 or frame folder rendered by hand: Cavalry, any GUI tool). Each render is frame-complete or it fails: the engine must
-write preroll + n frames; the preroll is dropped. --repeat in render-shot measures whether a rerun is bit-identical.
+write preroll + n frames; the preroll is dropped. --repeat in render-shot measures whether a rerun is pixel-identical.
 Unreal and Unity are scaffolds until their first spike (account installs): their command lines are documented, not
 yet run on this machine.
 """
@@ -24,6 +24,7 @@ FRAME_EXTS = (".png", ".exr")
 # script fails to parse. A cmd shot adds its own with "fail_on".
 FAIL_ON = {"godot": ("SCRIPT ERROR", "Failed to load script"), "manim": ("Traceback (most recent call last)",)}
 HOME = Path.home()
+PROGRAMS = Path(os.environ.get("ProgramFiles", Path.home().anchor + "Program Files"))  # resolved at run time
 
 
 class RenderError(RuntimeError):
@@ -71,8 +72,8 @@ def executable(engine: str) -> str:
     found = {
         "godot": os.environ.get("GODOT_PATH") or _first(str(HOME / ".local/bin/godot/Godot_v*_win64_console.exe")),
         "manim": os.environ.get("MANIM_PATH") or _first(str(HOME / ".aos/venvs/manim/Scripts/manim.exe")),
-        "unreal": os.environ.get("UNREAL_CMD") or _first(r"C:\Program Files\Epic Games\UE_*\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"),
-        "unity": os.environ.get("UNITY_PATH") or _first(r"C:\Program Files\Unity\Hub\Editor\*\Editor\Unity.exe"),
+        "unreal": os.environ.get("UNREAL_CMD") or _first(str(PROGRAMS / "Epic Games/UE_*/Engine/Binaries/Win64/UnrealEditor-Cmd.exe")),
+        "unity": os.environ.get("UNITY_PATH") or _first(str(PROGRAMS / "Unity/Hub/Editor/*/Editor/Unity.exe")),
     }.get(engine, "")
     if engine in ("godot", "manim", "unreal", "unity") and not (found and Path(found).exists()):
         var = {"godot": "GODOT_PATH", "manim": "MANIM_PATH", "unreal": "UNREAL_CMD", "unity": "UNITY_PATH"}[engine]
@@ -92,7 +93,7 @@ def input_files(root: Path, engine: str, spec: dict) -> list:
         proj = root / "engines" / "godot"
         files = [p for p in proj.rglob("*") if p.is_file() and ".godot" not in p.relative_to(proj).parts]
     elif engine == "manim":
-        files = sorted((root / "engines" / "manim").glob("*.py"))
+        files = sorted((root / "engines" / "manim").rglob("*.py"))
     elif engine == "import":
         src = root / spec["source"]
         files = sorted(p for p in src.rglob("*") if p.is_file()) if src.is_dir() else [src]
@@ -103,11 +104,25 @@ def input_files(root: Path, engine: str, spec: dict) -> list:
     return sorted(set(files))
 
 
+_FFMPEG = []
+
+
+def ffmpeg_version() -> str:
+    if not _FFMPEG:
+        r = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        _FFMPEG.append(r.stdout.splitlines()[0] if r.stdout else "")
+    return _FFMPEG[0]
+
+
 def render_key(root: Path, engine: str, spec: dict, size, fps: int) -> str:
+    """Spec, size, rate, the engine program (name, size, mtime), ffmpeg's version, this adapter's own code and every
+    input file's bytes: any of them changing renders the shot again."""
     h = hashlib.sha256()
     prog = executable(engine) if engine in ("godot", "manim", "unreal", "unity") else ""
-    version = f"{Path(prog).name} {Path(prog).stat().st_size}" if prog else ""
-    h.update(json.dumps([engine, spec, list(size), fps, version], sort_keys=True).encode())
+    st = Path(prog).stat() if prog else None
+    version = f"{Path(prog).name} {st.st_size} {st.st_mtime_ns}" if prog else ""
+    h.update(json.dumps([engine, spec, list(size), fps, version, ffmpeg_version()], sort_keys=True).encode())
+    h.update(hashlib.sha256(Path(__file__).read_bytes()).digest())
     for f in input_files(root, engine, spec):
         if not f.exists():
             raise RenderError(f"input {f} is missing")
@@ -271,7 +286,10 @@ def frame_md5s(frames: list) -> list:
 
 
 def repeat(root: Path, engine: str, spec: dict, work: Path, k: int, preroll: int, size, fps: int) -> dict:
-    """Render the first k frames twice; bit-identical means every decoded frame matched (R57)."""
+    """Render the first k frames twice; pixel-identical means every decoded frame matched (R57). Encoded bytes are
+    not compared: the clip is encoded once from the frames."""
+    if k < 1:
+        raise RenderError(f"--repeat needs a positive frame count, got {k}")
     runs = []
     for i in (1, 2):
         frames = run_frames(root, engine, spec, work / f"repeat{i}", preroll + k, size, fps, work / f"repeat{i}.log")
@@ -279,4 +297,4 @@ def repeat(root: Path, engine: str, spec: dict, work: Path, k: int, preroll: int
     differ = sum(1 for a, b in zip(*runs) if a != b)
     shutil.rmtree(work / "repeat1", ignore_errors=True)
     shutil.rmtree(work / "repeat2", ignore_errors=True)
-    return {"level": "bit-identical" if differ == 0 else "differs", "frames": k, "differ": differ}
+    return {"level": "pixel-identical" if differ == 0 else "differs", "frames": k, "differ": differ}

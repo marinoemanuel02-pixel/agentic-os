@@ -42,7 +42,7 @@ deliberately dark or bright shot; the reason is recorded in `src/data/media.json
   render an engine shot while it is stale.
 - `python tools/render-shot.py S04 S09 [--scale 50] [--repeat 30] [--force]` renders frames, encodes
   `<media>/app/public/clips/<id>.mp4`, logs seconds per frame, writes the `media.json` row (with `engine`) and runs the
-  exposure gate. `--repeat 30` renders the first 30 frames twice and records `determinism` (bit-identical or differs).
+  exposure gate. `--repeat 30` renders the first 30 frames twice and records `determinism` (pixel-identical or differs: decoded frames compared).
 - A re-rendered clip re-renders only the Remotion segments of the shot that plays it (`tools/cache/keys.mjs`).
 - Binary projects (Unreal, Unity) cannot be hashed cheaply: list a `rev.txt` (or any file you bump) in `inputs`.
 

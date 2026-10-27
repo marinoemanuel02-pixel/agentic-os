@@ -7,11 +7,12 @@ Reads blender/shots.json ({shot: {script, shot, offset?}}) and src/data/edit.jso
 <media>/renders/render-log.jsonl so render budgets are measured, not guessed (R32).
 Engine shots (engines/shots.json: Godot, Manim, Unreal, Unity, cmd, import; see tools/engines.py and R55-R57) go
 through the same clip, log, state and exposure gate. Without edit.json a shot takes "frames" from its table entry.
---repeat K renders an engine shot's first K frames twice and records whether the rerun is bit-identical (R57).
+--repeat K renders an engine shot's first K frames twice and records whether the rerun is pixel-identical (R57).
 """
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -76,6 +77,8 @@ def main() -> None:
         i = args.index("--frames"); force_frames = int(args[i + 1]); del args[i:i + 2]
     if "--repeat" in args:
         i = args.index("--repeat"); repeat_k = int(args[i + 1]); del args[i:i + 2]
+        if repeat_k < 1:
+            sys.exit(f"--repeat needs a positive frame count, got {repeat_k}")
     table = engines.load_table(ROOT)
     edit_path = ROOT / "src/data/edit.json"
     edit = {s["id"]: s for s in json.loads(edit_path.read_text(encoding="utf-8"))["shots"]} if edit_path.exists() else None
@@ -157,6 +160,9 @@ def render_engine(sid, engine, spec, n, scale, repeat_k, out, partial, media_pat
     media = json.loads(media_path.read_text(encoding="utf-8")) if media_path.exists() else {}
     if "--force" not in sys.argv and have.get("key") == key and have.get("frames", 0) >= n and out.exists():
         print(f"{sid}: unchanged ({have['frames']} frames, need {n}), skipped")
+        if media.get(sid, {}).get("clip") != f"clips/{sid}.mp4":  # a lost or edited row is restored on a hit
+            media[sid] = {**media.get(sid, {}), "clip": f"clips/{sid}.mp4", "startFrom": 0, "push": spec.get("push", False),
+                          "engine": engine}
     else:
         t = time.time()
         try:
@@ -165,6 +171,7 @@ def render_engine(sid, engine, spec, n, scale, repeat_k, out, partial, media_pat
             else:
                 frames = engines.run_frames(ROOT, engine, spec, work / "final", preroll + n, size, fps, work / "final.log")
                 engines.encode(frames[preroll:], partial, fps, spec.get("color", "linear") == "linear")
+                shutil.rmtree(work / "final", ignore_errors=True)  # 1080p frames run to hundreds of MB; the clip and log stay
         except (engines.RenderError, subprocess.CalledProcessError) as e:
             partial.unlink(missing_ok=True)
             sys.exit(f"{sid}: render failed: {e}")

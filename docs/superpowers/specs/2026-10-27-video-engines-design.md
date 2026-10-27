@@ -86,8 +86,8 @@ available, each in its own lane, under one design system (R28).
 
 | Shot | Frames | Time | Rerun of 30 frames |
 |---|---|---|---|
-| Godot `s_tokens` (48 nodes, 320 tokens, glow, fog, MSAA 4x) | 186 | 100-139 s incl. startup (0.5-0.75 s/frame) | bit-identical |
-| Manim `s_attention` (MathTex, 36 cells) | 426 | 60 s (0.14 s/frame) | bit-identical |
+| Godot `s_tokens` (48 nodes, 320 tokens, glow, fog, MSAA 4x) | 186 | 100-139 s incl. startup (0.5-0.75 s/frame) | pixel-identical |
+| Manim `s_attention` (MathTex, 36 cells) | 426 | 60 s (0.14 s/frame) | pixel-identical |
 
 ## Open (needs the user)
 

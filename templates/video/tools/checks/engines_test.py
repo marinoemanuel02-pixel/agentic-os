@@ -85,6 +85,23 @@ class EngineRenders(unittest.TestCase):
         self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
         self.assertNotIn("unchanged", again.stdout)
 
+    def test_a_changed_adapter_renders_again_and_a_cache_hit_restores_a_lost_media_row(self):
+        # Codex review 2026-10-27: the key left out the adapter code, and a hit left a deleted media row missing
+        self.assertEqual(self.film.run("S01").returncode, 0)
+        media = self.film.dir / "src" / "data" / "media.json"
+        media.write_text("{}", encoding="utf-8")
+        hit = self.film.run("S01")
+        self.assertIn("unchanged", hit.stdout)
+        self.assertEqual(self.film.media_row("S01")["clip"], "clips/S01.mp4")
+        adapter = self.film.dir / "tools" / "engines.py"
+        adapter.write_text(adapter.read_text(encoding="utf-8") + "\n# changed\n", encoding="utf-8")
+        self.assertNotIn("unchanged", self.film.run("S01").stdout)
+
+    def test_repeat_needs_a_positive_frame_count(self):
+        r = self.film.run("S01", "--repeat", "0")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("--repeat", r.stdout + r.stderr)
+
     def test_preroll_frames_are_rendered_then_dropped(self):
         self.film.table({"S01": fake(preroll=20)})
         r = self.film.run("S01")
@@ -127,7 +144,7 @@ class EngineRenders(unittest.TestCase):
     def test_repeat_tells_a_repeatable_engine_from_a_noisy_one(self):
         r = self.film.run("S01", "--repeat", "4")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(self.film.media_row("S01")["determinism"]["level"], "bit-identical")
+        self.assertEqual(self.film.media_row("S01")["determinism"]["level"], "pixel-identical")
         self.film.table({"S01": fake("random")})
         r = self.film.run("S01", "--repeat", "4")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
