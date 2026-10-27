@@ -58,6 +58,30 @@ class IngestVoiceLanguage(unittest.TestCase):
                 os.environ["AOS_VO_LANG"] = old
 
 
+class PhonePolish(unittest.TestCase):
+    """--phone (pauseai-it, 2026-10-27): phone takes carry clicks far above the voice band; the chain must remove them."""
+
+    def hf_rms(self, filters):
+        import re
+        import shutil
+        import subprocess
+        if not shutil.which("ffmpeg"):
+            self.skipTest("ffmpeg is not on PATH")
+        # a 1 kHz tone with a click every 100 ms, then everything above 11 kHz measured
+        src = "sine=f=1000:d=2:sample_rate=48000[a];aevalsrc='if(lt(mod(t,0.1),0.0002),0.9,0)':d=2:s=48000[c];[a][c]amix=inputs=2:normalize=0"
+        chain = (filters + "," if filters else "") + "highpass=f=11000,highpass=f=11000,astats=metadata=0"
+        r = subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-filter_complex", src + "," + chain, "-f", "null", "-"],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        return float(re.findall(r"RMS level dB: (-?[\d.]+|-inf)", r.stderr)[-1].replace("-inf", "-200"))
+
+    def test_phone_chain_removes_clicks_above_the_voice(self):
+        mod = load()
+        self.assertTrue(hasattr(mod, "PHONE_CHAIN"), "ingest-voice.py offers a --phone chain")
+        self.assertNotIn("deesser", mod.PHONE_CHAIN, "the de-esser added broadband clicks")
+        raw, polished = self.hf_rms(""), self.hf_rms(mod.PHONE_CHAIN)
+        self.assertLess(polished, raw - 20, f"clicks above 11 kHz: {raw:.1f} dB raw, {polished:.1f} dB polished")
+
+
 if __name__ == "__main__":
     # report on stdout: Windows PowerShell 5.1 turns native stderr into an error record under $ErrorActionPreference Stop
     unittest.main(testRunner=unittest.TextTestRunner(stream=sys.stdout))

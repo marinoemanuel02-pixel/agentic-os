@@ -1220,7 +1220,7 @@ Describe 'Video input provenance' {
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
 
-    It 'ingests a non-English voiceover: takes heard in AOS_VO_LANG, accented words kept (python unittest)' {
+    It 'ingests a non-English voiceover: takes heard in AOS_VO_LANG, accented words kept, phone crackle removed (python unittest)' {
         if (-not (Get-Command python -ErrorAction SilentlyContinue)) { Set-ItResult -Skipped -Because 'python is not on PATH'; return }
         $result = & python (Join-Path $PSScriptRoot '..\templates\video\tools\checks\ingest_voice_test.py') 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $result
