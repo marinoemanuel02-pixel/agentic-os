@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {segments} from './segments.mjs';
-import {closure, segmentKeys, envDigest} from './keys.mjs';
+import {closure, segmentKeys, envDigest, shotClips, clipShas} from './keys.mjs';
 import {concat, parseCount} from './concat.mjs';
 
 test('segments split at cuts, merge dissolve runs and tile the edit without gaps', () => {
@@ -151,4 +151,29 @@ test('long segments are split into chunks of at most maxFrames (fresh render pro
   assert.ok(s.every((x) => x.to - x.from <= 150), JSON.stringify(s));
   assert.deepEqual(s.map((x) => [x.from, x.to]), [[0, 150], [150, 300], [300, 400], [400, 430]]);
   assert.ok(s.slice(0, 3).every((x) => x.shots.join() === 'S01'));
+});
+
+test('a re-rendered engine clip changes only the segment of the shot that plays it (media.json owns the clip)', () => {
+  const {root, put} = tree();
+  put('src/data/media.json', JSON.stringify({S02: {clip: 'clips/S02.mp4'}, S03: {clip: 'clips/S03.mp4'}}));
+  const manifest = (s02) => ({metadata: {remotion: '4'}, entries: [
+    {path: 'fonts/a.ttf', sha256: '1'}, {path: 'public/clips/S02.mp4', sha256: s02}, {path: 'public/clips/S03.mp4', sha256: 'c3'},
+    {path: 'public/clips/loose.mp4', sha256: 'l1'}]});
+  const clips = shotClips(root);
+  assert.deepEqual(clips, {S02: 'public/clips/S02.mp4', S03: 'public/clips/S03.mp4'});
+  const keys = (m) => segmentKeys(root, [{from: 0, to: 10, shots: ['S01']}, {from: 10, to: 20, shots: ['S02']}, {from: 20, to: 30, shots: ['S03']}],
+    envDigest(m, '', Object.values(clips)), clipShas(m, clips));
+  const a = keys(manifest('c2'));
+  const b = keys(manifest('c2-new'));
+  assert.equal(a[0], b[0]);
+  assert.notEqual(a[1], b[1]);
+  assert.equal(a[2], b[2]);
+});
+
+test('a public clip no media.json row owns still changes every key; a missing owned clip is keyed as missing', () => {
+  const base = {metadata: {}, entries: [{path: 'public/clips/S02.mp4', sha256: 'a'}, {path: 'public/clips/loose.mp4', sha256: 'l'}]};
+  const owned = ['public/clips/S02.mp4'];
+  const loose = {...base, entries: base.entries.map((e) => (e.path.endsWith('loose.mp4') ? {...e, sha256: 'l2'} : e))};
+  assert.notEqual(envDigest(loose, '', owned), envDigest(base, '', owned));
+  assert.deepEqual(clipShas({metadata: {}, entries: []}, {S02: 'public/clips/S02.mp4'}), {S02: 'missing'});
 });

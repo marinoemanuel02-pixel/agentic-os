@@ -1,0 +1,25 @@
+; Godot 4.7 project for the film's engine shots (R55-R57). Scenes in shots/, shared code in lib/.
+; Finals render headless through tools/render-shot.py (Movie Maker); look-dev may use the Godot editor or MCP.
+config_version=5
+
+[application]
+
+config/name="{{name}} engine shots"
+run/main_scene="res://shots/s_tokens.tscn"
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/stretch/mode="viewport"
+
+[editor]
+
+movie_writer/fps=30
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+anti_aliasing/quality/msaa_3d=2
+anti_aliasing/quality/use_taa=false
+anti_aliasing/quality/screen_space_aa=0
