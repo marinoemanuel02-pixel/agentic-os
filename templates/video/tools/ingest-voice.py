@@ -11,6 +11,7 @@ key on) and src/data/words.sha256.json, plus voice/ingest-report.md listing what
 Usage: python tools/ingest-voice.py take1.m4a take2.m4a ... [--dry] [--verify]
   --dry     align and report only, write nothing
   --verify  transcribe each written line again and compare its first and last word (catches clipped words)
+  --phone   de-click and band-limit phone/messaging-app recordings (removes their crackle)
 Needs AOS_WHISPER_MODEL (a local faster-whisper model folder; nothing is downloaded) and ffmpeg on PATH.
 """
 import difflib
@@ -33,6 +34,10 @@ SR = 48000
 TARGET_LUFS = -19.0
 PAD_BEFORE, PAD_AFTER = 0.10, 0.14  # seconds of air kept around a line
 CHAIN = "highpass=f=70"
+# --phone: takes recorded on a phone and sent through a messaging app arrive band-limited near 9 kHz with short clicks
+# that reach far above the voice (heard as crackle). Remove the clicks, then cut steeply above the voice band. A
+# de-esser was tried and rejected: it added broadband clicks of its own (pauseai-it, 2026-10-27).
+PHONE_CHAIN = "highpass=f=70,adeclick=w=55:o=75:a=2:t=2:b=2,lowpass=f=9000,lowpass=f=9000,lowpass=f=9000"
 
 
 def norm(w: str) -> str:
@@ -93,6 +98,9 @@ def quietest(rms: np.ndarray, t0: float, t1: float) -> float:
 def main() -> None:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     dry, verify = "--dry" in sys.argv, "--verify" in sys.argv
+    if "--phone" in sys.argv:
+        global CHAIN
+        CHAIN = PHONE_CHAIN
     if not args:
         sys.exit(__doc__)
     lines = json.loads((ROOT / "src/data/lines.json").read_text(encoding="utf-8"))
