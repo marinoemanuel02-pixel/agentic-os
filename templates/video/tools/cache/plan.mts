@@ -7,15 +7,18 @@ import {fileURLToPath} from "node:url";
 import {SHOT_BEATS} from "../../src/data/plan.ts";
 import {BEAT} from "../../src/lib/look.ts";
 import {segments} from "./segments.mjs";
-import {segmentKeys, envDigest} from "./keys.mjs";
+import {segmentKeys, envDigest, shotClips, clipShas} from "./keys.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const manifestFile = process.argv[2];
 if (!manifestFile) throw new Error("usage: plan.mts <input-manifest.json>");
 // The render script's encoder flags shape every segment, so its bytes are part of the environment too.
 const flags = fs.readFileSync(path.join(root, "tools/render-cached.sh"), "utf8");
-const env = envDigest(JSON.parse(fs.readFileSync(manifestFile, "utf8")), flags);
+const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
+// Rendered clips (Blender and engine shots) key only the segments of the shots that play them.
+const clips = shotClips(root);
+const env = envDigest(manifest, flags, Object.values(clips));
 // At most 150 frames per render process (see segments.mjs).
 const segs = segments(SHOT_BEATS, BEAT, 150);
-const keys = segmentKeys(root, segs, env);
+const keys = segmentKeys(root, segs, env, clipShas(manifest, clips));
 segs.forEach((s, i) => console.log(`${keys[i]} ${s.from} ${s.to - 1} ${s.shots.join(",")}`));

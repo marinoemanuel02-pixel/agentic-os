@@ -52,6 +52,8 @@ for checked dependencies and compact packets, `report`/`annotate` for routing ev
 a cold quota handoff to the other existing vendor without replaying work. The six-case
 `tools/coordination-eval.ps1` defaults to model-free preparation. See `docs/coordination-tuning.md`.
 
+Engine shots for video films: Godot 4.7 (`~/.local/bin/godot/`, Movie Maker), Manim CE (venv `~/.aos/venvs/manim`) with TinyTeX (`~/.aos/tinytex`, never on the user PATH); driven only through a film's `tools/render-shot.py` (see the template's `engines/README.md`, rules R55-R57). Unreal, Unity, Autograph and Cavalry need accounts the user creates; their adapters are written but not yet run.
+
 Existing-footage editing: `tools/footage/footage.py` in the setup repo, reached through the `aos`
 module's directory. Offline inventory/transcription, timestamp search, draft cuts and checked FFmpeg
 export; use the `media-tools` skill's footage reference. Never downloads a model implicitly.

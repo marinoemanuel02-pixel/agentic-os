@@ -1,0 +1,48 @@
+{
+ "fps": 30,
+ "softPoints": [
+  0.45,
+  0,
+  0.55,
+  1
+ ],
+ "fonts": {
+  "serif": "\"Sitka Display\", \"Sitka Heading\", Georgia, serif",
+  "sans": "Bahnschrift, \"Segoe UI\", sans-serif"
+ },
+ "looks": {
+  "studio": {
+   "name": "Studio",
+   "bg": "#09090a",
+   "fogNear": 9,
+   "fogFar": 34,
+   "floor": {
+    "color": "#0d0d0e",
+    "roughness": 0.42,
+    "metalness": 0
+   },
+   "block": "obsidian",
+   "accent": "#ff7a1f",
+   "accentGain": 9,
+   "key": {
+    "color": "#ffd8b0",
+    "intensity": 260
+   },
+   "rim": {
+    "color": "#9cb8ff",
+    "intensity": 2.5
+   },
+   "env": 0.6,
+   "exposure": 1,
+   "bloom": {
+    "strength": 0.55,
+    "radius": 0.55,
+    "threshold": 0.95
+   },
+   "ink": "#ede7db",
+   "inkSoft": "#8d877c",
+   "grain": 0.045,
+   "vignette": 0.42
+  }
+ }
+}
