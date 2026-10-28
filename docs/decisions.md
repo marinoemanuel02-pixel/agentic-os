@@ -3,6 +3,26 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-28 - Repair coordination evidence and validate pool failure paths
+
+- **Scope.** Audit the previous coordination chat, current run receipts and source. Preserve the
+  existing native teams and shared API ledger. Fix observed lifecycle and validation defects;
+  do not introduce another orchestration service or infer savings from mixed task classes.
+- **Coordination.** Reuse the native actor already created by `--workers 1`. An observed native
+  handle cannot be replaced, and terminal runs cannot return to active states. Classify the
+  observed Claude weekly-limit message as quota exhaustion. Fresh zero capacity remains limited
+  even when its reset date is unknown; report that uncertainty instead of inventing a date.
+- **Pool.** Check complete prompts and cloud UTF-8 packet size, bypass proxies and redirects for
+  private local requests, validate chat/embedding shape, preserve usable local candidates when
+  cloud admission fails, and reject malformed variants, empty summaries and invalid feedback.
+  Batch local work to reduce model swaps; failed pool routes do not block direct host inspection.
+- **Evidence and limits.** Live private extraction was useful; a structurally passing variants
+  result missed the brief and was rejected in feedback. Live cloud attempts returned `not_free`;
+  static account admission is not working capacity. Claude's weekly quota blocked independent
+  test authorship/review. Codex wrote local regressions and used a separate native reviewer;
+  that is explicitly not a cross-vendor second opinion. No vendor-home/PATH configuration sync.
+  See [audit validation](validation/2026-10-28-orchestration-audit.md).
+
 ## 2026-10-26 - Make the local model and the free API pool a default worker (`aos-pool` MCP)
 
 - **Why.** The swarm and the local model existed but went unused: the swarm needs a packet and a lead-written

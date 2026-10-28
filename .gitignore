@@ -1,4 +1,4 @@
-# (reference clones live outside the repo: %LOCALAPPDATA%\agentic-os\refs)
+# Reference clones live outside the repo under ~/.aos/refs.
 
 # app-managed skills (the Claude desktop app syncs account skills into a synced\ folder)
 agents-home/skills/synced/

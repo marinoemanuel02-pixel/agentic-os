@@ -43,3 +43,21 @@ and unknown usage remain explicit. Existing unrelated `HANDOFF-media.md` is unto
   This exposed contradictory skill wording; the existing runbook has the correct form.
 - Transport tests delegated to Claude with only the new test file writable; host compile
   acceptance establishes a test artifact, not passing behavior before the fix.
+
+### Rulings and progress
+
+- The Claude dispatch actually failed at weekly quota before producing any test artifact;
+  its compile check also failed because the file did not exist. The preceding acceptance
+  description was the intended check, not an observed acceptance. Preserve the failed receipt.
+- Continue source repairs and local tests under the operator's broad authorization. Independent
+  test authorship/review is unavailable; no vendor-home or PATH rollout will be performed.
+- Native review reproduced an escaped-label tie-break exceeding the local budget. Two added
+  regressions failed before checking the assembled tie-break and system/format text.
+- The quota regression exposed a second defect: fresh zero capacity with no reset date was
+  merely `low`. It now stays `limited` while fresh and displays an unknown reset safely.
+- Full-suite failures exposed the prior optional pool approval lookup aborting delegation on
+  unreadable registration. A new regression failed before making this optional grant fail closed.
+- One initial full test process was explicitly cancelled after a logged replacement started;
+  its incomplete output is not passing evidence. The final suite uses a native subprocess log.
+- Git worktree prune was previewed only. Missing paths and permission errors do not authorize
+  deleting recovery metadata or releasing unidentified actors.

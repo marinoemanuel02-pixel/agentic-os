@@ -37,12 +37,23 @@ prompt, and some free tiers may train on prompts. Never pass secrets either way.
 
 - Ledger: `~/.aos/pool/ledger.jsonl` (override with `AOS_POOL_DIR`). It records tool, routes, verdict,
   time and input size, never the texts.
-- Input: under 40,000 characters per call for the local model (16K context, set per request); the free
-  API pool takes packets under 30,000 characters.
+- Input: the complete local prompt, including schema, labels, claims and instructions, is capped at
+  40,000 characters. This is a coarse bound, not a tokenizer guarantee for the 16K context. Cloud
+  prompts also have a 30,000-character bound and must fit the swarm's 32 KiB UTF-8 packet limit.
+  An oversized public prompt stays local; unavailable cloud admission returns a route error and
+  preserves any usable local candidate.
+- Private local HTTP requests bypass environment proxies and refuse redirects. Chat responses
+  need string content; embeddings need one finite, nonzero vector of equal width per input.
+- Empty summaries and malformed candidate lists cannot pass. Feedback accepts a real boolean
+  and a known result id, preventing accidental truthiness from inflating acceptance statistics.
 - The 6 GB GPU holds one model at a time: switching between the embedding model and the text model
   costs about a minute the first time (measured 65 s), then calls are fast (warm triage 0.1 s, warm
   extraction a few seconds). Models stay loaded for 30 minutes after use.
 - `AOS_OLLAMA_URL` and `AOS_LOCAL_JSON` override the local endpoint and config for tests.
+
+Batch related work and reuse checked results. On a route failure, continue with direct inspection
+or an eligible route instead of repeating an unchanged call. Check `swarm accounts` before counting
+API capacity: expired free-tier attestations stay ineligible until the operator supplies new evidence.
 
 ## Measured on 2026-10-26 (qwen3.5:4b, bge-m3, one run each)
 

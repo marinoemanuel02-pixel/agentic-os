@@ -2229,8 +2229,15 @@ Describe 'MCP placeholders and nar registration' {
     }
 
     It 'runs the free-resource pool checks and MCP protocol without a real model or network' {
-        & python -m unittest discover -s $PSScriptRoot -p 'test_pool.py' -v
+        & python -m unittest discover -s $PSScriptRoot -p 'test_pool*.py' -v
         $LASTEXITCODE | Should -Be 0
+    }
+
+    It 'omits optional pool approvals when registration cannot be read' {
+        InModuleScope aos {
+            Mock Get-AosCodexConfigText { throw (New-Object IO.IOException('registration unavailable')) }
+            @(Get-AosCodexPoolArgs).Count | Should -Be 0
+        }
     }
 
     It 'skips a server whose required file does not exist yet' {
@@ -3084,6 +3091,18 @@ Describe 'Vendor capacity (R34)' {
         $cap['codex'].remaining | Should -Be 0
         $cap['codex'].source | Should -Be 'delegate'
         $cap['codex'].resets | Should -Not -BeNullOrEmpty
+    }
+    It 'recognizes the observed Claude weekly limit and records exhausted capacity without guessing a date' {
+        InModuleScope aos {
+            $message = "You've hit your weekly limit " + [char]0x00b7 + ' resets 5am (Europe/Rome)'
+            (Get-AosErrorCategory $message) | Should -Be quota
+            Add-AosCapacityFromError -Vendor claude -Message $message
+            $capacity = Get-AosCapacity -Now ([datetime]::UtcNow)
+            $capacity['claude'].remaining | Should -Be 0
+            $capacity['claude'].state | Should -Be limited
+            $capacity['claude'].resets | Should -BeNullOrEmpty
+            (Get-AosCapacityWarning claude) | Should -Match 'reset.*unknown'
+        }
     }
     It 'sets and shows capacity through the CLI and rejects a bad vendor or percent' {
         aos capacity set codex 23 --note 'app usage card' | Out-Null
@@ -4186,6 +4205,57 @@ Describe 'Pass A review fixes' {
         $sw.Stop()
         $r.TimedOut | Should -BeTrue
         $sw.Elapsed.TotalSeconds | Should -BeLessThan 15
+    }
+}
+
+Describe 'coordination identity regressions' {
+    BeforeEach {
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        InModuleScope aos {
+            Reserve-AosActor -Id identity -Vendor codex -Task identity -Workers 1 | Out-Null
+            Set-AosActorState -Id identity-native-1 -State running -Handle actual-child -Evidence launch | Out-Null
+        }
+    }
+    It 'rejects replacement handles without changing a running native actor' {
+        InModuleScope aos {
+            $before = Get-AosActors | Where-Object id -eq identity-native-1 | ConvertTo-Json -Compress
+            { Set-AosActorState -Id identity-native-1 -State running -Handle other-child -Evidence other-launch } | Should -Throw
+            $after = Get-AosActors | Where-Object id -eq identity-native-1 | ConvertTo-Json -Compress
+            $after | Should -BeExactly $before
+        }
+    }
+    It 'rejects unrelated completion handles without releasing a native allowance' {
+        InModuleScope aos {
+            { Set-AosActorState -Id identity-native-1 -State done -Handle other-child -Evidence other-completion } | Should -Throw
+            $child = Get-AosActors | Where-Object id -eq identity-native-1
+            $child.state | Should -Be running
+            $child.handle | Should -Be actual-child
+            { Set-AosActorState -Id identity -State done } | Should -Throw
+        }
+    }
+    It 'accepts completion for the observed native handle and then its parent' {
+        InModuleScope aos {
+            $child = Set-AosActorState -Id identity-native-1 -State done -Handle actual-child -Evidence matching-completion
+            $child.state | Should -Be done
+            (Set-AosActorState -Id identity -State done).state | Should -Be done
+        }
+    }
+    It 'refuses terminal runs returning to active states and preserves the receipt state' {
+        InModuleScope aos {
+            Set-AosRunState -Id identity -State running | Out-Null
+            Set-AosRunState -Id identity -State accepted | Out-Null
+            $before = Get-AosRunState identity | ConvertTo-Json -Compress
+            foreach ($state in @('running','waiting-input','reserved','preparing','suspect','needs-inspection')) {
+                { Set-AosRunState -Id identity -State $state -Text stale-update } | Should -Throw
+                (Get-AosRunState identity | ConvertTo-Json -Compress) | Should -BeExactly $before
+            }
+        }
+    }
+    It 'allows host inspection to resolve to rejected' {
+        InModuleScope aos {
+            Set-AosRunState -Id identity -State needs-inspection | Out-Null
+            (Set-AosRunState -Id identity -State rejected).state | Should -Be rejected
+        }
     }
 }
 

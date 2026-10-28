@@ -28,7 +28,7 @@ The worker flag creates child actor <lead-id>-native-1. Lead plus that child fil
 
 ## Split the work
 
-Give independent files to parallel writers, each in its own worktree. Check semantic dependencies as well as file overlap. The implementing vendor does not write the tests: have the other vendor write tests first as a prerequisite task, with test files declared as artifacts. See the tests fail before implementation. Implementers depend on that task and start only after its accepted result is merged into their checkout. One writer owns each checkout, including native children; only the lead integrates.
+Give independent files to parallel writers, each in its own worktree. Check semantic dependencies as well as file overlap. For risky fixes, have the other vendor write tests first as a prerequisite task, with test files declared as artifacts. Routine reversible changes can keep test authorship inline. See the tests fail before implementation. When tests are a separate task, implementers start only after its accepted result is merged into their checkout. One writer owns each checkout, including native children; only the lead integrates.
 
 ## Write contracts
 

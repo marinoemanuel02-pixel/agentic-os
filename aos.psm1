@@ -327,7 +327,11 @@ function Get-AosCodexPoolArgs {
     # codex exec never approves MCP calls, so a delegated Codex could not use the aos-pool tools.
     # Approve them for this run only, and only when the server is registered (a bare override
     # would create a server entry with no command). config.toml itself is not written.
-    if ((Get-AosCodexConfigText) -match '(?m)^\[mcp_servers\.aos-pool\]') {
+    # This is an optional grant: an unreadable registration must fail closed without
+    # aborting unrelated delegation. The Codex runtime handles its own config errors.
+    try { $configText = Get-AosCodexConfigText }
+    catch { Write-AosWarn 'Codex pool registration unreadable; no extra tool approval for this run'; return @() }
+    if ($configText -match '(?m)^\[mcp_servers\.aos-pool\]') {
         return @('-c', 'mcp_servers.aos-pool.default_tools_approval_mode="approve"')
     }
     return @()
@@ -2823,7 +2827,7 @@ function Get-AosCodexModelCandidates {
 
 function Get-AosErrorCategory([string]$Message) {
     if ($Message -match '(?i)not supported') { return 'not-supported' }
-    if ($Message -match '(?i)usage limit|rate limit|\b429\b|quota') { return 'quota' }
+    if ($Message -match '(?i)usage limit|rate limit|\b(?:weekly|daily|monthly|session) limit\b|\b429\b|quota') { return 'quota' }
     if ($Message -match '(?i)\b401\b|unauthori[sz]ed|log ?in|not logged|authentication') { return 'auth' }
     return 'other'
 }
@@ -3142,6 +3146,7 @@ function Get-AosCapacity([datetime]$Now) {
         if ($resets -and $resets -le $Now) { $state = 'reset' }
         elseif ($remaining -le 0 -and $resets) { $state = 'limited' }
         elseif (($Now - $ts).TotalHours -ge $script:CapacityStaleHours) { $state = 'stale' }
+        elseif ($remaining -le 0) { $state = 'limited' }
         elseif ($remaining -le $script:CapacityLowPercent) { $state = 'low' }
         $out[$v] = [pscustomobject]@{ vendor = $v; remaining = $remaining; resets = $resets; reported = $ts; source = [string]$e['source']; note = [string]$e['note']; state = $state; window = '' }
     }
@@ -3152,7 +3157,10 @@ function Get-AosCapacityWarning([string]$Vendor) {
     try { $cap = Get-AosCapacity -Now ([datetime]::UtcNow) } catch { return $null }
     if (-not $cap.Contains($Vendor)) { return $null }
     $c = $cap[$Vendor]
-    if ($c.state -eq 'limited') { return "$Vendor is limited until $($c.resets.ToLocalTime().ToString('HH:mm')) (quota): give this task to the other vendor, or schedule it after the reset" }
+    if ($c.state -eq 'limited') {
+        if (-not $c.resets) { return "$Vendor is limited (quota); reset time is unknown: use the other vendor and refresh capacity before retrying" }
+        return "$Vendor is limited until $($c.resets.ToLocalTime().ToString('HH:mm')) (quota): give this task to the other vendor, or schedule it after the reset"
+    }
     if ($c.state -eq 'low') { return "$Vendor has about $($c.remaining) % of its window left: keep this task small (a bounded review), and give builds to the other vendor" }
     return $null
 }
@@ -3187,7 +3195,10 @@ function Invoke-AosCapacity([string[]]$Arguments) {
         $c = $cap[$v]
         $hint = 'free for builds and reviews'
         if ($c.state -eq 'low') { $hint = 'small tasks only (bounded reviews); builds go to the other vendor' }
-        elseif ($c.state -eq 'limited') { $hint = 'limited until ' + $c.resets.ToLocalTime().ToString('HH:mm') + ': hand work to the other vendor' }
+        elseif ($c.state -eq 'limited') {
+            $hint = 'limited; reset time unknown: hand work to the other vendor'
+            if ($c.resets) { $hint = 'limited until ' + $c.resets.ToLocalTime().ToString('HH:mm') + ': hand work to the other vendor' }
+        }
         elseif ($c.state -eq 'reset') { $hint = 'its reset has passed: check its real usage before a big task' }
         elseif ($c.state -eq 'stale') { $hint = 'report is old: ask for a fresh number before planning' }
         $age = [int]([datetime]::UtcNow - $c.reported).TotalMinutes

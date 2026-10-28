@@ -161,6 +161,9 @@ function Set-AosActorState {
         $store = Read-AosActorStore
         $row = $store['actors'][$Id]
         if (-not $row) { throw 'unknown actor' }
+        if ($row['kind'] -eq 'native' -and $row['handle'] -and $Handle -and $row['handle'] -ne $Handle) {
+            throw 'native handle cannot change after launch; use a new actor for another child'
+        }
         if (-not (Test-AosActorActive $row)) {
             if ($row['state'] -eq $State) { return [pscustomobject]$row }
             throw 'terminal actor cannot change state'
@@ -313,6 +316,10 @@ function Set-AosRunState {
         'accepted','rejected','busy','preflight-failed','timed-out','needs-inspection')) { throw 'invalid run state' }
     return (Invoke-AosCoordLocked {
         $run=Get-AosRunState $Id
+        if ($run -and $run['state'] -in @('accepted','rejected','busy','preflight-failed','timed-out','done','failed','cancelled') -and
+            $State -in @('preparing','reserved','running','waiting-input','suspect','needs-inspection')) {
+            throw 'terminal run cannot return to an active state; use a new run id'
+        }
         if (-not $run) {
             $actors=(Read-AosActorStore)['actors']
             if (-not $actors[$Id] -and $State -in @('running','preparing','waiting-input','reserved')) { throw 'active run needs an admitted actor' }
