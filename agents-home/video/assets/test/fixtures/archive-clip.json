@@ -1,0 +1,21 @@
+{
+ "response": {
+  "numFound": 3,
+  "docs": [
+   {
+    "identifier": "robots_1957",
+    "title": "Robots of Tomorrow (1957)",
+    "licenseurl": "http://creativecommons.org/publicdomain/mark/1.0/"
+   },
+   {
+    "identifier": "factory_film",
+    "title": "Factory Film",
+    "licenseurl": "https://creativecommons.org/licenses/by/4.0/"
+   },
+   {
+    "identifier": "prelinger_unknown",
+    "title": "Prelinger reel without a license URL"
+   }
+  ]
+ }
+}

@@ -1,0 +1,47 @@
+{
+ "total": 2,
+ "hits": [
+  {
+   "id": 301,
+   "pageURL": "https://pixabay.com/videos/robot-301/",
+   "duration": 15,
+   "user": "dan",
+   "tags": "robot, arm",
+   "videos": {
+    "large": {
+     "url": "https://cdn.pixabay.com/301-large.mp4",
+     "width": 1920,
+     "height": 1080,
+     "size": 9000000
+    },
+    "medium": {
+     "url": "https://cdn.pixabay.com/301-medium.mp4",
+     "width": 1280,
+     "height": 720,
+     "size": 4000000
+    }
+   }
+  },
+  {
+   "id": 302,
+   "pageURL": "https://pixabay.com/videos/lab-302/",
+   "duration": 9,
+   "user": "eve",
+   "tags": "lab",
+   "videos": {
+    "large": {
+     "url": "",
+     "width": 0,
+     "height": 0,
+     "size": 0
+    },
+    "medium": {
+     "url": "https://cdn.pixabay.com/302-medium.mp4",
+     "width": 1280,
+     "height": 720,
+     "size": 3000000
+    }
+   }
+  }
+ ]
+}

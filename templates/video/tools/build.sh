@@ -3,7 +3,7 @@
 #   tools/build.sh [version-label]
 set -euo pipefail
 P="$(cd "$(dirname "$0")/.." && pwd)"
-H="${AOS_VIDEO_MEDIA_ROOT:-$HOME/.aos/video/{{name}}}"
+. "$P/tools/media-root.sh"
 label="${1:-v1}"
 cd "$P"
 currency_mode=""
@@ -12,6 +12,10 @@ if [ -f currency.json ]; then node tools/checks/currency.mjs currency.json --cla
 elif [ "$currency_mode" = none ]; then echo "no currency ledger: qa.env declares a timeless topic (CURRENCY=none)"
 else echo "currency.json missing: keep a ledger (R27) or declare CURRENCY=none in qa.env for a timeless topic" >&2; exit 1; fi
 node tools/checks/claims.mjs
+# Imported material (R35): rights, credits, fair-use limits and registry-only media paths, before any render.
+mkdir -p "$H/qa"
+node --no-warnings tools/timeline-json.mts > "$H/qa/timeline.json"
+node tools/checks/assets.mjs "$P" --timeline "$H/qa/timeline.json" --public "$H/app/public" --report "$P/qa/assets.md"
 node tools/checks/screen-text.mjs
 node --no-warnings tools/checks/joins.mts
 node --no-warnings tools/check-plan.mts | tail -1

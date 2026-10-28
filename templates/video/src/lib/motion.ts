@@ -3,6 +3,7 @@
 // no expo-out or back-out curves, no move shorter than MIN_MOVE_FRAMES, holds that breathe.
 import { Easing, interpolate, spring } from "remotion";
 import { FPS } from "./look";
+import { SOFT_POINTS } from "./ease";
 
 /** The shortest move allowed for anything that travels (0.6 s at 30 fps). Small accents (blinks) use `blink`. */
 export const MIN_MOVE_FRAMES = 18;
@@ -10,7 +11,7 @@ export const MIN_MOVE_FRAMES = 18;
 const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
 
 /** Sine-like in-out: starts and ends at rest. The default for every move. */
-export const SOFT = Easing.bezier(0.45, 0, 0.55, 1);
+export const SOFT = Easing.bezier(...SOFT_POINTS);
 /** Gentle arrival for things that enter already moving (a boat, a running Pip). Zero slope at the end only. */
 export const ARRIVE = Easing.bezier(0.3, 0.2, 0.4, 1);
 /** Gentle departure: zero slope at the start only. */

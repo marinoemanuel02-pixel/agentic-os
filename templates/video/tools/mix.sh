@@ -4,7 +4,8 @@
 #   tools/mix.sh <video.mp4> <out.mp4> [start_seconds duration_seconds]
 # With start/duration, the stems are cut to that window (to preview one shot with its real soundtrack).
 set -euo pipefail
-H="${AOS_VIDEO_MEDIA_ROOT:-$HOME/.aos/video/{{name}}}"
+P="$(cd "$(dirname "$0")/.." && pwd)"
+. "$P/tools/media-root.sh"
 A="$H/audio"
 video="$1"; out="$2"; start="${3:-0}"; dur="${4:-}"
 if [ -z "$dur" ]; then dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$video"); fi

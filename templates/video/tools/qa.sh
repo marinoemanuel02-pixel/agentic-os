@@ -4,7 +4,7 @@
 set -uo pipefail
 P="$(cd "$(dirname "$0")/.." && pwd)"
 video="$1"; srt="$2"
-H="${AOS_VIDEO_MEDIA_ROOT:-$HOME/.aos/video/{{name}}}"
+. "$P/tools/media-root.sh"
 mkdir -p "$P/qa" "$H/qa/shots"
 R="$P/qa/report.md"; fail=0
 ok() { echo "- PASS $*" >> "$R"; }; bad() { echo "- FAIL $*" >> "$R"; fail=1; }
@@ -16,6 +16,10 @@ if [ -f "$P/currency.json" ]; then node "$P/tools/checks/currency.mjs" "$P/curre
 elif [ "$currency_mode" = none ]; then ok "no currency ledger: qa.env declares a timeless topic (CURRENCY=none)"
 else bad "currency.json missing: keep a ledger (R27) or declare CURRENCY=none in qa.env for a timeless topic"; cat "$R"; exit 1; fi
 node "$P/tools/checks/claims.mjs" || { bad "claims ledger incomplete"; cat "$R"; exit 1; }
+node --no-warnings "$P/tools/timeline-json.mts" > "$H/qa/timeline.json" || { bad "timeline export failed"; cat "$R"; exit 1; }
+if node "$P/tools/checks/assets.mjs" "$P" --timeline "$H/qa/timeline.json" --public "$H/app/public" --report "$P/qa/assets.md" > "$H/qa/assets.log"; then ok "asset policy checks passed (qa/assets.md lists the human checks)"
+else bad "asset policy checks failed: $(head -3 "$H/qa/assets.log" | tr '
+' ' ')"; cat "$R"; exit 1; fi
 node "$P/tools/checks/screen-text.mjs" || { bad "screen-text ledger coverage incomplete"; cat "$R"; exit 1; }
 node --no-warnings "$P/tools/checks/joins.mts" || { bad "camera joins invalid"; cat "$R"; exit 1; }
 

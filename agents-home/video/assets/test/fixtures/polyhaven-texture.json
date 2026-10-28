@@ -1,0 +1,16 @@
+{
+ "metal_plate": {
+  "name": "Metal Plate",
+  "type": 1,
+  "tags": [
+   "metal",
+   "robot"
+  ],
+  "categories": [
+   "metal"
+  ],
+  "authors": {
+   "Rob": "All"
+  }
+ }
+}

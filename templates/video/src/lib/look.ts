@@ -48,3 +48,12 @@ export const LOOKS: Record<string, Look> = {
 
 export const SERIF = '"Sitka Display", "Sitka Heading", Georgia, serif';
 export const SANS = 'Bahnschrift, "Segoe UI", sans-serif';
+
+// The film grade as a CSS filter for imported 2D material (clips, photos, captures), so stock sits inside the look:
+// contrast follows the vignette's weight, exposure the look's exposure; saturation is held down a little.
+export const gradeFilter = (look: Look): string => {
+  const contrast = (1 + look.vignette * 0.25).toFixed(3);
+  const saturate = (0.86 - look.grain).toFixed(3);
+  const brightness = (0.92 * look.exposure).toFixed(3);
+  return `contrast(${contrast}) saturate(${saturate}) brightness(${brightness})`;
+};

@@ -1,0 +1,16 @@
+{
+ "studio_small": {
+  "name": "Studio Small",
+  "type": 0,
+  "tags": [
+   "studio",
+   "robot lab"
+  ],
+  "categories": [
+   "studio"
+  ],
+  "authors": {
+   "Greg": "All"
+  }
+ }
+}

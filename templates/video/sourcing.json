@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "fairUse": false,
+  "acquisition": {
+    "youtube": ["api", "platform-feature"],
+    "*": ["api", "direct-file", "platform-feature"]
+  },
+  "budget": null
+}

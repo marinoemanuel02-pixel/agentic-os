@@ -14,7 +14,7 @@ for (const script of ['build.sh', 'qa.sh']) {
       const root = fs.mkdtempSync(path.join(scratch, 'case '));
       const tools = path.join(root, 'tools');
       fs.mkdirSync(path.join(tools, 'checks'), {recursive:true});
-      fs.copyFileSync(new URL(`../${script}`, import.meta.url), path.join(tools, script));
+      fs.copyFileSync(new URL(`../${script}`, import.meta.url), path.join(tools, script)); fs.copyFileSync(new URL('../media-root.sh', import.meta.url), path.join(tools, 'media-root.sh'));
       fs.copyFileSync(new URL('./currency.mjs', import.meta.url), path.join(tools, 'checks/currency.mjs'));
       fs.writeFileSync(path.join(root, 'claims.json'), '{"lines":[],"screen":[]}');
       fs.writeFileSync(path.join(root, 'qa.env'), scenario.includes('declared') || scenario.includes('despite') ? 'CURRENCY=none\n' : 'QA_MIN_S=60\n');

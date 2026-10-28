@@ -1,0 +1,30 @@
+{
+ "robot_arm": {
+  "name": "Robot Arm",
+  "type": 2,
+  "tags": [
+   "robot",
+   "arm",
+   "industrial"
+  ],
+  "categories": [
+   "industrial"
+  ],
+  "authors": {
+   "Jane Doe": "All"
+  }
+ },
+ "wooden_chair": {
+  "name": "Wooden Chair",
+  "type": 2,
+  "tags": [
+   "chair"
+  ],
+  "categories": [
+   "furniture"
+  ],
+  "authors": {
+   "Sam": "All"
+  }
+ }
+}

@@ -1,0 +1,25 @@
+{
+ "collection": {
+  "items": [
+   {
+    "href": "https://images-assets.nasa.gov/image/KSC-20260302-pad/collection.json",
+    "data": [
+     {
+      "nasa_id": "KSC-20260302-pad",
+      "title": "Title KSC-20260302-pad",
+      "center": "KSC",
+      "date_created": "2026-03-01T00:00:00Z",
+      "media_type": "image",
+      "description": "A launch."
+     }
+    ],
+    "links": [
+     {
+      "href": "https://images-assets.nasa.gov/image/KSC-20260302-pad/KSC-20260302-pad~thumb.jpg",
+      "rel": "preview"
+     }
+    ]
+   }
+  ]
+ }
+}

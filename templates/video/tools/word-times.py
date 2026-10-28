@@ -31,7 +31,11 @@ if not model_dir:
 model_path = Path(model_dir)
 if not (model_path / "model.bin").is_file():
     raise RuntimeError("Existing Whisper model cache incomplete; no download attempted")
-media = Path(os.environ.get("AOS_VIDEO_MEDIA_ROOT", Path.home() / ".aos/video/{{name}}"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from media_root import media_root  # same rule as tools/media-root.mjs, worktrees included
+
+
+media = media_root(root)
 public = media / "app/public"
 vo_dir = Path(os.environ["VO_DIR"]) if os.environ.get("VO_DIR") else None
 model = WhisperModel(str(model_path), device="cpu", compute_type="int8", cpu_threads=4, local_files_only=True)
@@ -43,7 +47,8 @@ for line in lines:
     entry = next(v for v in voice if v["id"] == line["id"])
     wav = vo_dir / Path(entry["file"]).name if vo_dir else public / entry["file"]
     meta[line["id"]] = hashlib.sha256(wav.read_bytes()).hexdigest()
-    segments, _ = model.transcribe(pcm16k(wav), language="en", beam_size=5, word_timestamps=True)
+    # the narration language (AOS_VO_LANG, default en): forcing English on Italian speech mistranscribes words
+    segments, _ = model.transcribe(pcm16k(wav), language=os.environ.get("AOS_VO_LANG", "en"), beam_size=5, word_timestamps=True)
     words = [[w.word.strip(), round(w.start, 2), round(w.end, 2)] for s in segments for w in s.words]
     out[line["id"]] = words
     print(line["id"], len(words), "words")

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
+import {mediaRoot} from '../media-root.mjs';
 import {fileURLToPath} from 'node:url';
 
 const hash = data => crypto.createHash('sha256').update(data).digest('hex');
@@ -17,6 +18,14 @@ const normalize = label => {
   return name;
 };
 
+const isPlaceholder = (file) => {
+  try {
+    return path.resolve(fs.realpathSync.native(file)).toLowerCase() === path.resolve(file).toLowerCase() && fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+};
+
 export function snapshot(options) {
   const entries = [];
   const seen = new Set();
@@ -29,7 +38,9 @@ export function snapshot(options) {
   function walk(dir, prefix) {
     for (const item of fs.readdirSync(dir, {withFileTypes: true})) {
       const full = path.join(dir, item.name); const name = `${prefix}/${item.name}`;
-      if (item.isSymbolicLink()) throw new Error(`Undeclared linked input: ${name}`);
+      // OneDrive keeps synced files as cloud placeholders, which Node reports as symbolic links; a placeholder resolves
+      // to itself, a real link resolves elsewhere and stays refused.
+      if (item.isSymbolicLink() && !isPlaceholder(full)) throw new Error(`Undeclared linked input: ${name}`);
       if (item.isDirectory()) walk(full, name);
       else add(name, full);
     }
@@ -77,17 +88,19 @@ export function assertRendererSource(expected, rendered, label = 'source') {
 export function projectEvidenceFiles(root) {
   const files = {};
   for (const name of ['script.md', 'sources.md', 'qa.env']) files[name] = path.join(root, name);
-  for (const name of ['claims.json', 'currency.json']) {
+  for (const name of ['claims.json', 'currency.json', 'assets.json', 'sourcing.json']) {
     if (fs.existsSync(path.join(root, name))) files[name] = path.join(root, name);
   }
+  // Rights evidence for imported material (R35) is sealed with the build like the ledger itself.
+  const rights = path.join(root, 'research/rights');
+  if (fs.existsSync(rights)) for (const name of fs.readdirSync(rights).sort()) if (name.endsWith('.json')) files[`research/rights/${name}`] = path.join(rights, name);
   return files;
 }
 
 export function projectInputs(root) {
   const home = process.env.USERPROFILE;
   if (!home || !process.env.WINDIR) throw new Error('Windows USERPROFILE/WINDIR required');
-  const name = JSON.parse(fs.readFileSync(path.join(root, 'tools/package.json'), 'utf8')).name;
-  const media = process.env.AOS_VIDEO_MEDIA_ROOT ? path.resolve(process.env.AOS_VIDEO_MEDIA_ROOT) : path.join(home, '.aos/video', name);
+  const media = mediaRoot(root);
   const modules = process.env.AOS_REMOTION_MODULES ? path.resolve(process.env.AOS_REMOTION_MODULES) : path.join(home, '.aos/scratch/video-agi-race/node_modules');
   const shared = path.dirname(modules);
   assertRendererSource(path.join(root, 'src'), path.join(media, 'app/src'));

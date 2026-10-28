@@ -132,7 +132,8 @@ test('changed voice refuses before overwriting any soundtrack stem', () => {
 
 test('every media writer honours AOS_VIDEO_MEDIA_ROOT and build gates precede audio/render', () => {
   for (const f of ['audio.mts', 'build.sh', 'frames.sh', 'make-voice.cjs', 'mix.sh', 'qa.sh', 'render.sh', 'screen.mjs', 'still.sh', 'sync-app.sh', 'verify.mjs', 'verify-hero.mjs', 'word-times.py']) {
-    assert.match(fs.readFileSync(path.join(template, 'tools', f), 'utf8'), /AOS_VIDEO_MEDIA_ROOT/, f);
+    // directly, or through the shared resolver whose own test proves the variable wins (media-root.test.mjs)
+    assert.match(fs.readFileSync(path.join(template, 'tools', f), 'utf8'), /AOS_VIDEO_MEDIA_ROOT|media-root\.(sh|mjs)|function media_?[rR]oot/, f);
   }
   const build = fs.readFileSync(path.join(template, 'tools/build.sh'), 'utf8');
   for (const gate of ['checks/claims.mjs', 'checks/screen-text.mjs', 'check-plan.mts', 'checks/joins.mts']) {

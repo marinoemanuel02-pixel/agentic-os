@@ -1,0 +1,278 @@
+{
+  "schema": 1,
+  "rows": [
+    {
+      "id": "a01",
+      "kind": "clip",
+      "need": "a robot arm sorting parts",
+      "searchStep": 3,
+      "url": "https://www.pexels.com/video/1/",
+      "page": "https://www.pexels.com/video/1/",
+      "author": "Ana",
+      "retrieved": "2026-10-07T10:00:00+02:00",
+      "basis": "license",
+      "license": "pexels",
+      "licenseUrl": "https://www.pexels.com/license/",
+      "acquisition": "api",
+      "platform": "pexels",
+      "rightsEvidence": "research/rights/a01.json",
+      "source": {
+        "in": 0,
+        "out": 8
+      },
+      "media": {
+        "sha256": "123db7a5ddce64b9fe160e4b10c0e2b48b63952590400ea5d59ab1f16d27b057",
+        "cache": "objects/123db7a5ddce64b9fe160e4b10c0e2b48b63952590400ea5d59ab1f16d27b057.bin",
+        "start": 0,
+        "duration": 8
+      },
+      "derivatives": [
+        {
+          "path": "assets/a01.mp4",
+          "sha256": "754868abf442b82dd67023580662a680597053140e72f54834214ef5c55250ca",
+          "ffmpeg": "-c:v libx264 -crf 18 -g 30 -an"
+        }
+      ],
+      "uses": [
+        {
+          "use": "u1",
+          "shot": "S01",
+          "shotFrom": 0,
+          "mediaFrom": 0,
+          "mediaTo": 8,
+          "audio": "muted"
+        }
+      ],
+      "credit": "Video by Ana on Pexels",
+      "clearance": null
+    },
+    {
+      "id": "a02",
+      "kind": "model",
+      "need": "a recognisable industrial robot at real scale",
+      "searchStep": 3,
+      "url": "https://polyhaven.com/a/robot_arm",
+      "page": "https://polyhaven.com/a/robot_arm",
+      "author": "Poly Haven",
+      "retrieved": "2026-10-07T10:00:00+02:00",
+      "basis": "cc0",
+      "license": "cc0-1.0",
+      "licenseUrl": "https://polyhaven.com/license",
+      "acquisition": "api",
+      "platform": "polyhaven",
+      "rightsEvidence": "research/rights/a02.json",
+      "source": null,
+      "media": {
+        "sha256": "27700d2ecc1323edc3f39a7ff783b97261969aeb5316e67dd0c613d64d8a44ff",
+        "cache": "objects/27700d2ecc1323edc3f39a7ff783b97261969aeb5316e67dd0c613d64d8a44ff.bin",
+        "start": 0,
+        "duration": null
+      },
+      "derivatives": [
+        {
+          "path": "assets/a02.glb",
+          "sha256": "729ad8e5ea224a2546141edc91c83fac223d4c6603c8bb6cc70388430da54518",
+          "ffmpeg": null
+        }
+      ],
+      "uses": [
+        {
+          "use": "u1",
+          "shot": "S02",
+          "shotFrom": 0,
+          "mediaFrom": 0,
+          "mediaTo": 5,
+          "audio": "muted"
+        }
+      ],
+      "credit": "Poly Haven: Robot arm",
+      "clearance": null
+    },
+    {
+      "id": "a03",
+      "kind": "clip",
+      "need": "a real launch, not an illustration",
+      "searchStep": 3,
+      "url": "https://images-assets.nasa.gov/video/x/x~orig.mp4",
+      "page": "https://images.nasa.gov/details/x",
+      "author": "NASA/KSC",
+      "retrieved": "2026-10-07T10:00:00+02:00",
+      "basis": "public-domain",
+      "license": "pd",
+      "licenseUrl": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "acquisition": "api",
+      "platform": "nasa",
+      "rightsEvidence": "research/rights/a03.json",
+      "source": {
+        "in": 0,
+        "out": 4
+      },
+      "media": {
+        "sha256": "26f53af16616f50a89b373aaa44b9292200c47fc3adf414413b17388a2d5ab6f",
+        "cache": "objects/26f53af16616f50a89b373aaa44b9292200c47fc3adf414413b17388a2d5ab6f.bin",
+        "start": 0,
+        "duration": 4
+      },
+      "subjects": [],
+      "derivatives": [
+        {
+          "path": "assets/a03.mp4",
+          "sha256": "115c1bca62e2c723cd912b41eafbd54ca0e8bed7339b46cd6ff0a484a58e36e2",
+          "ffmpeg": "-c:v libx264 -crf 18 -g 30 -an"
+        }
+      ],
+      "uses": [
+        {
+          "use": "u1",
+          "shot": "S04",
+          "shotFrom": 0,
+          "mediaFrom": 0,
+          "mediaTo": 4,
+          "audio": "muted"
+        }
+      ],
+      "credit": "NASA/KSC",
+      "clearance": null
+    },
+    {
+      "id": "a04",
+      "kind": "clip",
+      "need": "our own render of the lab",
+      "searchStep": 4,
+      "url": null,
+      "page": null,
+      "author": "this channel",
+      "retrieved": "2026-10-07T10:00:00+02:00",
+      "basis": "own",
+      "license": null,
+      "licenseUrl": null,
+      "acquisition": null,
+      "platform": null,
+      "rightsEvidence": null,
+      "source": null,
+      "media": {
+        "sha256": "96a3fb994e8cc4a1196bf09671a317eebf2b416db53e69778535c7dc1303fa27",
+        "cache": "objects/96a3fb994e8cc4a1196bf09671a317eebf2b416db53e69778535c7dc1303fa27.bin",
+        "start": 0,
+        "duration": 3
+      },
+      "derivatives": [
+        {
+          "path": "assets/a04.mp4",
+          "sha256": "06a7812bbb8a38f7cfbf906905e0246ee2134ad9cc5c0937957afb2b5753a51b",
+          "ffmpeg": "-c:v libx264 -crf 18 -g 30 -an"
+        }
+      ],
+      "uses": [
+        {
+          "use": "u1",
+          "shot": "S06",
+          "shotFrom": 0,
+          "mediaFrom": 0,
+          "mediaTo": 3,
+          "audio": "muted"
+        }
+      ],
+      "credit": "",
+      "clearance": null
+    },
+    {
+      "id": "a05",
+      "kind": "clip",
+      "need": "the demo the lab showed on launch day",
+      "searchStep": 1,
+      "url": "https://lab.example/demo.mp4",
+      "page": "https://lab.example/launch",
+      "author": "Example Lab",
+      "retrieved": "2026-10-07T10:00:00+02:00",
+      "basis": "fair-use",
+      "license": null,
+      "licenseUrl": null,
+      "acquisition": "direct-file",
+      "platform": "lab-site",
+      "rightsEvidence": "research/rights/a05.json",
+      "source": {
+        "in": 12,
+        "out": 18
+      },
+      "media": {
+        "sha256": "f821193fd61d2441f52de4045fa4f1f66522a0fb7d04396093b6759dc66ddf06",
+        "cache": "objects/f821193fd61d2441f52de4045fa4f1f66522a0fb7d04396093b6759dc66ddf06.bin",
+        "start": 0,
+        "duration": 6
+      },
+      "derivatives": [
+        {
+          "path": "assets/a05.mp4",
+          "sha256": "c76ef08def9312fd6d13506af02a37ba9ebe3edd336437701d1cb0b431826bbe",
+          "ffmpeg": "-c:v libx264 -crf 18 -g 30 -an"
+        }
+      ],
+      "uses": [
+        {
+          "use": "u1",
+          "shot": "S03",
+          "shotFrom": 0,
+          "mediaFrom": 0,
+          "mediaTo": 3,
+          "audio": "muted",
+          "rationale": "we show the moment the agent edits its own test; the narration explains why it matters"
+        },
+        {
+          "use": "u2",
+          "shot": "S03",
+          "shotFrom": 90,
+          "mediaFrom": 3,
+          "mediaTo": 5,
+          "audio": "muted",
+          "rationale": "the same demo a moment later: the test now passes, which the narration questions"
+        }
+      ],
+      "credit": "Source: Example Lab launch demo, 2026-09-09",
+      "clearance": null
+    },
+    {
+      "id": "a06",
+      "kind": "capture",
+      "need": "the real product page, not a mock-up",
+      "searchStep": 1,
+      "url": "https://product.example/",
+      "page": "https://product.example/",
+      "author": "Example Inc.",
+      "retrieved": "2026-10-07T10:00:00+02:00",
+      "basis": "capture",
+      "license": null,
+      "licenseUrl": null,
+      "acquisition": "platform-feature",
+      "platform": "web",
+      "rightsEvidence": "research/rights/a06.json",
+      "source": null,
+      "media": {
+        "sha256": "46a09291bdec299189c0ef8c80c6f3986ef466c399957f255bbb3195f5455eca",
+        "cache": "objects/46a09291bdec299189c0ef8c80c6f3986ef466c399957f255bbb3195f5455eca.bin",
+        "start": 0,
+        "duration": 2
+      },
+      "derivatives": [
+        {
+          "path": "assets/a06.mp4",
+          "sha256": "263e12839368e6aba8b89d734fbd4db44ffea295abf90d78719b7b609d7ad072",
+          "ffmpeg": "-c:v libx264 -crf 18 -g 30 -an"
+        }
+      ],
+      "uses": [
+        {
+          "use": "u1",
+          "shot": "S05",
+          "shotFrom": 0,
+          "mediaFrom": 0,
+          "mediaTo": 1,
+          "audio": "muted",
+          "rationale": "the page as visitors see it on the day; the narration reads its claim and disputes it"
+        }
+      ],
+      "credit": "Source: product.example, captured 2026-10-07",
+      "clearance": null
+    }
+  ]
+}

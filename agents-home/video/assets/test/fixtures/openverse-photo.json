@@ -1,0 +1,57 @@
+{
+ "result_count": 3,
+ "results": [
+  {
+   "id": "ov-1",
+   "title": "Server room",
+   "url": "https://live.staticflickr.com/1.jpg",
+   "foreign_landing_url": "https://www.flickr.com/photos/x/1",
+   "creator": "Gus",
+   "license": "by",
+   "license_version": "4.0",
+   "license_url": "https://creativecommons.org/licenses/by/4.0/",
+   "attribution": "\"Server room\" by Gus is licensed under CC BY 4.0.",
+   "width": 2048,
+   "height": 1365
+  },
+  {
+   "id": "ov-2",
+   "title": "Robot",
+   "url": "https://live.staticflickr.com/2.jpg",
+   "foreign_landing_url": "https://www.flickr.com/photos/x/2",
+   "creator": "Hal",
+   "license": "cc0",
+   "license_version": "1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "attribution": "\"Robot\" by Hal is marked with CC0 1.0.",
+   "width": 1600,
+   "height": 1200
+  },
+  {
+   "id": "ov-3",
+   "title": "Data centre",
+   "url": "https://live.staticflickr.com/3.jpg",
+   "foreign_landing_url": "https://www.flickr.com/photos/x/3",
+   "creator": "Ivy",
+   "license": "by-sa",
+   "license_version": "2.0",
+   "license_url": "https://creativecommons.org/licenses/by-sa/2.0/",
+   "attribution": "\"Data centre\" by Ivy is licensed under CC BY-SA 2.0.",
+   "width": 1600,
+   "height": 1200
+  },
+  {
+   "id": "ov-4",
+   "title": "Chip",
+   "url": "https://live.staticflickr.com/4.jpg",
+   "foreign_landing_url": "https://www.flickr.com/photos/x/4",
+   "creator": "Jon",
+   "license": "by-nc",
+   "license_version": "2.0",
+   "license_url": "https://creativecommons.org/licenses/by-nc/2.0/",
+   "attribution": "\"Chip\" by Jon is licensed under CC BY-NC 2.0.",
+   "width": 1600,
+   "height": 1200
+  }
+ ]
+}

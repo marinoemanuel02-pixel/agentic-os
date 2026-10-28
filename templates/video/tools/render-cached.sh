@@ -5,7 +5,7 @@
 #   tools/render-cached.sh
 set -euo pipefail
 P="$(cd "$(dirname "$0")/.." && pwd)"
-H="${AOS_VIDEO_MEDIA_ROOT:-$HOME/.aos/video/{{name}}}"
+. "$P/tools/media-root.sh"
 JOBS="${AOS_RENDER_JOBS:-2}"
 CONC=$(( 4 / JOBS > 0 ? 4 / JOBS : 1 ))
 C="$H/renders/cache"

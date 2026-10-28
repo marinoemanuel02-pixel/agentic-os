@@ -1,0 +1,52 @@
+{
+ "page": 1,
+ "per_page": 2,
+ "videos": [
+  {
+   "id": 101,
+   "url": "https://www.pexels.com/video/robot-arm-101/",
+   "duration": 12,
+   "user": {
+    "name": "Ana",
+    "url": "https://www.pexels.com/@ana"
+   },
+   "video_files": [
+    {
+     "id": 1,
+     "quality": "uhd",
+     "width": 3840,
+     "height": 2160,
+     "file_type": "video/mp4",
+     "link": "https://videos.pexels.com/101-uhd.mp4"
+    },
+    {
+     "id": 2,
+     "quality": "hd",
+     "width": 1920,
+     "height": 1080,
+     "file_type": "video/mp4",
+     "link": "https://videos.pexels.com/101-hd.mp4"
+    }
+   ]
+  },
+  {
+   "id": 102,
+   "url": "https://www.pexels.com/video/factory-102/",
+   "duration": 8,
+   "user": {
+    "name": "Ben",
+    "url": "https://www.pexels.com/@ben"
+   },
+   "video_files": [
+    {
+     "id": 3,
+     "quality": "hd",
+     "width": 1280,
+     "height": 720,
+     "file_type": "video/mp4",
+     "link": "https://videos.pexels.com/102-hd.mp4"
+    }
+   ]
+  }
+ ]
+}

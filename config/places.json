@@ -55,6 +55,16 @@
       "name": "where-you-end",
       "kind": "repo",
       "path": "{{projects}}\\videos\\where-you-end"
+    },
+    {
+      "name": "cant-escape-ai-2",
+      "kind": "repo",
+      "path": "{{projects}}\\videos\\cant-escape-ai-2"
+    },
+    {
+      "name": "pauseai-it",
+      "kind": "repo",
+      "path": "{{projects}}\\videos\\pauseai-it"
     }
   ]
 }

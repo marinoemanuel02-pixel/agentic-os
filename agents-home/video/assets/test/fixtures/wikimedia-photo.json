@@ -1,0 +1,84 @@
+{
+ "query": {
+  "pages": {
+   "1": {
+    "pageid": 13,
+    "ns": 6,
+    "title": "File:Robot_arm.jpg",
+    "imageinfo": [
+     {
+      "url": "https://upload.wikimedia.org/a/Robot_arm.jpg",
+      "descriptionurl": "https://commons.wikimedia.org/wiki/File:Robot_arm.jpg",
+      "size": 1000000,
+      "width": 1920,
+      "height": 1080,
+      "mime": "image/jpeg",
+      "extmetadata": {
+       "LicenseShortName": {
+        "value": "CC BY 4.0"
+       },
+       "Artist": {
+        "value": "<a href=\"//commons.wikimedia.org/wiki/User:Kim\">Kim</a>"
+       },
+       "LicenseUrl": {
+        "value": "https://creativecommons.org/licenses/by/4.0"
+       }
+      }
+     }
+    ]
+   },
+   "2": {
+    "pageid": 16,
+    "ns": 6,
+    "title": "File:Old_computer.jpg",
+    "imageinfo": [
+     {
+      "url": "https://upload.wikimedia.org/b/Old_computer.jpg",
+      "descriptionurl": "https://commons.wikimedia.org/wiki/File:Old_computer.jpg",
+      "size": 1000000,
+      "width": 1920,
+      "height": 1080,
+      "mime": "image/jpeg",
+      "extmetadata": {
+       "LicenseShortName": {
+        "value": "Public domain"
+       },
+       "Artist": {
+        "value": "<a href=\"//commons.wikimedia.org/wiki/User:Lee\">Lee</a>"
+       },
+       "LicenseUrl": {
+        "value": "https://creativecommons.org/licenses/by/4.0"
+       }
+      }
+     }
+    ]
+   },
+   "3": {
+    "pageid": 7,
+    "ns": 6,
+    "title": "File:Lab.jpg",
+    "imageinfo": [
+     {
+      "url": "https://upload.wikimedia.org/c/Lab.jpg",
+      "descriptionurl": "https://commons.wikimedia.org/wiki/File:Lab.jpg",
+      "size": 1000000,
+      "width": 1920,
+      "height": 1080,
+      "mime": "image/jpeg",
+      "extmetadata": {
+       "LicenseShortName": {
+        "value": "CC BY-SA 4.0"
+       },
+       "Artist": {
+        "value": "<a href=\"//commons.wikimedia.org/wiki/User:Mo\">Mo</a>"
+       },
+       "LicenseUrl": {
+        "value": "https://creativecommons.org/licenses/by/4.0"
+       }
+      }
+     }
+    ]
+   }
+  }
+ }
+}
