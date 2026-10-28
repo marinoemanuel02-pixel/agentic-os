@@ -46,7 +46,9 @@ cross-vendor work. A delegated CLI worker cannot launch another CLI delegate or 
 cross-vendor tree. Keep read-only workers read-only for project files; their assigned coordination
 commands may update their own status and messages.
 
-For a native worker, reserve its actor before launch, then use the harness's spawn/Agent tool with
+`reserve --workers 1` already creates `<coordinator-id>-native-1`. Reuse that actor for the native
+child; reserving a second id consumes another slot and is refused. Without an allowance, reserve
+one native actor under the coordinator before launch. Then use the harness's spawn/Agent tool with
 an explicit supported model from the local tier map or current account allowlist. A full-context
 fork normally inherits the parent's settings; use a fresh bounded brief when selecting a lighter
 worker. If the tool cannot override the model, report inheritance and choose another eligible route
@@ -59,15 +61,18 @@ Do not finish a coordinator while a launched child remains unconfirmed.
 
 ## Free resources first (`aos-pool` MCP tools)
 
-The local model and the free API pool are part of every run, not an option for when the user asks.
+Use the local model and free API pool for suitable bounded work without waiting for the user to ask.
 Before you or a native worker read, extract, sort, summarize, brainstorm options or check claims over
 supplied material, send that step to the `aos-pool` tools: `pool_extract`, `pool_triage`, `pool_variants`,
 `pool_crosscheck`, `pool_summarize`. Default `privacy` is `private` (local model only); pass `public`
-only for material that is already public or meant for release, which also lets the free API pool vote.
+only when the entire supplied prompt is already public or meant for release, which also lets the free API pool vote.
 A `pass` verdict means the built-in checks held, not that the result is right: spot-check before relying
 on it, then call `pool_feedback` with accepted true/false so acceptance per tool is measured. Skip the pool
 only for trivial work, repository edits, live retrieval and consequential decisions, and say why in the
-report. The tools do not replace native workers; they shrink what native workers must read.
+report. Batch related inputs and reuse verified results; do not alternate embedding and text models
+for tiny steps on a GPU that must swap them. On a route failure, report it and continue with direct
+inspection or another eligible route; do not retry unchanged calls or treat an unavailable pool as
+a blocker for work the lead can check. The tools shrink what native workers must read.
 
 ## Bounded free API candidates
 
