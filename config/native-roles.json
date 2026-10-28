@@ -17,7 +17,7 @@
       "description": "Check a bounded change against its requirements and report reproducible defects.",
       "instructions": "Inspect the assigned revision and run the authorized checks. Do not edit project files. Cite concrete locations for actionable defects and separate passing evidence from untested assumptions. Do not launch another worker.",
       "default_tier": "standard",
-      "max_turns": 16
+      "max_turns": 24
     }
   }
 }
