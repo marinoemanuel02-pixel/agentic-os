@@ -22,6 +22,16 @@ def digest(value):
     return hashlib.sha256(canonical(value).encode('utf-8')).hexdigest()
 
 
+def packet_units(packet):
+    """Quota units one attempt reserves; claim and dispatch check the same estimate."""
+    text = canonical({k: v for k, v in packet.items() if k not in ('image_base64', 'audio_base64')})
+    units = {'requests': 1, 'tokens': len(text.encode()) + packet.get('max_tokens', 1024)}
+    if packet['capability'] == 'vision': units['tokens'] += 8192
+    if packet['capability'] == 'transcribe':
+        units.update(audio_seconds=packet['audio_seconds'], tokens=packet['audio_seconds'] * 32 + 1024)
+    return units
+
+
 class State:
     def __init__(self, path):
         self.path = Path(path)
@@ -196,7 +206,7 @@ class State:
                         if (sum(x['provider'] == a['provider'] for x in leases) >= registry['provider_active']
                                 or any(x['account'] == a['id'] or x['quota_group'] == a['quota_group'] for x in leases)):
                             continue
-                        try: self._check(db, registry, a, {'requests': 1})
+                        try: self._check(db, registry, a, packet_units(packet))
                         except Unavailable: continue
                         selected = a; break
                     if selected is None: continue
@@ -242,6 +252,26 @@ class State:
                        (status, canonical(candidate) if candidate else None, digest(candidate) if candidate else None, error, name))
             db.execute('DELETE FROM leases WHERE run=?', (run,))
             db.execute('DELETE FROM holders WHERE run=?', (run,))
+
+    def requeue(self, name, run):
+        with self.db(True) as db:
+            row = db.execute('SELECT * FROM tasks WHERE id=?', (name,)).fetchone()
+            if not row or row['status'] != 'running' or row['run'] != run: raise ValueError('Run does not own task')
+            if db.execute('SELECT 1 FROM attempts WHERE run=?', (run,)).fetchone():
+                raise ValueError('A dispatched attempt cannot be requeued')
+            db.execute('UPDATE tasks SET status=?,run=NULL,inputs=NULL WHERE id=?', ('queued', name))
+            db.execute('DELETE FROM leases WHERE run=?', (run,))
+            db.execute('DELETE FROM holders WHERE run=?', (run,))
+
+    def expire_waiting(self, name, error):
+        """Fail a queued task whose inputs are ready but which no account can take now."""
+        with self.db(True) as db:
+            row = db.execute('SELECT * FROM tasks WHERE id=?', (name,)).fetchone()
+            if not row or row['status'] != 'queued' or row['cancelled']: return False
+            try: self._inputs(db, json.loads(row['packet']))
+            except Unavailable: return False
+            db.execute('UPDATE tasks SET status=?,error=? WHERE id=?', ('failed', error, name))
+            return True
 
     def reconcile(self, run, *, stopped):
         identifier(run)

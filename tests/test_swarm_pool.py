@@ -253,6 +253,38 @@ class TaskTests(unittest.TestCase):
         self.pool.drain(workers=2)
         self.assertEqual([self.state.task(n)['status'] for n in ('one', 'two')], ['candidate', 'candidate'])
 
+    def test_local_ceiling_keeps_task_queued_instead_of_failing(self):
+        r = registry(); r['accounts'][0]['limits'].append({'unit': 'tokens', 'seconds': 60, 'amount': 3000})
+        self.pool.registry = validate_registry(r)
+        self.pool.submit(packet(max_tokens=2000)); self.pool.submit(packet('two', max_tokens=2000))
+        self.pool.drain(workers=1)
+        self.assertEqual(self.state.task('one')['status'], 'candidate')
+        self.assertEqual(self.state.task('two')['status'], 'queued')
+        self.assertEqual(self.calls, [('first', 'one')])
+
+    def test_single_task_run_fails_on_full_ceiling_instead_of_leaving_an_orphan(self):
+        r = registry(); r['accounts'][0]['limits'].append({'unit': 'tokens', 'seconds': 60, 'amount': 3000})
+        self.pool.registry = validate_registry(r)
+        self.pool.submit(packet(max_tokens=2000)); self.pool.drain(only='one')
+        self.pool.submit(packet('two', max_tokens=2000)); self.pool.drain(only='two')
+        row = self.state.task('two')
+        self.assertEqual((row['status'], row['error']), ('failed', 'no_capacity'))
+        with patch.object(self.state, 'reserve', side_effect=Unavailable('Local quota ceiling reached')):
+            self.pool.submit(packet('three')); self.pool.drain(only='three')
+        self.assertEqual(self.state.task('three')['status'], 'failed')
+        self.assertEqual(self.calls, [('first', 'one')])
+
+    def test_capacity_refusal_after_claim_requeues_without_an_attempt(self):
+        self.pool.submit(packet())
+        claim = self.state.claim(registry=self.pool.registry)
+        with patch.object(self.state, 'reserve', side_effect=Unavailable('Local quota ceiling reached')):
+            self.pool.run_claimed(*claim)
+        row = self.state.task('one')
+        self.assertEqual((row['status'], row['run']), ('queued', None))
+        self.assertEqual(self.calls, [])
+        self.pool.drain()
+        self.assertEqual(self.state.task('one')['status'], 'candidate')
+
     def test_dependency_requires_host_verification_and_detects_drift(self):
         self.pool.submit(packet()); self.pool.submit(packet('two', depends_on=['one']))
         self.pool.drain()
