@@ -124,6 +124,8 @@ class Pool:
         units = packet_units(packet)
         accounts = self.state.eligible(self.registry, packet['capability'])
         accounts.sort(key=lambda a: a['id'] != first_account)
+        # Claim chose an account with a route, so none eligible now means another worker took the slot.
+        if first_account and not accounts: errors.append('no_capacity')
         for a in accounts:
             if packet.get('account') and packet['account'] != a['id']: continue
             if count >= packet.get('max_attempts', 2) or self._cancelled(packet): break

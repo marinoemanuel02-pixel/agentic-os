@@ -281,6 +281,13 @@ class TaskTests(unittest.TestCase):
         self.assertFalse(worker.is_alive())
         self.assertEqual(self.state.task('one')['status'], 'queued')
 
+    def test_slot_taken_between_claim_and_dispatch_keeps_batch_task_queued(self):
+        self.pool.submit(packet())
+        with patch.object(self.state, 'eligible', return_value=[]):
+            self.pool.drain()
+        self.assertEqual(self.state.task('one')['status'], 'queued')
+        self.assertEqual(self.calls, [])
+
     def test_capacity_refusal_after_claim_requeues_without_an_attempt(self):
         self.pool.submit(packet())
         claim = self.state.claim(registry=self.pool.registry)
