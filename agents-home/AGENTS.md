@@ -63,7 +63,8 @@ The lead agent owns the result and decides when another worker is useful. Keep s
 work inline; split only when parallel work, a tool advantage, independent reasoning or capacity can
 repay startup and integration cost. Choose a light, standard or deep task tier, and let each
 vendor's available tools and subscription limits shape the route. No model tier promises savings.
-Keep at most 2 active actors per vendor, including coordinators and native workers.
+In managed runs keep at most 2 registered actors per vendor, coordinators and native workers included;
+in-session subagents: at most 3 at once, model named on every spawn, one writer per checkout (`coordination`).
 Imported process skills do not by themselves require an extra reviewer, approval pause or highest
 tier. Follow the user's authorization, project requirements and the risk rules below.
 
@@ -106,4 +107,4 @@ then continue on the other vendor from that file.
   lists every skill, MCP server, CLI, media app and agent here, and which one to try first.
 - Prefer CLIs (`gh`, `rg`, `git`) over MCP servers when both work: tool schemas are loaded on
   every request. A new capability tool may be added on first need; a convenience one waits for the need to repeat.
-- Use subagents for broad searches so the main context stays small.
+- Use subagents for broad searches so the main context stays small: `aos-explore`, `aos-implement` and `aos-verify` over `general-purpose`.

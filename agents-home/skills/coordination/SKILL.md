@@ -34,8 +34,9 @@ supported model option; do not assume the CLI map configures a native child auto
 
 Dispatch the other vendor with `aos delegate codex|claude --task <file>`, adding `--tier light|standard|deep`,
 `--effort <supported-value>`, `--parent <actor-id>` and `--workers 0|1` when needed. `--workers` reserves
-the coordinator's one native-child allowance; it is not a recursive CLI delegation allowance. Each
-vendor has at most two active actors, including its lead/coordinator and native workers. A busy
+the coordinator's one native-child allowance; it is not a recursive CLI delegation allowance. In a
+managed run each vendor has at most two active registered actors, including its lead/coordinator and
+native workers. A busy
 reservation means wait for a state change, choose another eligible route, or continue inline; do not
 retry immediately.
 
@@ -59,13 +60,55 @@ after the harness confirms termination, `finish --evidence <completion-ref>` fre
 The coordinator must relay these observations to the host when its own metadata route is read-only.
 Do not finish a coordinator while a launched child remains unconfirmed.
 
+## In-session subagents (Claude Agent tool, Codex spawn)
+
+Most parallel work is the lead's own subagents, not cross-vendor runs. Claude transcripts from
+2026-10-15 to 10-29 show 12 of 120 sessions using them, 32 of 40 calls as `general-purpose`, and
+18 inheriting the lead's model. Route each child by its job:
+
+| Job | Child | Rule |
+|---|---|---|
+| Locate files, paths, evidence | `aos-explore` or the built-in `Explore` | read-only; up to three in parallel on disjoint questions |
+| Scoped edit with an acceptance check | `aos-implement` | one writer per checkout; a parallel writer needs its own worktree |
+| Review a diff, test a claim | `aos-verify` | hand it the diff or review package as a file; same vendor, so never a second opinion |
+| Design judgment, hard diagnosis | `general-purpose`, deep model named | rare; say why in the brief |
+
+- Name the model on every spawn (from `~/.aos/routing.json`); an omitted one inherits the lead's.
+- The child starts cold: the brief names the goal, files or area, what done looks like and the size
+  of the answer to return. Spawn for real breadth or isolation, not for a few tool calls.
+- Run children you don't need for the next step in the background and wait for the notification.
+- One job per child. Claude stops a child at its turn budget and a cut-off child returns nothing:
+  continue it with SendMessage rather than spawning a fresh one.
+- These children share the lead's subscription window and are not registered actors. The two-actor
+  cap below counts registered actors in managed runs (leads, `aos delegate` workers, a coordinator's
+  native allowance). In-session: at most three children at once, and one writer per checkout.
+
+With superpowers, map its dispatches onto these roles instead of `general-purpose`:
+`subagent-driven-development` implementer to `aos-implement`, task reviewer and re-review to
+`aos-verify`, fix rounds 4-5 one tier up; its final review is `aos-verify`, or `codex exec --profile
+review` when the change is consequential (that one is independent). `dispatching-parallel-agents`
+investigations go to `aos-explore`; parallel fixes need separate worktrees. `requesting-code-review`
+uses `aos-verify` and reuses a review of the same revision. Plans under about an hour, or whose tasks
+share files, run inline with `executing-plans`.
+
 ## Free resources first (`aos-pool` MCP tools)
 
 Use the local model and free API pool for suitable bounded work without waiting for the user to ask.
-Before you or a native worker read, extract, sort, summarize, brainstorm options or check claims over
-supplied material, send that step to the `aos-pool` tools: `pool_extract`, `pool_triage`, `pool_variants`,
-`pool_crosscheck`, `pool_summarize`. Default `privacy` is `private` (local model only); pass `public`
-only when the entire supplied prompt is already public or meant for release, which also lets the free API pool vote.
+Since the tools shipped (2026-10-26) to 10-29 they were called four times, all in one Codex audit and
+none from Claude: the rule only works with concrete triggers. In Claude they are deferred: load them
+with `ToolSearch` `select:mcp__aos-pool__pool_extract,mcp__aos-pool__pool_triage,mcp__aos-pool__pool_crosscheck,mcp__aos-pool__pool_summarize,mcp__aos-pool__pool_variants,mcp__aos-pool__pool_feedback`.
+
+| Trigger | Tool |
+|---|---|
+| Specific fields from supplied text over a few KB (logs, transcripts, exports, docs; under 40,000 characters per call) | `pool_extract` |
+| Ten or more short items to label | `pool_triage` (or `nar classify --backend embed` for up to 50) |
+| Claims to check against supplied sources | `pool_crosscheck` |
+| A long supplied text you need only the gist of | `pool_summarize` |
+| Options or wording drafts from a brief | `pool_variants` |
+
+Calls take seconds warm and about a minute when the GPU swaps models. Default `privacy` is `private`
+(local model only); pass `public` only when the entire supplied prompt is already public or meant for
+release, which also lets the free API pool vote.
 A `pass` verdict means the built-in checks held, not that the result is right: spot-check before relying
 on it, then call `pool_feedback` with accepted true/false so acceptance per tool is measured. Skip the pool
 only for trivial work, repository edits, live retrieval and consequential decisions, and say why in the
@@ -88,6 +131,9 @@ vendor or reserve an API account as a Claude/Codex actor. An account key is not 
 bucket unless the provider/account/project allocation establishes independence. The OmniRoute
 alias shares its upstream account's allowance. Never assume a free route from authentication.
 
+Write the verifier before you submit a batch: of 279 pool tasks up to 10-29, 86 candidates were
+never verified and only 12 accepted, so a batch without a check is spent quota. In a batch, tasks
+over a local ceiling stay queued; run `drain` again later rather than resubmitting.
 Candidates stay unaccepted until a lead-authored verifier runs. Dependent pool tasks require
 host acceptance and current hashes. For existing registered task contracts, use `swarm contract
 <id> --repo <checkout> --cloud-allowed --owner-session <claim-session>`: the host verifier reads
