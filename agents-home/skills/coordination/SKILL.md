@@ -114,6 +114,10 @@ reserves actors. `aos coord observe <id>` records a state; `aos coord finish <id
 return JSON. Use `aos coord status <id>` to read run state and `aos coord cancel <id>` to request
 cancellation; a request does not establish that a process has stopped.
 
+Before the final response, finish your confirmed children, then your lead. Preserve unresolved
+actor identities in the handoff; do not leave completed reservations consuming slots or release
+another session's actor based only on its age.
+
 Address messages within the same task tree. `aos coord send <from-id> --to <recipient-id> --text <text>`
 sends one message; add `--reply-to <message-id>` for a reply between the same actors. `aos coord inbox
 <id>` reads addressed messages, `aos coord ack <id> --ack <message-id>` acknowledges one explicitly,

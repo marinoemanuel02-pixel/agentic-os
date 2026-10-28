@@ -61,3 +61,8 @@ and unknown usage remain explicit. Existing unrelated `HANDOFF-media.md` is unto
   its incomplete output is not passing evidence. The final suite uses a native subprocess log.
 - Git worktree prune was previewed only. Missing paths and permission errors do not authorize
   deleting recovery metadata or releasing unidentified actors.
+- Completed: final `aos test` exited 0 with 608 passing tests in each PowerShell shell; pool
+  tests 31/31, focused capacity 9/9 and delegate 25/25 per shell, bootstrap dry run and diff
+  checks passed. Live triage classified both synthetic items correctly with accepted feedback.
+- The clean quota-blocked worktree was removed through normal delegate cleanup; its failed
+  receipt is retained. Cross-vendor review remains unavailable; no vendor configuration sync.

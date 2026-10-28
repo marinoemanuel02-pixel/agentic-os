@@ -21,8 +21,9 @@ every installed optional tool was revalidated.
 | A string could become character-by-character variants; empty summaries passed | Enforce candidate list shape and require nonempty summaries |
 | String feedback became truthy and unknown ids were accepted | Require a boolean and an existing result id |
 
-The coordination skill also explains batching, result reuse and continuing with direct inspection
-after a failed pool route. The conjoined-task runbook limits mandatory cross-vendor test authorship
+The coordination skill also explains batching, result reuse, continuing with direct inspection
+after a failed pool route, and closing confirmed children/lead before the final response. The
+conjoined-task runbook limits mandatory cross-vendor test authorship
 to risky fixes, matching the global contract. The stale AppData reference-cache comment was corrected.
 
 ## Live observations
@@ -53,18 +54,23 @@ A separate Codex native explorer reproduced the lifecycle defects. A subsequent 
 checked the repairs and found the oversized tie-break; the lead reproduced and fixed it. This is
 same-vendor scrutiny, not a second opinion. The later quota/optional-grant changes use host checks.
 
-Verified so far:
+Verified on the repaired source:
 
+- `aos test`: exit 0; 608 passed under Windows PowerShell 5.1 and 608 passed under PowerShell 7,
+  with zero failures, skips, inconclusive or unrun tests. Parse/ASCII checks passed too. This
+  includes the existing swarm, stack, media and coordination suites with their isolated fixtures.
 - `python -m unittest discover -s tests -p 'test_pool*.py' -v`: 31 passed.
 - `tests/Run-Focused.ps1 -Filter '*coordination identity regressions*'`: five passed per shell
   in the native review, after the lead observed three failing cases on the original code.
 - `tests/Run-Focused.ps1 -Filter '*Vendor capacity*'`: nine passed per shell after quota repairs.
+- `tests/Run-Focused.ps1 -Filter '*aos delegate*'`: 25 passed per shell after the optional-grant repair.
 - `powershell -ExecutionPolicy Bypass -File ./bootstrap.ps1 -DryRun`: exit 0.
 - `git diff --check`: passed.
 
-Full-suite results will be recorded after the final run completes. Earlier full runs exposed the
-optional-grant regression and were not clean. A superseded initial process was cancelled; its
-incomplete output is not counted. The pool protocol fixture emits an existing socket ResourceWarning.
+Earlier full runs exposed the optional-grant regression and were not clean. Superseded initial
+and diagnostic processes were cancelled; their incomplete output is not counted. The pool protocol
+fixture emits an existing socket ResourceWarning. Raw final output is in the home-relative
+`.aos/research/orchestration-audit-20261028/verified-suite.log`.
 
 ## Retained limits
 
@@ -73,5 +79,7 @@ incomplete output is not counted. The pool protocol fixture emits an existing so
   Age alone does not establish safe release, so it remains reserved.
 - Worktree prune dry run found stale registrations; Git also reported two permission errors
   during automatic metadata maintenance. No forced deletion or branch cleanup was performed.
+- The quota-blocked Claude worktree was confirmed clean and removed with ordinary
+  `aos delegate clean`; its failure receipt remains preserved.
 - Existing unrelated `HANDOFF-media.md` remains untouched. The ignored root handoff will point
   to this audit and retain a backup of its superseded content outside the repository.
