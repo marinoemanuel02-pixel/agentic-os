@@ -274,6 +274,13 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(self.state.task('three')['status'], 'failed')
         self.assertEqual(self.calls, [('first', 'one')])
 
+    def test_drain_stops_when_dispatch_keeps_refusing_a_claimed_task(self):
+        self.pool.submit(packet())
+        with patch.object(self.state, 'reserve', side_effect=Unavailable('Local quota ceiling reached')):
+            worker = threading.Thread(target=self.pool.drain, daemon=True); worker.start(); worker.join(5)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(self.state.task('one')['status'], 'queued')
+
     def test_capacity_refusal_after_claim_requeues_without_an_attempt(self):
         self.pool.submit(packet())
         claim = self.state.claim(registry=self.pool.registry)

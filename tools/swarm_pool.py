@@ -155,7 +155,7 @@ class Pool:
                 errors.append('local_failure')
         # Nothing was sent: in a batch a full local ceiling means wait in the queue, not fail.
         if wait and count == 0 and errors and set(errors) == {'no_capacity'} and not self.state.cancelled(packet['id']):
-            self.state.requeue(packet['id'], run); return
+            self.state.requeue(packet['id'], run); return 'requeued'
         self.state.complete(packet['id'], run, error=','.join(errors) or 'no_admitted_route')
 
     def drain(self, *, only=None, workers=None):
@@ -168,8 +168,8 @@ class Pool:
                     # A single-task caller needs an answer now; a queued leftover would run in someone else's drain.
                     if only: self.state.expire_waiting(only, 'no_capacity')
                     return
-                self.run_claimed(*claim, wait=not only)
-                if only: return
+                # Claim can pass while dispatch refuses (credential ceilings); stop rather than spin on it.
+                if self.run_claimed(*claim, wait=not only) == 'requeued' or only: return
         with ThreadPoolExecutor(max_workers=n) as executor:
             list(executor.map(lambda _: work(), range(n)))
 

@@ -3,6 +3,30 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-29 - Route in-session subagents by role; the swarm queues instead of failing
+
+- **Evidence.** Claude transcripts 2026-10-15..29: 12 of 120 sessions used subagents; 32 of 40 calls were
+  `general-purpose` and 18 inherited the lead's model; the managed roles ran six times. `aos-pool` was
+  called four times since it shipped, all from one Codex audit. The free API pool held 279 tasks: 12
+  accepted, 86 candidates never verified, 178 failed, 169 of them `no_capacity` from one burst.
+- **Subagents.** The coordination skill maps jobs and superpowers dispatches onto `aos-explore`,
+  `aos-implement` and `aos-verify`, with the model named on every spawn. The two-actor cap is scoped to
+  registered actors in managed runs, which is how it was enforced in practice; in-session children
+  share the lead's window, so the rule there is at most three at once and one writer per checkout.
+  `aos-verify` gets 24 turns (16 cut reviews off with no report) and Claude role files state the budget
+  and ask for the report by two thirds of it.
+- **Pool.** Concrete triggers and the `ToolSearch` load line replace "suitable bounded work": in Claude
+  the tools are deferred, so a general rule never surfaced them.
+- **Swarm.** Claim checked one request while dispatch reserved the full token estimate, so a batch over
+  a per-minute ceiling failed permanently. Both now use one estimate; a batch task refused before any
+  attempt returns to the queue, and a single-task run fails at once with `no_capacity` so it cannot
+  linger as an orphan (three earlier `idro-*` vision tasks are such orphans and stay queued for the operator).
+- **Rejected.** Raising the two-actor cap for managed runs (no evidence it binds), a hook that rewrites
+  `general-purpose` spawns (silent model swaps were rejected on 2026-10-26), and a fixed in-session
+  limit enforced by code (the harness owns spawning; the rule stays cooperative).
+- **Also.** Merged `main` into this line (pool layer and audit were 43 commits behind). Pruned 27 worktree
+  registrations whose folders were gone; their empty metadata folders could not be deleted here.
+
 ## 2026-10-28 - Repair coordination evidence and validate pool failure paths
 
 - **Scope.** Audit the previous coordination chat, current run receipts and source. Preserve the
