@@ -2049,8 +2049,15 @@ function aos {
         [Parameter(Position = 1, ValueFromRemainingArguments = $true)][string[]]$Rest,
         [switch]$DryRun
     )
+    # Accept the GNU spelling of the switch: unrecognized, it once ran a real sync as a stray positional.
+    if ($Rest -contains '--dry-run') { $DryRun = [switch]$true; $Rest = @($Rest | Where-Object { $_ -ne '--dry-run' }) }
     $a1 = $null; $a2 = $null
     if ($Rest) { $a1 = $Rest[0]; if ($Rest.Count -gt 1) { $a2 = $Rest[1] } }
+    if ($Command -in @('sync', 'update') -and @($Rest | Where-Object { $_ }).Count -gt 0) {
+        Write-AosWarn ('unexpected argument: ' + @($Rest | Where-Object { $_ })[0] + ' (use -DryRun or --dry-run to preview)')
+        $global:LASTEXITCODE = 1
+        return
+    }
     switch ($Command) {
         'status'  { Get-AosStatus }
         'install' { $l = @($Rest | Where-Object { $_ }); if ($l.Count -eq 0) { $l = @('all') }; Install-AosLayer -Layer $l -DryRun:$DryRun }
