@@ -1,5 +1,7 @@
 # Places: every repo and knowledge base known to every agent, and an inbox for the phone
 
+> Superseded in part 2026-10-01: tala and duda15 were removed (not the user's) and meta-cognizione moved to legacy; the only vault is `Desktopault`, Paseo left 2026-10-15. The live list is `config/places.json`. Kept as history.
+
 Date: 2026-09-29. Status: design approved in conversation; this spec awaits the user's review.
 
 ## Where this fits
