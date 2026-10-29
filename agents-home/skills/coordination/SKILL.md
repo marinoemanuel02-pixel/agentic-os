@@ -79,14 +79,17 @@ Most parallel work is the lead's own subagents, not cross-vendor runs. Claude tr
 - Run children you don't need for the next step in the background and wait for the notification.
 - One job per child. Claude stops a child at its turn budget and a cut-off child returns nothing:
   continue it with SendMessage rather than spawning a fresh one.
-- These children share the lead's subscription window and are not registered actors. The two-actor
-  cap below counts registered actors in managed runs (leads, `aos delegate` workers, a coordinator's
-  native allowance). In-session: at most three children at once, and one writer per checkout.
+- Outside a managed run these children share the lead's subscription window and are not registered
+  actors: at most three at once, and one writer per checkout. Inside a managed run (an `aos delegate`
+  worker, or a coordinator holding a reserved allowance) children stay within the reserved native
+  allowance (`<id>-native-1`, one child): the signal import matches only that reservation, and an
+  extra child is flagged for inspection. The two-actor cap below counts registered actors in managed runs.
 
 With superpowers, map its dispatches onto these roles instead of `general-purpose`:
 `subagent-driven-development` implementer to `aos-implement`, task reviewer and re-review to
-`aos-verify`, fix rounds 4-5 one tier up; its final review is `aos-verify`, or `codex exec --profile
-review` when the change is consequential (that one is independent). `dispatching-parallel-agents`
+`aos-verify`, fix rounds 4-5 one tier up; its final review is `aos-verify`, or the other vendor when the
+change is consequential (`codex exec --profile review` from a Claude lead, `$cc:review` from a Codex
+lead); only that one is independent. `dispatching-parallel-agents`
 investigations go to `aos-explore`; parallel fixes need separate worktrees. `requesting-code-review`
 uses `aos-verify` and reuses a review of the same revision. Plans under about an hour, or whose tasks
 share files, run inline with `executing-plans`.

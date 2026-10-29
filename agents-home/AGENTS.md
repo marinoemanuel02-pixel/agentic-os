@@ -64,7 +64,7 @@ work inline; split only when parallel work, a tool advantage, independent reason
 repay startup and integration cost. Choose a light, standard or deep task tier, and let each
 vendor's available tools and subscription limits shape the route. No model tier promises savings.
 In managed runs keep at most 2 registered actors per vendor, coordinators and native workers included;
-in-session subagents: at most 3 at once, model named on every spawn, one writer per checkout (`coordination`).
+outside them, in-session subagents: at most 3 at once, model named on every spawn, one writer per checkout (`coordination`).
 Imported process skills do not by themselves require an extra reviewer, approval pause or highest
 tier. Follow the user's authorization, project requirements and the risk rules below.
 
