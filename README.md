@@ -71,7 +71,7 @@ settings are merged, never replaced, and backups go to `~/.aos-backups/`.
 | Work from your phone | see [From your phone](#from-your-phone) |
 | Use the local model | agents use the `aos-pool` tools by default for extraction, sorting, options, claim checks and summaries (local first, free API pool for public material; see [docs/pool.md](docs/pool.md)) and the `nar` tools when a choice benefits; `aos nar choose "..." --option A --option B` by hand; `ollama run <tag>` to chat |
 | Try a newer local model | `ollama pull <tag>`, `aos nar eval --models <tag>`, then `aos local adopt <tag>` (only if no worse) |
-| Check the setup's own code | `aos test` (parse, ASCII, Pester under PowerShell 5.1 and 7; CI runs it on every push) |
+| Check the setup's own code | `aos test` (parse, ASCII, Pester under PowerShell 5.1 and 7, Python/Node suites once under 7; CI runs it on every push) |
 
 Which agent to use for what, and how to stretch two entry plans: [docs/routing.md](docs/routing.md).
 

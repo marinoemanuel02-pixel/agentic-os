@@ -1145,7 +1145,7 @@ Describe 'Voice tool sherpa path' {
 }
 
 Describe 'Video input provenance' {
-    It 'runs reviewed export evidence guards (<Check>) in TestDrive fixtures' -ForEach @(
+    It 'runs reviewed export evidence guards (<Check>) in TestDrive fixtures' -Tag 'Language' -ForEach @(
         @{ Check = 'fact coverage and entry-point refusal'; File = 'currency-hardening.test.mjs' },
         @{ Check = 'actual export day'; File = 'currency-export-day.test.mjs' },
         @{ Check = 'dated evidence identity'; File = 'input-manifest-evidence.test.mjs' },
@@ -1162,7 +1162,7 @@ Describe 'Video input provenance' {
         }
     }
 
-    It 'runs reusable video <Check> regressions in isolated fixtures' -ForEach @(
+    It 'runs reusable video <Check> regressions in isolated fixtures' -Tag 'Language' -ForEach @(
         @{ Check = 'joins'; File = 'joins.test.mts' },
         @{ Check = 'screen text'; File = 'screen-text.test.mjs' },
         @{ Check = 'pipeline'; File = 'pipeline.test.mjs' },
@@ -1180,7 +1180,7 @@ Describe 'Video input provenance' {
         }
     }
 
-    It 'pipeline regressions pass inside a film checkout (its own plan, lines, shots and poses do not leak into fixtures)' {
+    It 'pipeline regressions pass inside a film checkout (its own plan, lines, shots and poses do not leak into fixtures)' -Tag 'Language' {
         $film = Join-Path $TestDrive 'film copy'
         Copy-Item -Recurse (Join-Path $PSScriptRoot '..\templates\video') $film
         $pose = 'export const poses = {start: {pos: [0, 2, 8], target: [0, 1, 0], fov: 32}, end: {pos: [0, 2, 8], target: [0, 1, 0], fov: 32}};'
@@ -1218,7 +1218,7 @@ Describe 'Video input provenance' {
         foreach ($relative in $filmFiles) { Test-Path -LiteralPath (Join-Path $snapshot $relative) | Should -BeTrue -Because "$relative must be in the fixture snapshot" }
     }
 
-    It 'runs the currency gate and export-day reverify tests (no network: a local fixture server)' -ForEach @(
+    It 'runs the currency gate and export-day reverify tests (no network: a local fixture server)' -Tag 'Language' -ForEach @(
         @{ Name = 'currency'; File = 'checks\currency.test.mjs' },
         @{ Name = 'reverify'; File = 'reverify.test.mjs' }
     ) {
@@ -1227,7 +1227,7 @@ Describe 'Video input provenance' {
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
 
-    It 'runs the pacing report and render cache tests when ffmpeg is installed (<Name>)' -ForEach @(
+    It 'runs the pacing report and render cache tests when ffmpeg is installed (<Name>)' -Tag 'Language' -ForEach @(
         @{ Name = 'pacing'; File = 'checks\pacing.test.mjs' },
         @{ Name = 'render cache'; File = 'cache\cache.test.mjs' }
     ) {
@@ -1237,22 +1237,22 @@ Describe 'Video input provenance' {
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
 
-    It 'resolves the media root from the film folder (worktrees too) and refuses the template (node --test)' {
+    It 'resolves the media root from the film folder (worktrees too) and refuses the template (node --test)' -Tag 'Language' {
         $result = & node --no-warnings --test (Join-Path $PSScriptRoot '..\templates\video\tools\checks\media-root.test.mjs') 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
 
-    It 'keeps the stage documents asking for imported material and the reference-pack skill present (node --test)' {
+    It 'keeps the stage documents asking for imported material and the reference-pack skill present (node --test)' -Tag 'Language' {
         $result = & node --no-warnings --test (Join-Path $PSScriptRoot '..\templates\video\tools\checks\template-text.test.mjs') 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
 
-    It 'refuses imported material without rights, credits, evidence or within fair-use limits (asset gate, node --test)' {
+    It 'refuses imported material without rights, credits, evidence or within fair-use limits (asset gate, node --test)' -Tag 'Language' {
         $result = & node --no-warnings --test (Join-Path $PSScriptRoot '..\templates\video\tools\checks\assets.test.mjs') 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
 
-    It 'rejects changed render inputs and mismatched exports in an isolated fixture' {
+    It 'rejects changed render inputs and mismatched exports in an isolated fixture' -Tag 'Language' {
         $testFile = Join-Path $PSScriptRoot '..\templates\video\tools\checks\input-manifest.test.mjs'
         $savedScratch = $env:AOS_MANIFEST_TEST_ROOT
         try {
@@ -1303,7 +1303,7 @@ Describe 'aos asset' {
         $shown | Should -Match 'a warning'
         $global:LASTEXITCODE | Should -Be 3
     }
-    It 'runs the shared asset tool tests (node --test: core, capture, adapters, registry)' {
+    It 'runs the shared asset tool tests (node --test: core, capture, adapters, registry)' -Tag 'Language' {
         $tests = Join-Path $PSScriptRoot '..\agents-home\video\assets\test\*.test.mjs'
         $result = & node --no-warnings --test $tests 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $result
@@ -2444,7 +2444,7 @@ Describe 'MCP placeholders and nar registration' {
         }
     }
 
-    It 'runs the free-resource pool checks and MCP protocol without a real model or network' {
+    It 'runs the free-resource pool checks and MCP protocol without a real model or network' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_pool*.py' -v
         $LASTEXITCODE | Should -Be 0
     }
@@ -2842,7 +2842,7 @@ Describe 'Pi on the local model' {
         Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'models.json' }
     }
 
-    It 'the permission gate blocks on Deny, on a dismissed dialog and without a UI (node --test)' {
+    It 'the permission gate blocks on Deny, on a dismissed dialog and without a UI (node --test)' -Tag 'Language' {
         # Enforcement, not just installation: Pi runs a tool only when every tool_call handler allows it.
         $ErrorActionPreference = 'Continue'
         $test = Join-Path $PSScriptRoot '..\config\pi\extensions\aos-permission-gate.test.ts'
@@ -2850,7 +2850,7 @@ Describe 'Pi on the local model' {
         $LASTEXITCODE | Should -Be 0 -Because (($out | Out-String).Trim())
     }
 
-    It 'the web search extension returns sources using a controlled fixture (node --test)' {
+    It 'the web search extension returns sources using a controlled fixture (node --test)' -Tag 'Language' {
         $ErrorActionPreference = 'Continue'
         $test = Join-Path $PSScriptRoot '..\config\pi\extensions\aos-web-search.test.ts'
         $out = & node --no-warnings --experimental-strip-types --test $test 2>&1
@@ -3711,7 +3711,7 @@ Describe 'Presence hooks sync' {
         Test-Path -LiteralPath $script | Should -BeTrue
         (@((Get-Content $target -Raw | ConvertFrom-Json).hooks.PostToolUse)[0].hooks[0].command) | Should -BeExactly ('node "' + $script + '" codex')
     }
-    It 'runs the notes hook tests (node --test, temp AOS_COORD)' {
+    It 'runs the notes hook tests (node --test, temp AOS_COORD)' -Tag 'Language' {
         $result = & node --no-warnings --test (Join-Path $PSScriptRoot '..\config\hooks\aos-notes.test.mjs') 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
@@ -5714,50 +5714,52 @@ Describe 'selected stack additions' {
         $null=aos coord continuation check quota-handoff --repo $continuationRepo --from codex --to claude 6>&1
         $LASTEXITCODE | Should -Be 1
     }
-    It 'runs the read-only status summary regression controls' {
+    It 'runs the read-only status summary regression controls' -Tag 'Language' {
         $script=Join-Path $PSScriptRoot '..\plugins\aos-status\tests\summary.test.mjs'
         & node --test $script
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs the offline footage workflow controls in disposable folders' {
+    It 'runs the offline footage workflow controls in disposable folders' -Tag 'Language' {
         & python -m unittest discover -s (Join-Path $PSScriptRoot '..\tools\footage') -p 'test_*.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs the optional tool launcher controls without installed services' {
+    It 'runs the optional tool launcher controls without installed services' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_stack_launcher.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs capability registry discovery and promotion controls without network or installed candidates' {
+    It 'runs capability registry discovery and promotion controls without network or installed candidates' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_capability_watch.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs pinned capability setup controls without real downloads or installs' {
+    It 'runs pinned capability setup controls without real downloads or installs' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_capability_setup.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs optional stack repair controls without credentials or installed services' {
+    It 'runs optional stack repair controls without credentials or installed services' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_stack_repairs.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs repeatable optional stack verification controls in disposable folders' {
+    It 'runs repeatable optional stack verification controls in disposable folders' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_stack_verify.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs additional-worker policy and lifecycle controls without credentials or services' {
+    It 'runs additional-worker policy and lifecycle controls without credentials or services' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_omniroute_integration.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs the cached speech launcher controls without installed runtimes' {
+    It 'runs the cached speech launcher controls without installed runtimes' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_voicestudio_launcher.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs API swarm admission and capability controls without credentials or network' {
+    It 'runs API swarm admission and capability controls without credentials or network' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_swarm_pool.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs API host contract acceptance and cancellation in disposable repositories' {
+    It 'runs API host contract acceptance and cancellation in disposable repositories' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_swarm_contract.py' -v
         $LASTEXITCODE | Should -Be 0
+    }
+    It 'keeps the swarm contract helper parseable and ASCII in this shell' {
         $helper = Join-Path $PSScriptRoot '..\tools\swarm_contract.ps1'
         $tokens = $null; $errors = $null
         [void][System.Management.Automation.Language.Parser]::ParseFile($helper,[ref]$tokens,[ref]$errors)

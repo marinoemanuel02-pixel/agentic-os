@@ -1604,7 +1604,11 @@ function Invoke-AosTest {
     foreach ($shell in @('powershell', 'pwsh')) {
         Write-AosStep "Pester suite under $shell"
         if (-not (Test-AosCommand $shell)) { Write-AosWarn "$shell not found"; $failed = $true; continue }
-        & $shell -NoProfile -ExecutionPolicy Bypass -File $runner | Out-Host
+        # Python and Node suites pick their own shell, so they run once, under PowerShell 7.
+        $savedExclude = $env:AOS_TEST_EXCLUDE_TAG
+        if ($shell -eq 'powershell') { $env:AOS_TEST_EXCLUDE_TAG = (@($savedExclude, 'Language') | Where-Object { $_ }) -join ',' }
+        try { & $shell -NoProfile -ExecutionPolicy Bypass -File $runner | Out-Host }
+        finally { $env:AOS_TEST_EXCLUDE_TAG = $savedExclude }
         if ($LASTEXITCODE -ne 0) { $failed = $true; Write-AosWarn "${shell}: suite failed (exit $LASTEXITCODE)" }
         else { Write-AosOk "${shell}: all tests passed" }
     }
@@ -2014,7 +2018,7 @@ aos - agentic-os control
   aos sync                   re-apply shared AGENTS.md, skills links, settings, Codex block, MCP
   aos update                 upgrade everything (winget, Claude Code, plugins, npm tools, refs), then sync
   aos usage                  local usage history for Claude Code and Codex
-  aos test                   parse/ASCII checks + the Pester suite under PowerShell 5.1 and 7
+  aos test                   parse/ASCII checks + the Pester suite under PowerShell 5.1 and 7 (Python/Node suites once)
   aos new <name>             new project in Desktop\1-Projects: AGENTS.md, CLAUDE.md (@AGENTS.md), .gitignore, git init
   aos video new <name>       new video project in Desktop\1-Projects\videos (video template + render app in ~\.aos\video)
   aos video verdict <name> <words>         record the user's verdict on a video, verbatim (coordination ledger)

@@ -3,6 +3,17 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-29 - aos test runs Python and Node suites once, under PowerShell 7
+
+- 35 Pester tests only launch `python -m unittest` or `node --test`; those suites pick their own shell
+  (test_swarm_contract runs pwsh, or 5.1 when it patches the lookup), so a second run proves nothing new.
+  They carry `-Tag 'Language'`; `aos test` sets `AOS_TEST_EXCLUDE_TAG=Language` for the 5.1 run only.
+  Measured: those tests took 240 s of the 5.1 run. Tests that also run PowerShell code stay untagged
+  (Pi file tools), and the swarm helper's parse/ASCII check became its own untagged test.
+- CI calls `aos test`, so it gets the same split. Running `tests/Run-Tests.ps1` directly still runs everything.
+- Rejected: dropping 5.1 entirely (aos.psm1 and bootstrap.ps1 must run there), and a separate language
+  runner outside Pester (two places to look for a failure).
+
 ## 2026-10-29 - Route in-session subagents by role; the swarm queues instead of failing
 
 - **Evidence.** Claude transcripts 2026-10-15..29: 12 of 120 sessions used subagents; 32 of 40 calls were

@@ -54,6 +54,8 @@ $config.TestRegistry.Enabled = $false
 $config.Output.Verbosity = 'Detailed'
 # Opt-in: AOS_TEST_FILTER (a wildcard on the full test name) runs only the matching tests.
 if ($env:AOS_TEST_FILTER) { $config.Filter.FullName = $env:AOS_TEST_FILTER }
+# Opt-in: AOS_TEST_EXCLUDE_TAG (comma list) skips tagged tests; aos test uses it to run 'Language' suites in one shell only.
+if ($env:AOS_TEST_EXCLUDE_TAG) { $config.Filter.ExcludeTag = @($env:AOS_TEST_EXCLUDE_TAG -split ',') }
 $result = Invoke-Pester -Configuration $config
 
 if ($result.TotalCount -eq 0) { Write-Host 'No tests were discovered.'; exit 3 }
