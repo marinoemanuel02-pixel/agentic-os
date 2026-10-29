@@ -218,6 +218,24 @@ Describe 'Set-AosManagedBlock' {
         (Get-Item -LiteralPath $path).LastWriteTimeUtc | Should -Be $written
     }
 
+    It 'backs up an existing file before changing it and writes nothing when the backup fails' {
+        $path = Join-Path $caseRoot 'backed.txt'
+        Write-TestFile $path 'mine'
+        Mock Backup-AosFile -ModuleName aos { 'saved' }
+        InModuleScope aos -Parameters @{ Path = $path } {
+            param($Path)
+            Set-AosManagedBlock -Path $Path -Start '# start' -End '# end' -Body 'body'
+        }
+        Should -Invoke Backup-AosFile -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Path -like '*backed.txt' }
+        Mock Backup-AosFile -ModuleName aos { throw 'backup failed' }
+        { InModuleScope aos -Parameters @{ Path = $path } {
+            param($Path)
+            Set-AosManagedBlock -Path $Path -Start '# start' -End '# end' -Body 'other'
+        } } | Should -Throw
+        [System.IO.File]::ReadAllText($path) | Should -Match 'body'
+        [System.IO.File]::ReadAllText($path) | Should -Not -Match 'other'
+    }
+
     It 'writes UTF-8 without a BOM by default and with a BOM when requested' {
         $plain = Join-Path $caseRoot 'plain.txt'
         $bom = Join-Path $caseRoot 'bom.txt'
@@ -5094,6 +5112,12 @@ Describe 'coordination tuning safety' {
         $otherRepo = New-TuningRepo (Join-Path $caseRoot 'other repo')
         $file = Write-TuningContract (Join-Path $caseRoot 'contracts\ta-other.json') 'ta'
         { InModuleScope aos -Parameters @{ F = $file; R = $otherRepo } { param($F, $R) Register-AosTaskContract -Path $F -Repo $R } } | Should -Throw
+    }
+
+    It 'refuses a contract without a verify command before recording it, so the corrected one can register' {
+        { Add-TuningTask 'tnv' @{ verify = '' } } | Should -Throw
+        InModuleScope aos { Get-AosTaskRecord -Id 'tnv' } | Should -BeNullOrEmpty
+        { Add-TuningTask 'tnv' } | Should -Not -Throw
     }
 
     It 'rejects unsafe artifact or context paths and unknown fields' {

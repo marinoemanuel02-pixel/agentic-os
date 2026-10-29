@@ -165,6 +165,14 @@ class WireTests(unittest.TestCase):
             '{"text":"hello","segments":[{"start":0,"end":1,"text":"hello"}]}'}]}}]}
         self.assertEqual(parse_result(a, p, wire)['segments'][0]['end'], 1)
 
+    def test_malformed_transcript_segments_are_provider_errors(self):
+        # A non-object segment once raised AttributeError past the pool's handlers, stranding the reservation.
+        a = dict(provider='groq', routes={'transcribe': {'model': 'fixture'}})
+        p = dict(capability='transcribe', audio_base64='ZmFrZQ==', audio_seconds=2)
+        for rows in [[None], ['x'], [[0, 1]]]:
+            with self.assertRaises(ProviderError):
+                parse_result(a, p, {'text': 'hello', 'segments': rows})
+
     def test_catalog_selection_prefers_current_alias_and_stable_embeddings(self):
         from swarm_accounts import pick_models
         rows = [{'name': 'models/family-1-flash-lite', 'supportedGenerationMethods': ['generateContent']},

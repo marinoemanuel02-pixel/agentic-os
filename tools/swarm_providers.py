@@ -246,6 +246,7 @@ def parse_result(account, packet, data):
         if not isinstance(rows, list) or not rows: raise ProviderError('missing_timestamps')
         previous = 0
         for row in rows:
+            if not isinstance(row, dict): raise ProviderError('invalid_timestamps')
             start, end = row.get('start'), row.get('end')
             if (type(start) not in (int, float) or type(end) not in (int, float) or
                     not previous <= start <= end <= packet['audio_seconds'] + 1 or not isinstance(row.get('text'), str)):

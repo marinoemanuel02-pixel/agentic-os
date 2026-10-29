@@ -72,6 +72,18 @@ It 'compares a binary artifact byte for byte, so converted line endings inside i
     Test-EolManifest $repo $rows | Should -BeTrue
 }
 
+It 'treats a file with its first NUL past 8000 bytes as binary' {
+    $head = [byte[]](@(65) * 9000)
+    $lf = $head + [byte[]](10, 0, 10)
+    $crlf = $head + [byte[]](13, 10, 0, 13, 10)
+    Write-EolBytes (Join-Path $repo 'late.bin') $lf
+    $rows = @(Get-EolManifest $repo @('late.bin'))
+    [string]$rows[0]['sha256'] | Should -Not -BeNullOrEmpty
+    [string]$rows[0]['sha256_text'] | Should -BeNullOrEmpty
+    Write-EolBytes (Join-Path $repo 'late.bin') $crlf
+    Test-EolManifest $repo $rows | Should -BeFalse
+}
+
 It 'keeps the raw sha256 field unchanged and adds a text hash only for text files' {
     Write-EolBytes (Join-Path $repo 'a.txt') (ConvertTo-EolBytes $text "`r`n")
     Write-EolBytes (Join-Path $repo 'b.bin') ([byte[]](0, 1, 2, 13, 10))
