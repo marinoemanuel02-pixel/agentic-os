@@ -65,6 +65,12 @@ test('import cycles terminate and shots exported from a chapter file are found',
   assert.equal(keysOf(root).length, 4);
 });
 
+test('shot ids with any capital-letter prefix are found (M01, pauseai-it-allineamento)', () => {
+  const {root, put} = tree();
+  put('src/shots/M01Eye.tsx', 'import {MID} from "../lib/mid";\nexport const M01Eye = () => MID;\n');
+  assert.equal(segmentKeys(root, [{from: 0, to: 10, shots: ['M01']}], 'env').length, 1);
+});
+
 test('an unknown shot id is an error, never a silent cache hit', () => {
   const {root} = tree();
   assert.throws(() => segmentKeys(root, [{from: 0, to: 10, shots: ['S99']}], 'env'), /S99/);

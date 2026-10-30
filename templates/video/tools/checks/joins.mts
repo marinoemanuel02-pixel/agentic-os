@@ -48,9 +48,9 @@ export const poseImportErrors = (root: string): string[] => {
       if (targets.some((t) => t === "src/shots/poses" || t.startsWith("src/shots/poses/"))) errors.push(`${name} imports other pose files; a pose file holds one shot's poses`);
       continue;
     }
-    const own = new Set([...text.matchAll(/export const (S\d\d)[A-Za-z0-9_]*\s*[:=]/g)].map((m) => m[1]));
+    const own = new Set([...text.matchAll(/export const ([A-Z]\d\d)[A-Za-z0-9_]*\s*[:=]/g)].map((m) => m[1]));
     for (const target of targets) {
-      const pose = /^src\/shots\/poses\/(S\d\d)$/.exec(target);
+      const pose = /^src\/shots\/poses\/([A-Z]\d\d)$/.exec(target);
       if (target === "src/shots/joins") errors.push(`${name} imports the shared pose table src/shots/joins.ts; import poses/<id> per shot`);
       else if (!pose && (target === "src/shots/poses" || target.startsWith("src/shots/poses/"))) errors.push(`${name} imports a pose barrel (${target}); import poses/<id> per shot`);
       else if (pose && !own.size) errors.push(`${name} imports poses/${pose[1]}; only shot modules import poses (pass them to the stage)`);

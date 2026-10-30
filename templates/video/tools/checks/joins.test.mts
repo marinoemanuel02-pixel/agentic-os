@@ -95,3 +95,12 @@ test("a pose barrel (poses/index or the poses folder) and a pose file importing 
   assert.match(errs, /src\/shots\/Chapter\.tsx imports a pose barrel/);
   assert.match(errs, /src\/shots\/poses\/index\.ts imports other pose files/);
 });
+
+test("shot ids with any capital-letter prefix (M01) import their own poses; another shot's poses still fail (pauseai-it-allineamento)", () => {
+  const { root, put } = film();
+  put("src/shots/poses/M01.ts", "export const poses = {start: {pos: [0, 2, 8], target: [0, 1, 0], fov: 32}, end: {pos: [0, 2, 8], target: [0, 1, 0], fov: 32}};\n");
+  put("src/shots/M01Eye.tsx", 'import {poses} from "./poses/M01";\nexport const M01Eye = () => poses;\n');
+  assert.deepEqual(poseImportErrors(root), []);
+  put("src/shots/M01Eye.tsx", 'import {poses} from "./poses/M01";\nimport {poses as b} from "./poses/S02";\nexport const M01Eye = () => [poses, b];\n');
+  assert.match(poseImportErrors(root).join("\n"), /src\/shots\/M01Eye\.tsx imports poses\/S02, which belongs to another shot/);
+});
