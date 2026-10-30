@@ -5,6 +5,8 @@ import { Easing, interpolate, spring } from "remotion";
 import { FPS } from "./look";
 import { SOFT_POINTS } from "./ease";
 
+export { mix } from "./ease";
+
 /** The shortest move allowed for anything that travels (0.6 s at 30 fps). Small accents (blinks) use `blink`. */
 export const MIN_MOVE_FRAMES = 18;
 

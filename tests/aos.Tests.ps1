@@ -1150,7 +1150,8 @@ Describe 'Video input provenance' {
         @{ Check = 'pipeline'; File = 'pipeline.test.mjs' },
         @{ Check = 'review sheets'; File = 'review-sheets.test.mts' },
         @{ Check = 'grade (no fringes, no SAO halos)'; File = 'grade.test.mjs' },
-        @{ Check = 'cast geometry (limb caps, head units, hand attachment, poses, faces)'; File = 'cast.test.mts' }
+        @{ Check = 'cast geometry (limb caps, head units, hand attachment, poses, faces)'; File = 'cast.test.mts' },
+        @{ Check = 'easing helpers (mix for an eased progress)'; File = 'ease.test.mts' }
     ) {
         $testFile = Join-Path $PSScriptRoot "..\templates\video\tools\checks\$File"
         $savedScratch = $env:AOS_VIDEO_TEST_ROOT
