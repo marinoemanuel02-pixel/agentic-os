@@ -3576,6 +3576,72 @@ Describe 'Delegation preflight' {
         $r.Ok | Should -BeFalse
         ($r.Reasons -join ' ') | Should -Match 'missing-tool'
     }
+    Context 'verify executable given as a path' {
+        BeforeEach {
+            Mock Test-AosCommand -ModuleName aos { $true }
+            Mock Resolve-AosDelegateModel -ModuleName aos { @{ Ok=$true; Model='fixture-model' } }
+            $pyExe = Join-Path $caseRoot 'py dir\python.exe'
+            Write-TestFile $pyExe ''
+        }
+        It 'starts an existing absolute path in the sandbox instead of asking where.exe' {
+            # where.exe rejects a path ("Invalid pattern ... path:pattern"); the program itself starts fine.
+            Mock Invoke-AosProcess -ModuleName aos {
+                if ($Arguments -contains 'where.exe') { return @{ Code=2; TimedOut=$false; KillFailed=$false } }
+                Write-TestFile $StdoutFile 'Python 3.13.0'
+                @{ Code=0; TimedOut=$false; KillFailed=$false }
+            }
+            $r = InModuleScope aos -Parameters @{ W=$caseRoot; V=('"' + $pyExe + '" -I tools/x.py') } { param($W, $V) Test-AosDelegatePreflight -Vendor 'codex' -Model '' -Needs @() -Verify $V -WorkDir $W -Write }
+            $r.Reasons | Should -BeNullOrEmpty
+            $r.Ok | Should -BeTrue
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Arguments -contains $pyExe -and $Arguments -contains 'sandbox_mode="workspace-write"' }
+        }
+        It 'resolves a relative path against the work folder' {
+            Mock Invoke-AosProcess -ModuleName aos {
+                if ($Arguments -contains 'where.exe') { return @{ Code=2; TimedOut=$false; KillFailed=$false } }
+                @{ Code=0; TimedOut=$false; KillFailed=$false }
+            }
+            $r = InModuleScope aos -Parameters @{ W=$caseRoot } { param($W) Test-AosDelegatePreflight -Vendor 'codex' -Model '' -Needs @() -Verify '"py dir\python.exe" -V' -WorkDir $W }
+            $r.Ok | Should -BeTrue
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Arguments -contains $pyExe }
+        }
+        It 'says the sandbox denies a path that exists' {
+            Mock Invoke-AosProcess -ModuleName aos {
+                if ($Arguments -contains 'where.exe') { return @{ Code=2; TimedOut=$false; KillFailed=$false } }
+                Write-TestFile $StderrFile 'windows sandbox failed: runner failed during SpawnChild: CreateProcessAsUserW failed: 5 (Access is denied.) | cwd=C:\w | cmd=python.exe --version (Windows error 5)'
+                @{ Code=1; TimedOut=$false; KillFailed=$false }
+            }
+            $r = InModuleScope aos -Parameters @{ W=$caseRoot; V=('"' + $pyExe + '" -V') } { param($W, $V) Test-AosDelegatePreflight -Vendor 'codex' -Model '' -Needs @() -Verify $V -WorkDir $W }
+            $r.Ok | Should -BeFalse
+            ($r.Reasons -join ' ') | Should -Match 'exists'
+            ($r.Reasons -join ' ') | Should -Match 'Access is denied'
+            ($r.Reasons -join ' ') | Should -Not -Match 'cannot find'
+        }
+        It 'says the sandbox denies a launcher whose child is denied' {
+            # A uv venv python.exe starts, then cannot start the real interpreter under AppData.
+            Mock Invoke-AosProcess -ModuleName aos {
+                if ($Arguments -contains 'where.exe') { return @{ Code=2; TimedOut=$false; KillFailed=$false } }
+                Write-TestFile $StderrFile "Unable to create process using 'python.exe --version': Access is denied."
+                @{ Code=101; TimedOut=$false; KillFailed=$false }
+            }
+            $r = InModuleScope aos -Parameters @{ W=$caseRoot; V=('"' + $pyExe + '" -V') } { param($W, $V) Test-AosDelegatePreflight -Vendor 'codex' -Model '' -Needs @() -Verify $V -WorkDir $W }
+            $r.Ok | Should -BeFalse
+            ($r.Reasons -join ' ') | Should -Match 'Access is denied'
+        }
+        It 'says a missing path does not exist, without starting the sandbox' {
+            Mock Invoke-AosProcess -ModuleName aos { @{ Code=2; TimedOut=$false; KillFailed=$false } }
+            $missing = Join-Path $caseRoot 'nowhere\tool.exe'
+            $r = InModuleScope aos -Parameters @{ W=$caseRoot; V=($missing + ' --check') } { param($W, $V) Test-AosDelegatePreflight -Vendor 'codex' -Model '' -Needs @() -Verify $V -WorkDir $W }
+            $r.Ok | Should -BeFalse
+            ($r.Reasons -join ' ') | Should -Match 'does not exist'
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
+        }
+        It 'keeps where.exe for a bare command name' {
+            Mock Invoke-AosProcess -ModuleName aos { @{ Code=0; TimedOut=$false; KillFailed=$false } }
+            $r = InModuleScope aos -Parameters @{ W=$caseRoot } { param($W) Test-AosDelegatePreflight -Vendor 'codex' -Model '' -Needs @() -Verify 'python -V' -WorkDir $W }
+            $r.Ok | Should -BeTrue
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Arguments -contains 'where.exe' -and $Arguments -contains 'python' }
+        }
+    }
     It 'reports a failing needs command and accepts passing commands' {
         Mock Test-AosCommand -ModuleName aos { $true }
         if (InModuleScope aos { Get-Command Resolve-AosDelegateModel -ErrorAction SilentlyContinue }) { Mock Resolve-AosDelegateModel -ModuleName aos { @{ Ok=$true; Model='fixture-model' } } }

@@ -3028,6 +3028,30 @@ function Get-AosCommandExe([string]$CommandLine) {
     return ($t -split '\s+')[0]
 }
 
+function Get-AosSandboxPathProblem([string[]]$Sandbox, [string]$Exe, [string]$WorkDir) {
+    # where.exe rejects a path, so a verify program named by path is checked on disk, then started once in the
+    # sandbox with --version: the sandbox reports a missing file and a denied one differently. '' means fine.
+    $full = $Exe
+    if (-not [System.IO.Path]::IsPathRooted($full)) { $full = [System.IO.Path]::GetFullPath((Join-Path $WorkDir $Exe)) }
+    if (-not [System.IO.Path]::HasExtension($full) -and (Test-Path -LiteralPath ($full + '.exe') -PathType Leaf)) { $full += '.exe' }
+    if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { return "verify needs '$Exe', which does not exist ($full)" }
+    # Only programs are started: a script would run its whole body, whatever the flag.
+    if ($full -notmatch '(?i)\.(exe|com)$') { return '' }
+    $log = Join-Path (Get-AosCoordDir) ('verify-probe-' + [guid]::NewGuid().ToString('N') + '.log')
+    $null = Invoke-AosProcess -Exe 'codex.exe' -Arguments ($Sandbox + @($full, '--version')) -WorkingDirectory $WorkDir -StdoutFile $log -StderrFile ($log + '.err') -TimeoutSeconds 60
+    $text = ''
+    foreach ($f in @($log, ($log + '.err'))) {
+        if (Test-Path -LiteralPath $f) { $text += [System.IO.File]::ReadAllText($f) + "`n"; Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue }
+    }
+    if ($text -match '(?i)Access is denied|\(Windows error 5\)') {
+        return "verify needs '$Exe', which exists, but the delegate's sandbox is denied access to it (Access is denied)"
+    }
+    $m = [regex]::Match($text, 'windows sandbox failed:[^|\r\n]*')
+    if ($m.Success) { return "verify needs '$Exe', which exists, but the delegate's sandbox cannot start it: $($m.Value.Trim())" }
+    # It started; what it answers to --version does not matter.
+    return ''
+}
+
 function Test-AosDelegatePreflight([string]$Vendor, [string]$Model, [string[]]$Needs, [string]$Verify, [string]$WorkDir, [switch]$Write) {
     $reasons = New-Object System.Collections.Generic.List[string]
     $exe = 'codex'
@@ -3044,7 +3068,11 @@ function Test-AosDelegatePreflight([string]$Vendor, [string]$Model, [string[]]$N
         if ($Write) { $sandbox += @('-c', 'sandbox_mode="workspace-write"') }
         if ($Verify) {
             $vexe = Get-AosCommandExe $Verify
-            if ($Vendor -eq 'codex') {
+            if ($Vendor -eq 'codex' -and $vexe -match '[\\/:]') {
+                $problem = Get-AosSandboxPathProblem -Sandbox $sandbox -Exe $vexe -WorkDir $WorkDir
+                if ($problem) { $reasons.Add($problem) }
+            }
+            elseif ($Vendor -eq 'codex') {
                 $r = Invoke-AosProcess -Exe 'codex.exe' -Arguments ($sandbox + @('where.exe', $vexe)) -WorkingDirectory $WorkDir -TimeoutSeconds 60
                 if ($r.Code -ne 0) { $reasons.Add("verify needs '$vexe', which the delegate's sandbox cannot find") }
             }
