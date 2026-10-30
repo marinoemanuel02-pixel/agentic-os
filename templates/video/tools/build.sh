@@ -17,6 +17,7 @@ mkdir -p "$H/qa"
 node --no-warnings tools/timeline-json.mts > "$H/qa/timeline.json"
 node tools/checks/assets.mjs "$P" --timeline "$H/qa/timeline.json" --public "$H/app/public" --report "$P/qa/assets.md"
 node tools/checks/screen-text.mjs
+node tools/checks/type-size.mjs
 node --no-warnings tools/checks/joins.mts
 node --no-warnings tools/check-plan.mts | tail -1
 node --no-warnings tools/audio.mts

@@ -1167,7 +1167,10 @@ Describe 'Video input provenance' {
         @{ Check = 'screen text'; File = 'screen-text.test.mjs' },
         @{ Check = 'pipeline'; File = 'pipeline.test.mjs' },
         @{ Check = 'review sheets'; File = 'review-sheets.test.mts' },
-        @{ Check = 'grade (no fringes, no SAO halos)'; File = 'grade.test.mjs' }
+        @{ Check = 'grade (no fringes, no SAO halos)'; File = 'grade.test.mjs' },
+        @{ Check = 'type size (rubric 4)'; File = 'type-size.test.mjs' },
+        @{ Check = 'voice scale (R55)'; File = 'voice-scale.test.mjs' },
+        @{ Check = 'render-shot media entry and kit key'; File = 'render-shot.test.mjs' }
     ) {
         $testFile = Join-Path $PSScriptRoot "..\templates\video\tools\checks\$File"
         $savedScratch = $env:AOS_VIDEO_TEST_ROOT

@@ -1,14 +1,17 @@
 """Render Blender shots headless: the same scene scripts the Blender MCP runs during look-dev.
 
 Usage: python tools/render-shot.py S02 S11 ...  [--scale 50] [--frames N]  (or "all")
-Reads blender/shots.json ({shot: {script, shot, offset?}}) and src/data/edit.json (frames per shot), runs
+Reads blender/shots.json ({shot: {script, shot, offset?, speed?}}) and src/data/edit.json (frames per shot), runs
 `blender -b --python-expr` with SHOT set, renders frames offset+1 .. offset+frames+HANDLE to an H.264 MP4 in
 <media>/app/public/clips/<shot>.mp4, and records it in src/data/media.json. Logs seconds per frame to
 <media>/renders/render-log.jsonl so render budgets are measured, not guessed (R32).
+`speed` (default 1) plays every keyframed action that much faster (key x -> 1 + (x - 1) / speed, camera included),
+so a variant designed longer than its slot in the edit keeps its whole action; drivers and particles keep their pace.
 """
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -20,6 +23,30 @@ MEDIA = Path(os.environ.get("AOS_VIDEO_MEDIA_ROOT", Path.home() / ".aos" / "vide
 BLENDER = os.environ.get("BLENDER_PATH", r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe")
 HANDLE = 6  # extra frames so a cut can slip by a few frames without a re-render
 LUMA_MIN, LUMA_MAX = 40, 225  # 90th-percentile Y of the mid frame (TV range: black is 16); v1 shipped near-black shots
+
+
+def kit_files(blender: Path, script: str) -> list[str]:
+    """The scene script and the shared kit it runs: lib.py, then every other blender/*.py whose name appears in a file
+    already in the set (exec(open(... "sf_incident.py")), followed through the kit. Other scene scripts (s_*.py) are
+    entry points, not kit: a kit file that names one does not pull it in."""
+    names = sorted(p.name for p in blender.glob("*.py"))
+    found = [script, "lib.py"]
+    todo = list(found)
+    while todo:
+        text = (blender / todo.pop(0)).read_text(encoding="utf-8")
+        for name in names:
+            if name not in found and not name.startswith("s_") and re.search(r"\b" + re.escape(name), text):
+                found.append(name)
+                todo.append(name)
+    return found
+
+
+def clip_entry(old: dict, sid: str, spec: dict) -> dict:
+    """The media.json entry for a rendered clip: hand-set fields (tag, gain) stay, the render owns clip, startFrom and
+    push, and an animatic `still` goes. A film's Clip component that prefers the still (huggingface-it's src/lib/Clip.tsx)
+    otherwise plays every rendered shot as a slowly zooming picture."""
+    kept = {k: v for k, v in old.items() if k != "still"}
+    return {**kept, "clip": f"clips/{sid}.mp4", "startFrom": 0, "push": spec.get("push", False)}
 
 
 def exposure(clip: Path, n: int, png: Path) -> tuple[float, Path]:
@@ -37,6 +64,19 @@ import bpy, json, sys, time
 SHOT = {shot!r}
 BLENDER_LIB = {lib!r}
 exec(open({script!r}, encoding="utf-8").read())
+SPEED = {speed!r}
+if SPEED != 1:
+    def _fcurves(a):
+        yield from getattr(a, "fcurves", [])
+        for layer in getattr(a, "layers", []):  # Blender 5 layered actions
+            for strip in layer.strips:
+                for cb in getattr(strip, "channelbags", []):
+                    yield from cb.fcurves
+    for _a in bpy.data.actions:
+        for _fc in _fcurves(_a):
+            for _k in _fc.keyframe_points:
+                for _p in (_k.co, _k.handle_left, _k.handle_right):
+                    _p.x = 1 + (_p.x - 1) / SPEED
 sc = bpy.context.scene
 sc.render.resolution_percentage = {scale}
 for _f in range({start} - {preroll}, {start}):
@@ -85,15 +125,17 @@ def main() -> None:
         start = 1 + spec.get("offset", 0)
         out = clips / f"{sid}.mp4"
         partial = clips / f"{sid}.partial.mp4"  # an interrupted render never overwrites a good clip
-        # incremental: a shot re-renders only when its scene script, lib.py, table entry or scale changed, or when the
-        # edit now needs more frames than the clip has (a longer clip is fine: the composition plays only what it needs)
-        key = hashlib.sha256(json.dumps([spec, scale, (ROOT / "blender" / spec["script"]).read_text(encoding="utf-8"),
-                                         (ROOT / "blender" / "lib.py").read_text(encoding="utf-8")]).encode()).hexdigest()
+        # incremental: a shot re-renders only when its scene script, the kit it runs (kit_files), its table entry or
+        # the scale changed, or when the edit now needs more frames than the clip has (a longer clip is fine: the
+        # composition plays only what it needs)
+        key = hashlib.sha256(json.dumps([spec, scale] + [(ROOT / "blender" / n).read_text(encoding="utf-8") for n in
+                                         kit_files(ROOT / "blender", spec["script"])]).encode()).hexdigest()
         have = state.get(sid) if isinstance(state.get(sid), dict) else {}
         if "--force" not in sys.argv and have.get("key") == key and have.get("frames", 0) >= n and out.exists():
             print(f"{sid}: unchanged ({have['frames']} frames, need {n}), skipped")
             continue
         expr = EXPR.format(lib=str(ROOT / "blender" / "lib.py"), shot=spec["shot"], script=str(ROOT / "blender" / spec["script"]), scale=scale, preroll=spec.get("preroll", 0),
+                           speed=float(spec.get("speed", 1)),
                            start=start, end=start + n - 1, out=str(partial))
         t = time.time()
         p = subprocess.run([BLENDER, "-b", "--factory-startup", "--python-expr", expr], capture_output=True,
@@ -107,8 +149,7 @@ def main() -> None:
             f.write(json.dumps({"shot": sid, "frames": n, "scale": scale, "seconds": round(secs, 1),
                                 "s_per_frame": round(secs / n, 2), "at": time.strftime("%Y-%m-%dT%H:%M:%S")}) + "\n")
         media = json.loads(media_path.read_text(encoding="utf-8")) if media_path.exists() else {}
-        # keep hand-set fields (tag, gain) and replace only what the render owns
-        media[sid] = {**media.get(sid, {}), "clip": f"clips/{sid}.mp4", "startFrom": 0, "push": spec.get("push", False)}
+        media[sid] = clip_entry(media.get(sid, {}), sid, spec)
         media_path.write_text(json.dumps(media, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
         state[sid] = {"key": key, "frames": n}
         state_path.write_text(json.dumps(state, indent=1) + "\n", encoding="utf-8")

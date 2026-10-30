@@ -38,9 +38,9 @@ export const Reveal: React.FC<{ at: number; dur?: number; children: React.ReactN
   );
 };
 
-/** Small all-caps label in the numerals face. */
+/** Small all-caps label in the numerals face, at the rubric's 36 px minimum (tools/checks/type-size.mjs). */
 export const Label: React.FC<{ color: string; children: React.ReactNode; style?: React.CSSProperties }> = ({ color, children, style }) => (
-  <div style={{ fontFamily: SANS, fontWeight: 400, fontSize: 22, letterSpacing: "0.22em", textTransform: "uppercase", color, fontStretch: "condensed", ...style }}>
+  <div style={{ fontFamily: SANS, fontWeight: 400, fontSize: 36, letterSpacing: "0.22em", textTransform: "uppercase", color, fontStretch: "condensed", ...style }}>
     {children}
   </div>
 );

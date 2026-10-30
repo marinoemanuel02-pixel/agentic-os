@@ -56,8 +56,11 @@ console.log("bundle ok");
 
 // 3. stills
 const listed = run([cli, "compositions", bundle, "--quiet"], { cwd: app }).trim().split(/\s+/);
-const { buildShots } = await import(new URL("../src/data/plan.ts", import.meta.url));
-const comps = buildShots().filter((s) => listed.includes(s.id)).map((s) => ({ id: s.id, durationInFrames: s.frames }));
+// a short cut on words (R44) lists its shots in edit.json; otherwise the beat plan does
+const editPath = path.join(here, "src", "data", "edit.json");
+const shots = fs.existsSync(editPath) ? JSON.parse(fs.readFileSync(editPath, "utf8")).shots
+  : (await import(new URL("../src/data/plan.ts", import.meta.url))).buildShots();
+const comps = shots.filter((s) => listed.includes(s.id)).map((s) => ({ id: s.id, durationInFrames: s.frames }));
 let failed = 0;
 for (const id of ids) {
   const c = comps.find((x) => x.id === id);

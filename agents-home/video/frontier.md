@@ -57,6 +57,25 @@ both vendors, blind, judge the new frame better. A gap is written as a target, n
 - how: claims.json screen entries per source, currency.json with export-day proofs.
 - next: data panels in the same illustrated material as the scenes (the blind review's remaining gap).
 - try: dials and counters drawn as props inside the set, not as panels over it.
+## Captions
+- best: huggingface-it v6 (2026-10-30), narration at about 250 words a minute: `src/lib/Captions.tsx` keyed on the
+  measured words, chunks of two rows of at most 20 characters at 84 px just above the band the apps cover, the spoken
+  word easing into the accent colour, one box per run of chunks fading 0.5 s at the run's ends, and inside a run the
+  next chunk replacing the last on the same frame (no fade, no empty frame); nothing over a `CAPTION_OFF` card.
+- how: a chunk ends at two rows or a phrase end; chunks closer than 0.9 s share a box; the swap lands 0.05 s before
+  the next chunk's first word.
+- next: readable time measured rather than judged from sheets: the share of narrated frames that show a whole chunk
+  at full opacity, reported per film, so the next fast short beats this one's number.
+- try: a readable-time report computed from words.json and the caption timing, run beside the pacing report; the
+  template's `src/lib` has no caption component yet, so start from huggingface-it's.
+## Type size
+- best: huggingface-it v6: every size on screen at 36 px or more at 1080p (quote-card original and source lines,
+  counter source, headline tag at 36 px, the headline's Italian note at 48 px), held by `tools/checks/type-size.mjs`
+  (R58) at build and QA.
+- how: small type set at the rubric's floor and the card made room for it (the quote card widened to 940 px, lines
+  wrap) instead of shrinking type to fit.
+- next: secondary lines (sources, translations) that read at a glance on a phone without a pause on the frame.
+- try: one type scale in look.ts (caption, card, note, source) that every component takes its sizes from.
 ## Accuracy and currency
 - best: alignment-now: currency gate (R27) plus an independent blind accuracy read by the other vendor after every
   narration change; cant-escape-ai-2: accuracy read before voicing.

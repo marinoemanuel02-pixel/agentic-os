@@ -8,9 +8,16 @@ keeping only a short pad of air, and written to <media>/app/public/vo/<id>.wav. 
 src/data/words.json (the SCRIPT's own words with times relative to each line WAV, which is what captions and cuts
 key on) and src/data/words.sha256.json, plus voice/ingest-report.md listing what was heard against what was written.
 
-Usage: python tools/ingest-voice.py take1.m4a take2.m4a ... [--dry] [--verify]
+Usage: python tools/ingest-voice.py take1.m4a take2.m4a ... --ref=healthy.wav[,more.wav] [--dry] [--verify]
+  --ref=a.wav,b.wav  healthy takes of the same speaker (a sane header, heard as the real voice): before anything is
+            cut, tools/checks/voice-scale.mjs measures every take against them and stops the ingest on a frequency
+            shift (a wrong playback rate, R55); the result is kept in src/data/voice-scale.json with the line hashes.
+            Without --ref the voice is ingested unchecked and QA refuses it.
   --dry     align and report only, write nothing
   --verify  transcribe each written line again and compare its first and last word (catches clipped words)
+  --phone   de-click and band-limit phone/messaging-app recordings (removes their crackle)
+  --match=L08,L09  give every other line the timbre and level of these reference lines (long-term spectrum matched
+            with a smooth zero-phase EQ, then the active-speech level): for takes recorded in different conditions
 Needs AOS_WHISPER_MODEL (a local faster-whisper model folder; nothing is downloaded) and ffmpeg on PATH.
 """
 import difflib
@@ -20,6 +27,7 @@ import os
 import re
 import subprocess
 import sys
+import unicodedata
 import wave
 from pathlib import Path
 
@@ -32,10 +40,17 @@ SR = 48000
 TARGET_LUFS = -19.0
 PAD_BEFORE, PAD_AFTER = 0.10, 0.14  # seconds of air kept around a line
 CHAIN = "highpass=f=70"
+# --phone: takes recorded on a phone and sent through a messaging app arrive band-limited near 9 kHz with short clicks
+# that reach far above the voice (heard as crackle). Remove the clicks, then cut steeply above the voice band. A
+# de-esser was tried and rejected: it added broadband clicks of its own (pauseai-it-allineamento, 2026-10-27).
+PHONE_CHAIN = "highpass=f=70,adeclick=w=55:o=75:a=2:t=2:b=2,lowpass=f=9000,lowpass=f=9000,lowpass=f=9000"
 
 
 def norm(w: str) -> str:
-    return re.sub(r"[^a-z0-9']", "", w.lower().replace("’", "'"))
+    # accents fold to their base letter ("È" -> "e"): stripping them dropped one-letter words such as Italian "è",
+    # so a line starting with one was cut after it
+    w = unicodedata.normalize("NFKD", w.lower().replace("’", "'"))
+    return re.sub(r"[^a-z0-9']", "", "".join(c for c in w if not unicodedata.combining(c)))
 
 
 def ff(*args) -> subprocess.CompletedProcess:
@@ -72,7 +87,7 @@ def write_wav(p: Path, x: np.ndarray) -> None:
 def whisper_words(wav: Path, prompt: str, model):
     pcm = subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(wav), "-f", "f32le", "-ac", "1", "-ar", "16000", "-"],
                          capture_output=True, check=True).stdout
-    seg, _ = model.transcribe(np.frombuffer(pcm, dtype=np.float32), language="en", beam_size=8, word_timestamps=True,
+    seg, _ = model.transcribe(np.frombuffer(pcm, dtype=np.float32), language=os.environ.get("AOS_VO_LANG", "en"), beam_size=8, word_timestamps=True,
                               condition_on_previous_text=False, initial_prompt=prompt or None)
     return [(w.word.strip(), w.start, w.end) for s in seg for w in s.words]
 
@@ -85,11 +100,97 @@ def quietest(rms: np.ndarray, t0: float, t1: float) -> float:
     return (a + int(np.argmin(rms[a:b + 1]))) / 100
 
 
+def voice_end(rms: np.ndarray, t1: float, limit: float, hold: int = 12) -> float:
+    """First time after t1 where the 10 ms RMS stays under the take's noise floor for `hold` steps (120 ms)."""
+    floor = 2.5 * float(np.percentile(rms, 20))
+    a, b = int(t1 * 100), min(len(rms), int(min(limit, t1 + 0.8) * 100))
+    quiet = 0
+    for i in range(a, b):
+        quiet = quiet + 1 if rms[i] < floor else 0
+        if quiet >= hold:
+            return (i - hold + 1) / 100
+    return b / 100
+
+
+TAIL_FLOOR = 0.03  # 10 ms RMS of a normalised take above which there is still voice
+
+
+def tail_end(rms: np.ndarray, t1: float) -> float:
+    """Last time after t1 where the 10 ms RMS is above TAIL_FLOOR (the take's real end of speech)."""
+    loud = np.nonzero(rms[int(t1 * 100):] > TAIL_FLOOR)[0]
+    return t1 + (int(loud[-1]) + 1) / 100 if len(loud) else t1
+
+
+def ltas(x: np.ndarray) -> np.ndarray:
+    """Long-term power spectrum (Hann frames of 8192, hop 2048) on the rfft grid of 8192 at SR (5.9 Hz bins: frames
+    of 2048 left the 80 Hz third-octave band without a single bin, and the NaN zeroed every boost)."""
+    n, hop = 8192, 2048
+    w = np.hanning(n)
+    frames = [x[i:i + n] * w for i in range(0, max(1, len(x) - n), hop)]
+    return np.mean([np.abs(np.fft.rfft(f, n)) ** 2 for f in frames], axis=0) + 1e-12
+
+
+BANDS = 80.0 * 2 ** (np.arange(0, 22) / 3)  # third-octave centres, 80 Hz .. ~10 kHz
+
+
+def band_db(P: np.ndarray) -> np.ndarray:
+    fr = np.fft.rfftfreq(8192, 1 / SR)
+    out = []
+    for c in BANDS:
+        sel = (fr >= c / 2 ** (1 / 6)) & (fr < c * 2 ** (1 / 6))
+        out.append(10 * np.log10(P[sel].mean()))
+    return np.array(out)
+
+
+def active_rms(x: np.ndarray) -> float:
+    r = np.sqrt(np.convolve(x * x, np.ones(SR // 100) / (SR // 100), mode="same"))[:: SR // 100]
+    return float(np.sqrt(np.mean(r[r > np.percentile(r, 40)] ** 2)))
+
+
+def match_to(x: np.ndarray, ref_db: np.ndarray, ref_rms: float) -> tuple[np.ndarray, np.ndarray]:
+    """Zero-phase EQ from x's third-octave spectrum to the reference's, level-neutral in 300-3000 Hz, boosts capped
+    at +9 dB and none above the line's own band edge (no noise lifted where the take has no voice), cuts at -12 dB."""
+    db = band_db(ltas(x))
+    if not (np.isfinite(db).all() and np.isfinite(ref_db).all()):
+        sys.exit("timbre match: a band without spectrum (NaN); check BANDS against the FFT size")
+    g = ref_db - db
+    mid = (BANDS >= 300) & (BANDS <= 3000)
+    g -= g[mid].mean()
+    edge = db > db.max() - 55
+    g = np.where(edge, np.clip(g, -12, 9), np.minimum(g, 0))
+    g = np.convolve(np.pad(g, 1, mode="edge"), np.ones(3) / 3, mode="valid")
+    n = 1 << int(np.ceil(np.log2(len(x) + SR // 2)))
+    fr = np.fft.rfftfreq(n, 1 / SR)
+    gain = 10 ** (np.interp(np.log(np.maximum(fr, 1)), np.log(BANDS), g) / 20)
+    y = np.fft.irfft(np.fft.rfft(x, n) * gain, n)[:len(x)]
+    y *= ref_rms / max(active_rms(y), 1e-9)
+    knee = 0.8  # soft limit above the knee, ceiling 0.95
+    over = np.abs(y) > knee
+    y[over] = np.sign(y[over]) * (knee + (0.95 - knee) * np.tanh((np.abs(y[over]) - knee) / (0.95 - knee)))
+    return y, g
+
+
 def main() -> None:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     dry, verify = "--dry" in sys.argv, "--verify" in sys.argv
+    if "--phone" in sys.argv:
+        global CHAIN
+        CHAIN = PHONE_CHAIN
     if not args:
         sys.exit(__doc__)
+    # R55: a take converted at the wrong rate is a different voice (huggingface-it: 88.2 kHz instead of 96, 8 % slow)
+    ref = next((a.split("=", 1)[1].split(",") for a in sys.argv if a.startswith("--ref=")), None)
+    scale_out = MEDIA / "voice" / "voice-scale.json"
+    if ref:
+        p = subprocess.run(["node", str(ROOT / "tools" / "checks" / "voice-scale.mjs"), "--ref", *ref, "--takes", *args,
+                            "--out", str(scale_out)])
+        if p.returncode == 1:
+            sys.exit("voice-scale check failed (R55): the takes are frequency-shifted against the reference; "
+                     "fix their conversion (tools/fix-aac.py) before ingest")
+        if p.returncode != 0:
+            sys.exit("voice-scale check could not run (see above)")
+    else:
+        print("no --ref: the takes are not scale-checked (R55); QA refuses this voice until it is ingested with --ref")
     lines = json.loads((ROOT / "src/data/lines.json").read_text(encoding="utf-8"))
     from faster_whisper import WhisperModel
     model_dir = os.environ.get("AOS_WHISPER_MODEL")
@@ -160,7 +261,7 @@ def main() -> None:
         report.append(f"- {l['id']} ({frac:.0%} of words matched){flag}\n  written: {l['text']}\n  heard:   {spoken}")
 
     rms = [np.sqrt(np.convolve(a * a, np.ones(SR // 100) / (SR // 100), mode="same"))[:: SR // 100] for a in audio]
-    vo, words, sha = [], {}, {}
+    vo, words, sha, xs = [], {}, {}, {}
     out_dir = MEDIA / "app" / "public" / "vo"
     for li, (l, (take, hf, hl)) in enumerate(zip(lines, cuts)):
         t0, t1 = heard[hf][2], heard[hl][3]
@@ -170,6 +271,13 @@ def main() -> None:
         cut_prev = quietest(rms[take], heard[prev[2]][3], t0) if prev and prev[0] == take and heard[prev[2]][3] < t0 else 0.0
         cut_next = quietest(rms[take], t1, heard[nxt[1]][2]) if nxt and nxt[0] == take and heard[nxt[1]][2] > t1 else dur
         s, e = max(cut_prev, t0 - PAD_BEFORE), min(cut_next, t1 + PAD_AFTER)
+        # the recognizer can end a line early (a number heard as one token, "50%", ends before "cento" does):
+        # never cut while the voice is still above the take's noise floor
+        e = min(cut_next, max(e, voice_end(rms[take], t1, cut_next) + PAD_AFTER / 2))
+        # a take's last line keeps its voice to the take's real end: phone takes have a noise floor so high that
+        # voice_end() stops inside an unrecognised last word ("rassegnarsi" heard as "di", huggingface-it L05)
+        if not nxt or nxt[0] != take:
+            e = max(e, min(dur, tail_end(rms[take], t1) + PAD_AFTER))
         x = audio[take][int(s * SR):int(e * SR)].copy()
         fi, fo = int(0.008 * SR), int(0.015 * SR)
         x[:fi] *= np.linspace(0, 1, fi)
@@ -191,9 +299,23 @@ def main() -> None:
             tok.append((lo + pos * w, lo + (pos + 1) * w))
         words[l["id"]] = [[script[k][2], round(max(0.0, ts - s), 2), round(max(0.0, te - s), 2)] for k, (ts, te) in zip(ks, tok)]
         vo.append({"id": l["id"], "file": f"vo/{l['id']}.wav", "seconds": round(len(x) / SR, 3)})
+        xs[l["id"]] = x
+    match = next((a.split("=", 1)[1].split(",") for a in sys.argv if a.startswith("--match=")), None)
+    if match:
+        refs = [xs[i] for i in match]
+        ref_db = band_db(np.mean([ltas(r) for r in refs], axis=0))
+        ref_rms = float(np.mean([active_rms(r) for r in refs]))
+        report += ["", f"Timbre and level matched to {', '.join(match)} (EQ in dB at 125 Hz / 1 kHz / 4 kHz / 6.3 kHz):"]
+        for lid in xs:
+            if lid in match:
+                continue
+            xs[lid], g = match_to(xs[lid], ref_db, ref_rms)
+            at = [int(np.argmin(np.abs(BANDS - f))) for f in (125, 1000, 4000, 6300)]
+            report.append(f"- {lid}: " + " / ".join(f"{g[i]:+.1f}" for i in at))
+    for lid, x in xs.items():
         if not dry:
-            write_wav(out_dir / f"{l['id']}.wav", x)
-            sha[l["id"]] = hashlib.sha256((out_dir / f"{l['id']}.wav").read_bytes()).hexdigest()
+            write_wav(out_dir / f"{lid}.wav", x)
+            sha[lid] = hashlib.sha256((out_dir / f"{lid}.wav").read_bytes()).hexdigest()
     report.append("")
     report.append(f"Total speech: {sum(v['seconds'] for v in vo):.1f} s over {len(vo)} lines")
     text = "\n".join(report) + "\n"
@@ -206,6 +328,10 @@ def main() -> None:
     (data / "vo.json").write_text(json.dumps(vo, indent=1) + "\n", encoding="utf-8")
     (data / "words.json").write_text(json.dumps(words, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     (data / "words.sha256.json").write_text(json.dumps(sha, indent=1) + "\n", encoding="utf-8")
+    # the scale check's receipt, bound to these line WAVs: QA (voice-scale.mjs --receipt) refuses it once they change
+    receipt = json.loads(scale_out.read_text(encoding="utf-8")) if ref else {"skipped": "ingested without --ref"}
+    receipt["lines"] = sha
+    (data / "voice-scale.json").write_text(json.dumps(receipt, indent=1) + "\n", encoding="utf-8")
     if verify:
         bad = 0
         for l in lines:
