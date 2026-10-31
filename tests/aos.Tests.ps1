@@ -3902,6 +3902,17 @@ Describe 'Write guard' {
         }
         @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 0
     }
+    # Codex review of the change above: when git cannot answer (an OneDrive timeout), Get-AosCheckout returns the
+    # nearest folder; a subfolder of a claimed work tree must not pass as "outside git".
+    It 'still blocks a claimed work tree when git discovery fails inside a subfolder' {
+        $src = New-TestFolder (Join-Path $repo 'src')
+        InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosClaim -Path $P -Agent 'codex' -Session 'other' -Note 'working' } | Out-Null
+        Mock Invoke-AosGit -ModuleName aos { [pscustomobject]@{ Code = 1; Out = ''; Err = 'timed out' } }
+        $j = @{ cwd=$src; session_id='s1'; tool_name='Edit'; tool_input=@{ file_path=(Join-Path $src 'a.txt') } } | ConvertTo-Json -Compress
+        $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson $J }
+        $r.Exit | Should -Be 2
+        $r.Stderr | Should -Match 'is held by codex \(other\)'
+    }
     It 'still honours an explicit claim on a folder outside git' {
         $store = New-TestFolder (Join-Path $caseRoot 'plan')
         InModuleScope aos -Parameters @{ P=$store } { param($P) Invoke-AosClaim -Path $P -Agent 'codex' -Session 'other' -Note 'planning' } | Out-Null

@@ -2808,9 +2808,14 @@ function Invoke-AosGuard([string]$Agent, [string]$Event, [string]$InputJson) {
                 $done = @{}
                 foreach ($p in (Get-AosGuardPaths $in)) {
                     $co = Get-AosCheckout $p
+                    # When git cannot answer (an OneDrive timeout) the nearest folder comes back: the work tree is
+                    # still the nearest folder up the tree holding .git (a folder, or a file in worktrees and submodules).
+                    $top = $co
+                    while ($top -and -not (Test-Path -LiteralPath (Join-Path $top '.git'))) { $top = Split-Path -Parent $top }
+                    if ($top) { $co = $top.TrimEnd('\') }
                     if ($done.ContainsKey($co.ToLowerInvariant())) { continue }
                     $done[$co.ToLowerInvariant()] = $true
-                    if (-not (Test-Path -LiteralPath (Join-Path $co '.git'))) {
+                    if (-not $top) {
                         # Outside git (shared memory folder, scratchpads): no auto claim, but an explicit one still holds.
                         $held = $null
                         try { $held = Read-AosClaimFile (Get-AosClaimPath $co) } catch { }

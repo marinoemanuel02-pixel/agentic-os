@@ -10,12 +10,14 @@ don't rewrite the old one: the record of what was rejected is the part that ages
   (read-only, 169K tokens) checked the metrics and the stack. Report: `docs/research/2026-10-31-session-audit.md`;
   evidence in `~/.aos/research/session-audit-20261031`. Sessions that stop mid-work (58 of 156) were mostly the
   operator's stops or PC shutdowns; they are not treated as stack failures.
-- **Guard.** Outside git the guard claimed the nearest folder, so the shared Claude memory folder was claimed 81
-  times and other sessions' memory writes were refused 10 times; no other non-git claim was ever contended.
-  Auto-claims now cover git work trees only; an explicit `aos claim` on any folder is still honoured. Codex
-  proposed file-level claims for non-git paths instead; rejected because every memory write touches
-  `MEMORY.md`, so a one-hour claim on that file would recreate the block, and the Edit tool already refuses
-  a write to a file changed since it was read.
+- **Guard.** Outside git the guard claimed the nearest folder: the shared Claude memory folder saw 42 auto-claims
+  and 29 expired-claim takeovers, and 10 memory writes by other sessions were refused; no other non-git claim was
+  ever contended. Auto-claims now cover git work trees only (the nearest folder holding `.git`, also when git
+  times out); an explicit `aos claim` on any folder is still honoured. Codex proposed file-level claims for
+  non-git paths instead. Not taken for now: both vendors' edit tools already refuse a write to a file changed
+  since it was read, which covers same-file races in a shared store, while a one-hour claim on `MEMORY.md`
+  would block every new memory for that hour (updates to existing notes would still pass). Revisit if a
+  same-file overwrite in a shared store is ever observed.
 - **aos for agent shells.** The shims built on 2026-10-08 (`audit/no-brainers`) were never merged, and the
   "aos not recognized" errors continued. Ported with their 13 tests. A finished branch that never lands is the
   pattern behind it: AGENTS.md and the handoff skill now require naming where finished work lands.

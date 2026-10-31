@@ -81,8 +81,8 @@ Most parallel work is the lead's own subagents, not cross-vendor runs. Claude tr
   continue it with SendMessage rather than spawning a fresh one.
 - A child that works for more than a few minutes writes its results to a file named in the brief as it
   goes. A child stopped by a plan limit or its turn budget returns nothing but may have saved work: read
-  that file before re-running it (2026-10-09: six children ended at the limit; one had written two
-  ledger files over 278 calls).
+  that file before re-running it (the 2026-10-09 research run: five children ended at the limit; one had
+  written two ledger files over 278 calls).
 - Outside a managed run these children share the lead's subscription window and are not registered
   actors: at most three at once, and one writer per checkout. Inside a managed run (an `aos delegate`
   worker, or a coordinator holding a reserved allowance) children stay within the reserved native

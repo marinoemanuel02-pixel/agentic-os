@@ -38,7 +38,8 @@ findings are kept apart below. Evidence and scripts: `~/.aos/research/session-au
   cheap (median 45K input on gpt-6.1-sol, 64K on gpt-6-luna; 106 runs).
 - Claims: 85 refusals in the ledger. 62 were Codex blocked by Codex, all between 10-02 and 10-20 (holders named by
   process id, by a run name, or a coordinator's native child); none since. The live problem was non-git claims: the shared Claude memory
-  folder was claimed 81 times and refused other sessions' memory writes 10 times (10-12 to 10-30); no other non-git
+  folder saw 42 auto-claims and 29 expired-claim takeovers, and 10 memory writes by other sessions were refused
+  (10-12 to 10-30); no other non-git
   claim was ever contended, and those claims were per subfolder anyway.
 - `aos` from agent shells: only the interactive pwsh profile defines it, so Claude's Bash/PowerShell tools and Codex
   exec failed with "aos not recognized" and fell back to long `Import-Module` one-liners. The shims that fix this
@@ -90,7 +91,14 @@ Only Claude flagged:
 - The 62 Codex-on-Codex refusals are historical (none since 10-22), not a live defect.
 
 Disagreement: for non-git paths Codex proposed file-level claims; Claude kept "no auto-claim outside git, explicit
-claims honoured", because every memory write touches `MEMORY.md` and a one-hour claim on it would recreate the block.
+claims honoured": both vendors' edit tools already refuse a write to a file changed since it was read, and a one-hour
+claim on `MEMORY.md` would block every new memory for that hour. Codex's review corrected Claude's first rationale
+("every memory write touches MEMORY.md": updates to existing notes do not). To revisit if a same-file overwrite in a
+shared store is ever observed.
+
+Codex's review of the diff (verdict REVISE, four findings, all fixed): git discovery failing inside a subfolder of a
+claimed work tree could let an edit through (now the nearest folder holding `.git` is the checkout; test added, seen
+red first); the memory-claim count mixed three event types; the rationale above; the child-limit example's count.
 
 ## What changed (branch `claude/stack-upgrade-1031`)
 
