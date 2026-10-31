@@ -3902,6 +3902,13 @@ Describe 'Write guard' {
         }
         @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 0
     }
+    # Codex re-review: trimming the separator off a drive root ("C:\" -> "C:") makes it drive-relative, so a later
+    # lookup can resolve to whatever folder that drive's current directory is.
+    It 'keeps the separator of a drive root as the checkout identity' {
+        $root = [IO.Path]::GetPathRoot($TestDrive)
+        Mock Invoke-AosGit -ModuleName aos { [pscustomobject]@{ Code = 1; Out = ''; Err = 'not a repository' } }
+        InModuleScope aos -Parameters @{ P=$root } { param($P) Get-AosCheckout $P } | Should -BeExactly $root
+    }
     # Codex review of the change above: when git cannot answer (an OneDrive timeout), Get-AosCheckout returns the
     # nearest folder; a subfolder of a claimed work tree must not pass as "outside git".
     It 'still blocks a claimed work tree when git discovery fails inside a subfolder' {

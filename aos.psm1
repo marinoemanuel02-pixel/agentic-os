@@ -2616,11 +2616,18 @@ function Invoke-AosGitWithIdentity([string]$Dir, [string[]]$Arguments, [int]$Tim
 #endregion
 #region claims ----------------------------------------------------------------------------
 
+function Get-AosDirKey([string]$Path) {
+    # A full folder path without its trailing separator, except a drive root: "C:" alone means C's current folder.
+    $full = [System.IO.Path]::GetFullPath($Path)
+    if ($full -match '^[A-Za-z]:\\$') { return $full }
+    return $full.TrimEnd('\')
+}
+
 function Get-AosCheckout([string]$Path) {
     # The git top level holding $Path (a file or folder, existing or about to be created); without git,
     # the nearest existing folder.
     if ([string]::IsNullOrWhiteSpace($Path)) { $Path = (Get-Location).ProviderPath }
-    $full = [System.IO.Path]::GetFullPath($Path).TrimEnd('\')
+    $full = Get-AosDirKey $Path
     $dir = $full
     while ($dir -and -not (Test-Path -LiteralPath $dir -PathType Container)) { $dir = Split-Path -Parent $dir }
     if (-not $dir) { return $full }
@@ -2630,8 +2637,8 @@ function Get-AosCheckout([string]$Path) {
         if ($g.Code -eq 0 -and $g.Out) { $top = ($g.Out -split "`r?`n")[0].Trim().Replace('/', '\') }
     }
     catch { }
-    if ($top) { return [System.IO.Path]::GetFullPath($top).TrimEnd('\') }
-    return [System.IO.Path]::GetFullPath($dir).TrimEnd('\')
+    if ($top) { return (Get-AosDirKey $top) }
+    return (Get-AosDirKey $dir)
 }
 
 function Get-AosClaimKey([string]$Checkout) {
@@ -2812,7 +2819,7 @@ function Invoke-AosGuard([string]$Agent, [string]$Event, [string]$InputJson) {
                     # still the nearest folder up the tree holding .git (a folder, or a file in worktrees and submodules).
                     $top = $co
                     while ($top -and -not (Test-Path -LiteralPath (Join-Path $top '.git'))) { $top = Split-Path -Parent $top }
-                    if ($top) { $co = $top.TrimEnd('\') }
+                    if ($top) { $co = Get-AosDirKey $top }
                     if ($done.ContainsKey($co.ToLowerInvariant())) { continue }
                     $done[$co.ToLowerInvariant()] = $true
                     if (-not $top) {
