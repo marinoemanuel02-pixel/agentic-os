@@ -3654,6 +3654,178 @@ Describe 'Delegation preflight' {
     }
 }
 
+Describe 'Agent shell shims (aos on PATH)' {
+    # Agents run Git Bash, pwsh -NoProfile and Windows PowerShell 5.1, where the profile function does not exist:
+    # 19 sessions failed on "aos not found" and 451 calls imported aos.psm1 by hand (AUDIT.md row 1, 2026-10-08).
+    # Built then on audit/no-brainers but never merged; the 2026-10-31 session audit still found 17 such errors.
+    BeforeEach {
+        $savedBin = $env:AOS_BIN
+        $bin = Join-Path $caseRoot 'local bin'
+        $env:AOS_BIN = $bin
+        $entry = InModuleScope aos { Join-Path $script:Root 'bin\aos.ps1' }
+    }
+    AfterEach { $env:AOS_BIN = $savedBin }
+
+    It 'writes three shims that run bin\aos.ps1 from this checkout' {
+        InModuleScope aos { Sync-AosShims }
+        Test-Path -LiteralPath $entry | Should -BeTrue
+        $ps = [IO.File]::ReadAllText((Join-Path $bin 'aos.ps1'))
+        $ps | Should -Match ([regex]::Escape("& '" + $entry.Replace("'", "''") + "' @args"))
+        $ps | Should -Match 'exit \$LASTEXITCODE'
+        $cmd = [IO.File]::ReadAllText((Join-Path $bin 'aos.cmd'))
+        $cmd | Should -Match 'aos sync'
+        $cmd | Should -Match ([regex]::Escape("-File `"$entry`" %*"))
+        $cmd | Should -Match "`r`n"
+        $sh = [IO.File]::ReadAllText((Join-Path $bin 'aos'))
+        $sh.StartsWith("#!/bin/sh`n") | Should -BeTrue
+        $sh | Should -Not -Match "`r"
+        $sh | Should -Match 'aos sync'
+        $sh | Should -Match ([regex]::Escape("'" + $entry.Replace('\', '/') + "' `"`$@`""))
+    }
+
+    It 'changes nothing on a second sync' {
+        InModuleScope aos { Sync-AosShims }
+        $before = Get-TestTreeState $bin
+        Start-Sleep -Milliseconds 50
+        InModuleScope aos { Sync-AosShims }
+        Get-TestTreeState $bin | Should -BeExactly $before
+    }
+
+    It 'writes nothing in DryRun' {
+        InModuleScope aos { Sync-AosShims -DryRun }
+        Test-Path -LiteralPath $bin | Should -BeFalse
+    }
+
+    It 'leaves a file it did not write alone and warns' {
+        Write-TestFile (Join-Path $bin 'aos') 'someone else'
+        Mock Write-AosWarn -ModuleName aos { }
+        InModuleScope aos { Sync-AosShims }
+        [IO.File]::ReadAllText((Join-Path $bin 'aos')) | Should -BeExactly 'someone else'
+        Should -Invoke Write-AosWarn -ModuleName aos -ParameterFilter { $Text -match 'not written by aos' }
+        Test-Path -LiteralPath (Join-Path $bin 'aos.cmd') | Should -BeTrue
+    }
+
+    It 'replaces its own stale shim and keeps a backup' {
+        Write-TestFile (Join-Path $bin 'aos.cmd') "@echo off`r`nrem Written by aos sync from agentic-os; run aos sync again after moving the checkout.`r`necho old checkout`r`n"
+        InModuleScope aos { Sync-AosShims }
+        [IO.File]::ReadAllText((Join-Path $bin 'aos.cmd')) | Should -Match ([regex]::Escape($entry))
+        @(Get-ChildItem -LiteralPath $env:AOS_BACKUPS -Recurse -Filter 'aos.cmd').Count | Should -BeGreaterThan 0
+    }
+
+    It 'reports missing, stale and current shims' {
+        (InModuleScope aos { Test-AosShims }).Ok | Should -BeFalse
+        InModuleScope aos { Sync-AosShims }
+        (InModuleScope aos { Test-AosShims }).Ok | Should -BeTrue
+        Write-TestFile (Join-Path $bin 'aos') "#!/bin/sh`n# Written by aos sync`nexit 0`n"
+        (InModuleScope aos { Test-AosShims }).Ok | Should -BeFalse
+    }
+
+    It 'leaves a file containing the ownership phrase elsewhere alone' {
+        $text = "#!/bin/sh`n# personal shim`n# keep me`n# Written by aos sync from agentic-os; run aos sync again after moving the checkout.`necho Written by aos sync`n"
+        Write-TestFile (Join-Path $bin 'aos') $text
+        Mock Write-AosWarn -ModuleName aos { }
+        InModuleScope aos { Sync-AosShims }
+        [IO.File]::ReadAllText((Join-Path $bin 'aos')) | Should -BeExactly $text
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Text -match 'not written by aos' }
+    }
+
+    It 'returns one on module import failure with one stderr line' {
+        $alone = Join-Path $caseRoot 'bin\aos.ps1'
+        Write-TestFile $alone ([IO.File]::ReadAllText($entry))
+        # Read raw stderr: PS 5.1 turns native stderr into terminating errors under Pester.
+        $info = New-Object System.Diagnostics.ProcessStartInfo
+        $info.FileName = (Get-Process -Id $PID).Path
+        $info.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $alone + '" help'
+        $info.UseShellExecute = $false
+        $info.CreateNoWindow = $true
+        $info.RedirectStandardError = $true
+        $info.RedirectStandardOutput = $true
+        $process = [Diagnostics.Process]::Start($info)
+        try {
+            $stderr = $process.StandardError.ReadToEnd()
+            $stdout = $process.StandardOutput.ReadToEnd()
+            $process.WaitForExit()
+            $process.ExitCode | Should -Be 1
+            $stdout | Should -BeNullOrEmpty
+            @($stderr.TrimEnd("`r", "`n") -split '\r?\n').Count | Should -Be 1
+            $stderr | Should -Match '^aos: module import failed:'
+        } finally { $process.Dispose() }
+    }
+
+    It 'round trips note metacharacters through the PowerShell shim' {
+        InModuleScope aos { Sync-AosShims }
+        $savedCoord = $env:AOS_COORD
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        try {
+            $call = Join-Path $caseRoot 'call-aos.ps1'
+            Write-TestFile $call ("& '" + (Join-Path $bin 'aos.ps1').Replace("'", "''") + "' note 'p|q' 'say `"hi`" & bye' --as claude")
+            & (Get-Process -Id $PID).Path -NoProfile -ExecutionPolicy Bypass -File $call
+            $LASTEXITCODE | Should -Be 0
+            $event = Get-Content (Join-Path $env:AOS_COORD 'ledger.jsonl') | ConvertFrom-Json
+            $event.text | Should -BeExactly 'p|q say "hi" & bye'
+            $event.agent | Should -BeExactly 'claude'
+        } finally { $env:AOS_COORD = $savedCoord }
+    }
+
+    It 'runs from brain sync and passes DryRun through' {
+        foreach ($f in 'Set-AosJunction', 'Sync-AosClaudeSkills', 'Set-AosManagedBlock', 'Sync-AosCodexAgents', 'Repair-AosCcHooks',
+                       'Sync-AosCodexHooks', 'Sync-AosClaudeSettings', 'Sync-AosCodexProfiles', 'Sync-AosNativeRoles', 'Sync-AosLocalState',
+                       'Sync-AosPlaces', 'Sync-AosAgentModel', 'Sync-AosPi', 'Sync-AosMcp', 'Sync-AosProfile', 'Sync-AosShims') { Mock $f -ModuleName aos { } }
+        InModuleScope aos { Sync-AosBrain -DryRun }
+        Should -Invoke Sync-AosShims -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
+    }
+
+    It 'bin\aos.ps1 runs the command and returns its exit code' {
+        $shell = (Get-Process -Id $PID).Path
+        & $shell -NoProfile -ExecutionPolicy Bypass -File $entry delegate show no-such-id *> $null
+        $LASTEXITCODE | Should -Be 1
+        & $shell -NoProfile -ExecutionPolicy Bypass -File $entry help *> $null
+        $LASTEXITCODE | Should -Be 0
+    }
+
+    It 'resolves and runs from cmd through aos.cmd' {
+        InModuleScope aos { Sync-AosShims }
+        $bat = Join-Path $caseRoot 'call aos.cmd'
+        [IO.File]::WriteAllText($bat, "@echo off`r`nset `"PATH=$bin;%PATH%`"`r`ncall aos delegate show no-such-id >nul 2>&1`r`nexit /b %errorlevel%`r`n")
+        & cmd.exe /d /c "`"$bat`""
+        $LASTEXITCODE | Should -Be 1
+    }
+
+    It 'resolves and runs from Git Bash through the sh shim' {
+        $git = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        $bash = $null
+        # git.exe sits in Git\cmd, or in Git\mingw64\bin when PATH comes from Git Bash; bash.exe is in Git\bin.
+        if ($git) {
+            $dir = Split-Path -Parent $git.Source
+            foreach ($i in 1..3) {
+                if (Test-Path -LiteralPath (Join-Path $dir 'bin\bash.exe')) { $bash = Join-Path $dir 'bin\bash.exe'; break }
+                $dir = Split-Path -Parent $dir
+            }
+        }
+        if (-not $bash) { Set-ItResult -Skipped -Because 'Git Bash not found'; return }
+        InModuleScope aos { Sync-AosShims }
+        # A script file, not bash -c: Windows PowerShell 5.1 drops embedded double quotes from native arguments.
+        $script = Join-Path $caseRoot 'call-aos.sh'
+        [IO.File]::WriteAllText($script, ('export PATH="$(cygpath -u ''' + $bin + '''):$PATH"' + "`n" +
+            'command -v aos >/dev/null || echo missing' + "`n" + 'aos delegate show no-such-id >/dev/null 2>&1' + "`n" + 'echo "rc=$?"' + "`n"))
+        $out = & $bash $script
+        ($out -join "`n") | Should -Not -Match 'missing'
+        ($out -join "`n") | Should -Match 'rc=1'
+
+        $savedCoord = $env:AOS_COORD
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        try {
+            Write-TestFile $script ('export PATH="$(cygpath -u ''' + $bin + '''):$PATH"' + "`n" +
+                'aos note ''p|q'' ''say "hi" & bye'' --as claude' + "`n")
+            & $bash $script
+            $LASTEXITCODE | Should -Be 0
+            $event = Get-Content (Join-Path $env:AOS_COORD 'ledger.jsonl') | ConvertFrom-Json
+            $event.text | Should -BeExactly 'p|q say "hi" & bye'
+            $event.agent | Should -BeExactly 'claude'
+        } finally { $env:AOS_COORD = $savedCoord }
+    }
+}
+
 Describe 'Write guard' {
     BeforeEach {
         $env:AOS_COORD = Join-Path $caseRoot 'coord'

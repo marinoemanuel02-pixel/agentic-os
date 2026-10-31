@@ -45,6 +45,8 @@ $env:CODEX_HOME = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-test-codex-'
 $env:AOS_CLAUDE_HOME = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-test-claude-' + [guid]::NewGuid().ToString('N'))
 # Same for Pi's agent directory: a test that reaches Sync-AosPi unmocked must never touch ~/.pi/agent.
 $env:PI_CODING_AGENT_DIR = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-test-pi-' + [guid]::NewGuid().ToString('N'))
+# And the aos shims: a brain sync under test must never write ~\.local\bin, which is on the real PATH.
+$env:AOS_BIN = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-test-bin-' + [guid]::NewGuid().ToString('N'))
 
 $config = New-PesterConfiguration
 $config.Run.Path = $PSScriptRoot

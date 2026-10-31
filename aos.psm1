@@ -808,6 +808,59 @@ function Sync-AosClaudeSkills {
     }
 }
 
+function Get-AosBinDir {
+    # Where aos sync puts the aos shims: ~\.local\bin, already on the user PATH (the Claude installer's folder).
+    # AOS_BIN redirects it (the test suite uses a temp dir).
+    if ($env:AOS_BIN) { return $env:AOS_BIN }
+    return (Join-Path $HOME '.local\bin')
+}
+
+function Get-AosShimSpecs {
+    # Agents run Git Bash, pwsh -NoProfile and Windows PowerShell 5.1, where the profile function does not
+    # exist. pwsh 7 resolves aos.ps1 before aos.cmd and preserves arguments. Windows PowerShell 5.1
+    # with Restricted policy resolves aos.ps1 but refuses it: aos lives in pwsh; explicit aos.cmd still works.
+    # The extensionless sh script serves Git Bash, using pwsh or falling back to Windows PowerShell.
+    $entry = Join-Path $script:Root 'bin\aos.ps1'
+    $mark = 'Written by aos sync from agentic-os; run aos sync again after moving the checkout.'
+    $run = "-NoProfile -ExecutionPolicy Bypass -File `"$entry`" %*"
+    # goto, not an if (...) block: an argument with a ")" would end the block early.
+    $cmd = (@('@echo off', "rem $mark", 'rem cmd cannot carry metacharacters intact; use aos.ps1 from pwsh or aos from Git Bash.', 'where pwsh >nul 2>nul || goto ps51', "pwsh $run", 'exit /b %errorlevel%',
+              ':ps51', "powershell $run", 'exit /b %errorlevel%') -join "`r`n") + "`r`n"
+    $q = "'" + $entry.Replace('\', '/').Replace("'", "'\''") + "'"
+    $sh = (@('#!/bin/sh', "# $mark", 'if command -v pwsh >/dev/null 2>&1; then',
+             "  exec pwsh -NoProfile -ExecutionPolicy Bypass -File $q `"`$@`"", 'fi',
+             "exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File $q `"`$@`"") -join "`n") + "`n"
+    $ps = "# $mark`r`n& '" + $entry.Replace("'", "''") + "' @args`r`nexit `$LASTEXITCODE`r`n"
+    return @([pscustomobject]@{ Name = 'aos.cmd'; Text = $cmd; Mark = "rem $mark" },
+             [pscustomobject]@{ Name = 'aos'; Text = $sh; Mark = "# $mark" },
+             [pscustomobject]@{ Name = 'aos.ps1'; Text = $ps; Mark = "# $mark" })
+}
+
+function Sync-AosShims([switch]$DryRun) {
+    $dir = Get-AosBinDir
+    foreach ($s in (Get-AosShimSpecs)) {
+        $path = Join-Path $dir $s.Name
+        $have = $null
+        if (Test-Path -LiteralPath $path) { $have = [System.IO.File]::ReadAllText($path) }
+        if ($have -eq $s.Text) { Write-AosOk "shim $path"; continue }
+        if ($null -ne $have -and @($have -split '\r?\n' | Select-Object -First 3) -cnotcontains $s.Mark) { Write-AosWarn "$path exists and was not written by aos sync; left alone"; continue }
+        if ($DryRun) { Write-AosDry "would write $path"; continue }
+        if ($null -ne $have) { Backup-AosFile $path | Out-Null }
+        Write-AosText -Path $path -Text $s.Text
+        Write-AosOk "shim $path -> $(Join-Path $script:Root 'bin\aos.ps1')"
+    }
+}
+
+function Test-AosShims {
+    $problems = @()
+    foreach ($s in (Get-AosShimSpecs)) {
+        $path = Join-Path (Get-AosBinDir) $s.Name
+        if (-not (Test-Path -LiteralPath $path)) { $problems += "$path missing" }
+        elseif ([System.IO.File]::ReadAllText($path) -ne $s.Text) { $problems += "$path stale or not written by aos" }
+    }
+    return [pscustomobject]@{ Ok = ($problems.Count -eq 0); Problems = $problems }
+}
+
 function Sync-AosBrain([switch]$DryRun) {
     $root = $script:Root
     $agentsHome = Join-Path $root 'agents-home'
@@ -854,6 +907,9 @@ function Sync-AosBrain([switch]$DryRun) {
 
     Write-AosStep 'Shell integration (the aos command in new terminals)'
     Sync-AosProfile -DryRun:$DryRun
+
+    Write-AosStep 'aos for agent shells (Git Bash, pwsh -NoProfile, cmd: shims in ~\.local\bin)'
+    Sync-AosShims -DryRun:$DryRun
 }
 
 function Install-AosBridges([switch]$DryRun) {
@@ -1475,6 +1531,9 @@ function Get-AosStatus {
         if ((Test-Path -LiteralPath $p.Target) -and ([System.IO.File]::ReadAllText($p.Target) -eq $p.Text)) { Write-AosOk "codex --profile $($p.Name)" }
         else { Write-AosWarn "codex --profile $($p.Name): ~/.codex/$($p.Name).config.toml missing or stale (aos sync)" }
     }
+    $shims = Test-AosShims
+    if ($shims.Ok) { Write-AosOk "aos for agent shells: shims in $(Get-AosBinDir)" }
+    else { foreach ($p in $shims.Problems) { Write-AosWarn "aos shim: $p (aos sync)" } }
     foreach ($d in @(Get-ChildItem -LiteralPath (Join-Path $root 'agents-home\skills') -Directory -ErrorAction SilentlyContinue)) {
         if (Test-Path -LiteralPath (Join-Path $d.FullName 'SKILL.md')) { Write-AosOk "skill: $($d.Name)" }
         elseif ($d.Name -eq 'synced') { Write-AosWarn 'stray copy of the Claude app''s synced skills in the repo: restart the Claude app, then aos sync' }

@@ -48,7 +48,8 @@ How the pieces connect:
 3. Do the one-time steps it prints: sign in to Claude Code (`claude auth login`), `gh auth login`,
    restart the Claude and Codex apps (they predate the new PATH), then `$cc:setup` in Codex.
    Use PowerShell 7 (`pwsh`): Windows PowerShell 5.1 blocks profile scripts by default, so `aos`
-   is only wired into `pwsh` unless you change that policy yourself.
+   is only wired into `pwsh` unless you change that policy yourself. Agent shells (Git Bash,
+   `pwsh -NoProfile`, cmd) reach it through the shims `aos sync` writes to `~\.local\bin`.
 4. Open a new `pwsh` window and run `aos status`. Every line should be `ok`.
 
 Everything is idempotent: re-running changes nothing unless something drifted. Your existing
@@ -227,6 +228,7 @@ Candidates for later layers, each with the reason to wait:
 agentic-os/
   bootstrap.ps1          entry point (layers, -DryRun)
   aos.psm1               the aos command; all logic lives here
+  bin/aos.ps1            entry point; aos sync puts aos.ps1, aos.cmd and an sh shim in ~\.local\bin
   packages.json          winget / npm / VS Code extensions per layer
   agents-home/           becomes ~/.agents (junction)
     AGENTS.md            the global contract for both agents
