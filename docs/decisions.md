@@ -3,6 +3,33 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-10-31 - Session audit: guard scope, aos for agent shells, shorts QA, long-work guidance
+
+- **Evidence.** Two independent passes over the same package: Claude measured 156 Claude sessions, 24 subagent
+  transcripts, 178 Codex rollouts (10-25..10-30), 135 delegation receipts and the ledger since 09-27; Codex
+  (read-only, 169K tokens) checked the metrics and the stack. Report: `docs/research/2026-10-31-session-audit.md`;
+  evidence in `~/.aos/research/session-audit-20261031`. Sessions that stop mid-work (58 of 156) were mostly the
+  operator's stops or PC shutdowns; they are not treated as stack failures.
+- **Guard.** Outside git the guard claimed the nearest folder, so the shared Claude memory folder was claimed 81
+  times and other sessions' memory writes were refused 10 times; no other non-git claim was ever contended.
+  Auto-claims now cover git work trees only; an explicit `aos claim` on any folder is still honoured. Codex
+  proposed file-level claims for non-git paths instead; rejected because every memory write touches
+  `MEMORY.md`, so a one-hour claim on that file would recreate the block, and the Edit tool already refuses
+  a write to a file changed since it was read.
+- **aos for agent shells.** The shims built on 2026-10-08 (`audit/no-brainers`) were never merged, and the
+  "aos not recognized" errors continued. Ported with their 13 tests. A finished branch that never lands is the
+  pattern behind it: AGENTS.md and the handoff skill now require naming where finished work lands.
+- **Shorts QA.** `finish.sh` printed stream and loudness numbers and the template told agents to check by hand;
+  the last three films were shorts and two earlier ones never ran full QA (Codex's finding). `finish.sh` now runs
+  the static gates and `tools/checks/delivery.mjs` (qa.sh's limits at `QA_SIZE`) and exits 1 on failure.
+  qa.sh keeps its own copy of those limits for now; moving it onto delivery.mjs is a separate change.
+- **Guidance.** Hand off at a stage boundary past ~400K context (35 sessions passed it, 19 passed 700K); long
+  children and Codex write stages save intermediate results, read before any re-run; never resend a refused
+  command unchanged. The frontier's characters `best` moved from the stills-judged `Person.tsx` (rejected by
+  the operator in six verdicts) to the accepted `final-v20` Toon cast; moving dimensions need clip evidence.
+- **Rejected.** Raising actor caps, mandating more subagents, a smaller default model, another orchestration
+  layer (Codex agreed: no evidence of benefit); blanket fixes for operator-stopped sessions (checkpoints instead).
+
 ## 2026-10-29 - aos test runs Python and Node suites once, under PowerShell 7
 
 - 35 Pester tests only launch `python -m unittest` or `node --test`; those suites pick their own shell
