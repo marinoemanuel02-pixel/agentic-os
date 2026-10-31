@@ -50,7 +50,7 @@ def clip_entry(old: dict, sid: str, spec: dict) -> dict:
 
 
 def exposure(clip: Path, n: int, png: Path) -> tuple[float, Path]:
-    """Mean luma of the clip's middle frame (ffmpeg signalstats); the PNG is kept for the contact sheet."""
+    """90th-percentile luma (signalstats YHIGH) of the clip's middle frame; the PNG is kept for the contact sheet."""
     png.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", str(clip), "-vf", rf"select=eq(n\,{n // 2})",
                     "-vframes", "1", str(png)], check=True)
@@ -160,7 +160,7 @@ def main() -> None:
 
 
 def gate(sid: str, clip: Path, n: int, bad: list) -> float:
-    """Exposure gate (R50): mean luma of the clip's middle frame must lie within LUMA_MIN..LUMA_MAX."""
+    """Exposure gate (R50): 90th-percentile luma of the clip's middle frame must lie within LUMA_MIN..LUMA_MAX."""
     luma, _ = exposure(clip, n, MEDIA / "renders" / "mid" / f"{sid}.png")
     if not LUMA_MIN <= luma <= LUMA_MAX:
         bad.append(sid)

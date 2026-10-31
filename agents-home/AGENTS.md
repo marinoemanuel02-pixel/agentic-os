@@ -43,9 +43,14 @@ request, on both subscriptions.
 5. Report exactly what you ran, what passed, and what you skipped and why. "Nothing found" is a
    valid result — don't pad it. A crashed tool or unreachable reviewer is a failure, not a clean result.
 6. Commit early, on a branch. Uncommitted work that exists on one machine is the cheapest loss to prevent.
+   Finished work is merged where the next session runs, or the report names its branch and target.
 7. Never write secrets into files, commits, logs or chat. Keys live in the Windows secret store
    (`aos secret`). If you see a secret in plaintext, say where — don't repeat it.
 8. Don't store absolute paths in repos; resolve them at run time (`git rev-parse --show-toplevel`).
+9. Never resend a failed or refused command unchanged: after the second identical failure, change the
+   command or the route. Wait for a background job's notification instead of polling its output.
+10. Context is re-read every turn: at a stage boundary past about 400K tokens, hand off (`handoff`
+   skill) and continue fresh, unless only a few steps remain.
 
 ## Writing about the operator's own material
 

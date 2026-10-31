@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Write HANDOFF.md so another session - often the other vendor (Claude Code or Codex) - can continue this work cold, from files alone. Use when a usage limit is near or hit, when switching vendors, before ending a long session, or when the user says "hand off", "handoff", "switch to codex", "switch to claude", "save state", "out of tokens", "hit the limit". Not for describing finished work (that belongs in the commit message or PR).
+description: Write HANDOFF.md so another session - often the other vendor (Claude Code or Codex) - can continue this work cold, from files alone. Use when a usage limit is near or hit, when switching vendors, when context passes about 400K tokens at a stage boundary, before ending a long session, or when the user says "hand off", "handoff", "switch to codex", "switch to claude", "save state", "out of tokens", "hit the limit". Not for describing finished work (that belongs in the commit message or PR).
 ---
 
 # Handoff
@@ -24,6 +24,9 @@ Goal: the next agent resumes from `HANDOFF.md` alone, with no chat history.
    - **State** — branch; what is committed; what is uncommitted (from step 2); what works right now.
    - **Verified** — commands you actually ran in this session, with their result. Nothing else.
    - **Not verified** — assumptions, checks you did not run, open questions. Write "none" only if true.
+   - **Branches** — every branch or worktree this work created that is not merged where the next
+     session runs: its last commit and where it should land. A fix left on an unnamed branch is lost
+     (the `aos` shims of 2026-10-08 sat unmerged for three weeks while the error they fixed recurred).
    - **Next steps** — numbered, smallest first, with exact commands and file paths.
    - **Traps** — what wasted time: flaky tests, wrong paths, environment quirks.
    - **Written by** — vendor and local date/time, e.g. `Claude Code, 2026-09-27 18:40`.
@@ -72,3 +75,4 @@ becomes accepted by handoff alone.
 ## Log
 
 - 2026-09-27 — created with the agentic-os setup.
+- 2026-10-31 — context trigger and a Branches section, from the session audit.

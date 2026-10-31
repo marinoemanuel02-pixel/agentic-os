@@ -63,8 +63,8 @@ Do not finish a coordinator while a launched child remains unconfirmed.
 ## In-session subagents (Claude Agent tool, Codex spawn)
 
 Most parallel work is the lead's own subagents, not cross-vendor runs. Claude transcripts from
-2026-10-15 to 10-29 show 12 of 120 sessions using them, 32 of 40 calls as `general-purpose`, and
-18 inheriting the lead's model. Route each child by its job:
+2026-09-27 to 10-31 show 11 of 156 sessions using them, 18 of 25 calls as `general-purpose`, and
+10 inheriting the lead's model. Route each child by its job:
 
 | Job | Child | Rule |
 |---|---|---|
@@ -79,6 +79,10 @@ Most parallel work is the lead's own subagents, not cross-vendor runs. Claude tr
 - Run children you don't need for the next step in the background and wait for the notification.
 - One job per child. Claude stops a child at its turn budget and a cut-off child returns nothing:
   continue it with SendMessage rather than spawning a fresh one.
+- A child that works for more than a few minutes writes its results to a file named in the brief as it
+  goes. A child stopped by a plan limit or its turn budget returns nothing but may have saved work: read
+  that file before re-running it (2026-10-09: six children ended at the limit; one had written two
+  ledger files over 278 calls).
 - Outside a managed run these children share the lead's subscription window and are not registered
   actors: at most three at once, and one writer per checkout. Inside a managed run (an `aos delegate`
   worker, or a coordinator holding a reserved allowance) children stay within the reserved native
@@ -93,6 +97,25 @@ lead); only that one is independent. `dispatching-parallel-agents`
 investigations go to `aos-explore`; parallel fixes need separate worktrees. `requesting-code-review`
 uses `aos-verify` and reuses a review of the same revision. Plans under about an hour, or whose tasks
 share files, run inline with `executing-plans`.
+
+## Long work: context, checkpoints and partial results
+
+Measured 2026-09-27 to 10-31 (`docs/research/2026-10-31-session-audit.md`; 156 Claude sessions,
+178 Codex rollouts, 135 delegation receipts). Treat the figures as heuristics, not savings claims.
+
+- Context is re-read every turn: 35 Claude sessions passed 400K tokens and 19 passed 700K. At a stage
+  boundary past about 400K, write `HANDOFF.md` and continue in a fresh session unless only a few steps
+  remain; note the context size in the handoff so the next audit can compare like with like.
+- Codex write stages on the Riema site took 12-21 M input tokens each, about 97 % of it cached. Give a
+  substantial write one acceptance unit, an intermediate-results file and `--max-input`; larger work
+  becomes stages that each end in a commit.
+- A delegate or child stopped by a limit, a turn budget or a shutdown may still have written files: read
+  its worktree and output file before re-running. A partial result is evidence, never accepted work.
+- Many sessions end mid-work because the operator stopped them or the PC shut down. That is not a stack
+  failure; the defence is the same as for limits: commit and write outputs as you go.
+- Never resend a refused or failed command unchanged; after the second identical failure, change the
+  command or the route. Wait for a background job's notification rather than reading its output file
+  in a loop (47 such reads in 13 sessions).
 
 ## Free resources first (`aos-pool` MCP tools)
 

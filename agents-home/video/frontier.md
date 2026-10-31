@@ -5,12 +5,19 @@ preflight` inserts this file. Rewrite an entry at every retro (never append hist
 starts from each `best`, compares its look-lab frames against it side by side, and passes a dimension only when
 both vendors, blind, judge the new frame better. A gap is written as a target, not as a fault.
 
+Each `best` names the film's tag or commit and what judged it. A dimension that moves (acting, motion, timing,
+sound) is judged on a clip or the film, never on stills alone: the 2026-10-26 entry below came from stills, and the
+operator then rejected that cast in six verdicts (v8-v16) before accepting a different one.
+
 ## Characters and acting
-- best: pauseai-it (2026-10-26), a 2D cast in Remotion: `src/lib/Person.tsx` (lids, pupils with catch-lights, brows,
-  mouth shapes, jointed arms, `handPos()` so props and leashes attach to hands) and `src/lib/Mind.tsx` (one-eyed
-  creature with breathing lobes and an unreadable inside). Judged better than alignment-3's Pip blind by Codex and by
-  Claude (interaction and acting read in stills).
-- how: SVG rig as pure functions of the frame, poses as props, blinks/breathe/lag from motion.ts.
+- best: pauseai-it tag `final-v20` (accepted by the operator on the moving film, both formats, 2026-10-29): the drawn
+  cast in `src/lib/Toon.tsx`, `ToonHead.tsx`, `hands.ts` and `ToonPerson.tsx` (Codex's design B from v15, in Rational
+  Animations' sober register: muted palette from the scene, thin even line, about seven heads tall, profile-line
+  faces, two-segment limbs solved per joint; rig tests in `tools/checks/toon-rig.test.mjs`). Not yet in the template.
+  Superseded: `Person.tsx` (2026-10-26), judged better than alignment-3's Pip from stills by both vendors, rejected
+  by the operator on the film. `src/lib/Mind.tsx` (one-eyed creature with breathing lobes) was not part of that verdict.
+- how: SVG rig as pure functions of the frame, poses as props, blinks/breathe/lag from motion.ts; the look set
+  against operator-named reference frames (Rational Animations) before production.
 - next: characters that change shape language with emotion (squash, stretch, overlap) and hands that grip.
 - try: a pose library per character and a two-character contact helper (holding, pulling, handing over).
 ## Motion
