@@ -103,10 +103,11 @@ edit.json. These still read plan.ts, so on a short they describe the template's 
 - `tools/package-outputs.mts`: SRT and chapters from the plan's slots; use `tools/srt.py`.
 - `tools/checks/joins.mts`: checks the poses of the plan's shots.
 
-Until they read edit.json, finish a short with `bash tools/finish.sh <version>` and check by hand what qa.sh measures,
-as huggingface-it did (stream format with ffprobe, loudness and true peak with ebur128, blackdetect, freezedetect),
-plus the captions inside the duration and the static gates (`claims.mjs`, `screen-text.mjs`, `type-size.mjs`,
-`voice-scale.mjs --receipt src/data/voice-scale.json --voice src/data/words.sha256.json`); review with edit-sheets.py.
+Until they read edit.json, finish a short with `bash tools/finish.sh <version>`. It renders and writes the outputs, then
+runs the static gates (currency as in qa.sh, `claims.mjs`, `screen-text.mjs`, `type-size.mjs`, `voice-scale.mjs`) and
+`tools/checks/delivery.mjs` (stream format at `QA_SIZE` from qa.env, default 1080x1920; duration, loudness, true peak,
+black and frozen frames, captions inside the duration), writes `qa/report.md` and exits 1 on any failure, keeping the
+outputs. Fix the failure and finish again; do not pass a short on manual numbers. Review with edit-sheets.py.
 
 ## Done means
 
