@@ -3717,6 +3717,27 @@ Describe 'Write guard' {
         InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'session-end' -InputJson $J } | Out-Null
         @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 1
     }
+    # Session audit 2026-10-31: outside git the guard claimed the nearest folder, so the shared Claude memory
+    # folder was claimed 81 times and refused other sessions' memory writes 10 times; no other non-git claim was
+    # ever contended. A checkout is a git work tree; folders outside one are not auto-claimed.
+    It 'does not claim a folder outside git, so a second session can write there too' {
+        $store = New-TestFolder (Join-Path $caseRoot 'memory')
+        foreach ($s in 's1', 's2') {
+            $j = @{ cwd=$store; session_id=$s; tool_name='Write'; tool_input=@{ file_path=(Join-Path $store 'note.md') } } | ConvertTo-Json -Compress
+            $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson $J }
+            $r.Exit | Should -Be 0
+            $r.Stderr | Should -BeNullOrEmpty
+        }
+        @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 0
+    }
+    It 'still honours an explicit claim on a folder outside git' {
+        $store = New-TestFolder (Join-Path $caseRoot 'plan')
+        InModuleScope aos -Parameters @{ P=$store } { param($P) Invoke-AosClaim -Path $P -Agent 'codex' -Session 'other' -Note 'planning' } | Out-Null
+        $j = @{ cwd=$store; session_id='s1'; tool_name='Edit'; tool_input=@{ file_path=(Join-Path $store 'a.md') } } | ConvertTo-Json -Compress
+        $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson $J }
+        $r.Exit | Should -Be 2
+        $r.Stderr | Should -Match 'is held by codex \(other\)'
+    }
     It 'claims both checkouts named by Codex apply_patch including an accented folder' {
         $other = New-TestFolder (Join-Path $caseRoot ([char]0x00e9 + 'cole repo'))
         & git -C $other init -q

@@ -2751,6 +2751,17 @@ function Invoke-AosGuard([string]$Agent, [string]$Event, [string]$InputJson) {
                     $co = Get-AosCheckout $p
                     if ($done.ContainsKey($co.ToLowerInvariant())) { continue }
                     $done[$co.ToLowerInvariant()] = $true
+                    if (-not (Test-Path -LiteralPath (Join-Path $co '.git'))) {
+                        # Outside git (shared memory folder, scratchpads): no auto claim, but an explicit one still holds.
+                        $held = $null
+                        try { $held = Read-AosClaimFile (Get-AosClaimPath $co) } catch { }
+                        if ($null -ne $held -and (Test-AosClaimLive $held) -and -not ($held['agent'] -eq $Agent -and $held['session'] -eq $session)) {
+                            $res.Exit = 2
+                            $res.Stderr = 'aos: ' + (Format-AosClaimHolder $held) + ' Do not edit here; coordinate (aos who) or use a worktree.'
+                            break
+                        }
+                        continue
+                    }
                     $r = Invoke-AosClaim -Path $co -Agent $Agent -Session $session -TtlMinutes 60 -Note 'auto (first edit)' -KeepNote
                     if (-not $r.Ok) {
                         if ($null -eq $r.Holder) { throw $r.Message }
