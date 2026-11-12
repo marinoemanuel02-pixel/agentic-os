@@ -1,6 +1,6 @@
 # Generated video as a material source: design
 
-2026-11-12. Draft. First step only: more platforms will be tested before anything larger is built.
+2026-11-12. Approved by the operator for planning. First step only: more platforms will be tested before anything larger is built.
 Evidence: Flow and Kling spikes, `1-Projects/videos/flow-spike/` (working files `~/.aos/video/flow-spike`).
 
 ## Why
@@ -88,7 +88,8 @@ true, or when `monetized` is true and `commercial` is not `yes`. Watermarked row
 
 The skill is linked into `~/.claude` by `aos sync`, so the change gets a Codex review first (repo rule).
 
-## Open question
+## Monetization
 
-Which films count as monetized? It decides whether Kling's free output is usable and whether `commercial: unknown`
-(Flow today) blocks. Until answered, `monetized` defaults to false per film and is set when the film is briefed.
+Operator decision (2026-11-12): films are treated as not monetized, so `monetized` defaults to false and every tested
+platform is usable (watermarks stay visible). A film that later earns money sets `monetized: true` in its
+`sourcing.json`; the gate then admits only `commercial: yes` rows.
