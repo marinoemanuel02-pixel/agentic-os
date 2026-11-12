@@ -21,8 +21,9 @@ page says they reset.
 1. **Terms first.** Before a platform's first use in a film, read its terms on automated use and on commercial use of
    free-plan output; note the URL and date. If they forbid automated access, do not drive it: write a prompt sheet
    (keyframes, prompt, seconds, aspect) for the operator instead.
-2. **Keyframes from the film's code.** Render the frame before and the frame after the generated shot as PNG stills
-   (`tools/still.sh`), 1280x720 (720x1280 vertical).
+2. **Keyframes from the film's code.** Render the last frame of the shot before and the first frame of the shot after
+   (`tools/still.sh <frame> <CompositionId>`, film resolution), then scale to the platforms' 1280x720 (720x1280
+   vertical): `magick in.png -resize 1280x720 out.png`.
 3. **Generate.** Open the platform, check the credits it shows, follow its recipe. Write the prompt from the film's
    style lock: locked-off camera unless the shot needs a move, no text, same background, and ask for the motion to
    resolve into the last frame (in the 2026-11-12 spikes, one take per platform, Flow faded the target in and Kling
