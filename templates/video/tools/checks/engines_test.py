@@ -77,6 +77,23 @@ class EngineRenders(unittest.TestCase):
         log = (self.film.media / "renders" / "render-log.jsonl").read_text(encoding="utf-8")
         self.assertIn('"engine": "cmd"', log)
 
+    def test_a_rendered_engine_clip_replaces_a_stale_animatic_still_and_keeps_hand_set_fields(self):
+        # merge of the engines branch with huggingface-it's clip_entry(): the Blender path dropped the animatic
+        # still, the engine path kept it, so a Clip that prefers the still would play the picture, not the render
+        media = self.film.dir / "src" / "data" / "media.json"
+        media.write_text(json.dumps({"S01": {"still": "stills/S01.png", "tag": "Source: lab", "gain": 1.2}}), encoding="utf-8")
+        r = self.film.run("S01")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        row = self.film.media_row("S01")
+        self.assertNotIn("still", row)
+        self.assertEqual((row["clip"], row["tag"], row["gain"], row["engine"]), ("clips/S01.mp4", "Source: lab", 1.2, "cmd"))
+        # a cache hit that restores a lost clip row drops the still the same way
+        media.write_text(json.dumps({"S01": {"still": "stills/S01.png", "tag": "Source: lab"}}), encoding="utf-8")
+        self.assertIn("unchanged", self.film.run("S01").stdout)
+        row = self.film.media_row("S01")
+        self.assertNotIn("still", row)
+        self.assertEqual((row["clip"], row["tag"]), ("clips/S01.mp4", "Source: lab"))
+
     def test_unchanged_inputs_skip_and_a_changed_input_renders_again(self):
         self.assertEqual(self.film.run("S01").returncode, 0)
         self.assertIn("unchanged", self.film.run("S01").stdout)

@@ -203,8 +203,7 @@ def render_engine(sid, engine, spec, n, scale, repeat_k, out, partial, media_pat
     if "--force" not in sys.argv and have.get("key") == key and have.get("frames", 0) >= n and out.exists():
         print(f"{sid}: unchanged ({have['frames']} frames, need {n}), skipped")
         if media.get(sid, {}).get("clip") != f"clips/{sid}.mp4":  # a lost or edited row is restored on a hit
-            media[sid] = {**media.get(sid, {}), "clip": f"clips/{sid}.mp4", "startFrom": 0, "push": spec.get("push", False),
-                          "engine": engine}
+            media[sid] = {**clip_entry(media.get(sid, {}), sid, spec), "engine": engine}
     else:
         t = time.time()
         try:
@@ -222,8 +221,7 @@ def render_engine(sid, engine, spec, n, scale, repeat_k, out, partial, media_pat
         with open(MEDIA / "renders" / "render-log.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps({"shot": sid, "engine": engine, "frames": n, "scale": scale, "seconds": round(secs, 1),
                                 "s_per_frame": round(secs / n, 2), "at": time.strftime("%Y-%m-%dT%H:%M:%S")}) + "\n")
-        media[sid] = {**media.get(sid, {}), "clip": f"clips/{sid}.mp4", "startFrom": 0, "push": spec.get("push", False),
-                      "engine": engine}
+        media[sid] = {**clip_entry(media.get(sid, {}), sid, spec), "engine": engine}
         state[sid] = {"key": key, "frames": n}
         print(f"{sid}: {engine}, {n} frames in {secs:.0f} s ({secs / n:.2f} s/frame) -> {out}")
     if repeat_k and engine != "import":
