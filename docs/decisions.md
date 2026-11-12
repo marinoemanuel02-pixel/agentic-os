@@ -3,6 +3,19 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-11-12 - Generated video is a case-by-case material source
+
+- **Why.** Free tiers of hosted video generators make fluid, organic motion that code makes poorly. Spikes on Flow and
+  Kling joined a code segment, a generated transition and a code segment without a visible seam, by giving the
+  generator keyframes rendered from the film's own code. The operator judged the two platforms equal in look.
+- **Decision.** Generated material is opt-in per shot and judged case by case (R04); it enters through
+  `aos asset fetch --basis generated` with terms, watermark and commercial fields, the template gate admits it when the
+  film's `sourcing.json` allows it, and films are treated as not monetized unless they say so. The skill
+  `generate-video` records each platform's procedure as observed, dated (rule R55).
+- **Rejected.** Rotating accounts to stretch free quotas (it breaks every platform's terms and risks linked bans);
+  a queue, quota ledger, trim and seam tools before more platforms are tested; a separate ingest command (fetch
+  already does the budget, cache, evidence and row).
+
 ## 2026-10-26 - Video learning is longitudinal: a craft frontier replaces quoted verdicts
 
 - **Why.** The operator observed that past critiques of videos ("shape-like", "too snappy", "stiff") were being

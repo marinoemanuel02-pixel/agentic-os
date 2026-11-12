@@ -40,7 +40,7 @@ hand with ffmpeg; the recipe records those commands.
 1. Render the keyframes from the film's code (`tools/still.sh`), 1280x720 PNG (720x1280 vertical).
 2. Open the platform in the built-in browser; check credits; follow the platform recipe.
 3. Write the prompt from the film's style lock. Ask for the motion to resolve into the last frame.
-4. Fetch each take through `aos asset gen-ingest --url` (below).
+4. Fetch each take through `aos asset fetch --basis generated` (below).
 5. Make review sheets; judge against R04 and the style lock; log keep or discard with one reason.
 6. Join: trim the still tail (measure motion with ffmpeg `tblend` difference), crossfade about 4 frames in and
    10-12 out, then check the seams for jump frames.
@@ -70,10 +70,11 @@ real call each (R08): Claude in Chrome's file upload tool, then passing the PNG'
 
 ## Rights
 
-`aos asset gen-ingest --film <dir> --id <aNN> (--url <link> | --file <path>) --platform <p> --terms-url <url>
---terms-read <date> --watermark yes|no --commercial yes|no|unknown --why "<need>"` fetches through the kit's own
-fetch path (so the budget cap holds), measures, proxies, and writes an `assets.json` row with basis `generated` plus
-those fields and the prompt. `--file` is for takes the operator ran from a prompt sheet.
+No new command (changed while planning): `aos asset fetch --basis generated --license-url <terms page> --terms-read
+<date> --watermark yes|no --commercial yes|no|unknown --prompt "<prompt>"` plus the usual fetch flags. The existing
+fetch path already caps the download by the film's budget, caches, records the terms page as rights evidence and
+writes the `assets.json` row; the row gains a `generated` block with those fields. Taking in a file the operator ran
+from a prompt sheet (`--file`) is deferred until a platform needs the fallback.
 
 The gate (`templates/video/tools/checks/assets.mjs`): `generated` is a known basis and needs those fields;
 `sourcing.json` gets `"generated": {"allowed": true, "monetized": false}`; a `generated` row fails when `allowed` is not
@@ -82,7 +83,7 @@ true, or when `monetized` is true and `commercial` is not `yes`. Watermarked row
 ## Files
 
 - `agents-home/skills/generate-video/` (new); listed in `tool-catalog`.
-- `agents-home/video/assets/asset.mjs` (gen-ingest) and its tests.
+- `agents-home/video/assets/asset.mjs` (fetch's generated basis) and its tests.
 - `templates/video/tools/checks/assets.mjs` and its test; `templates/video/sourcing.json`.
 - `agents-home/video/video-rules.md` (one appended rule), `docs/decisions.md` (entry on top).
 
