@@ -9,8 +9,9 @@ Last verified 2026-11-12 (one spike, English UI). The page is wider than a narro
 - **Frames mode:** Generate, then the reference-mode dropdown in the prompt bar (default "Omni reference"):
   Keyframes. First frame and Last frame slots appear.
 - **Model and cost:** the generate button shows the cost. The flagship model cost 50 credits for a 720p 5 s take,
-  the fast model 30. Only one flagship take fits a day's free credits.
-- **First frame:** setting the slot's own file input (`input[type=file]`, single file, .jpg/.png) worked.
+  the fast model 30. Only one flagship take fit the 66 credits seen (how often they refill was not observed).
+- **First frame:** setting the slot's own file input (`input[type=file]`, single file, .jpg/.png) worked. The `File`
+  was built in the page (a canvas redraw of the keyframe), not a local PNG: see SKILL.md, local files.
 - **Last frame:** a drop on the strip adds a Middle frame instead. Click the Last frame tile, choose Upload, and fill
   the file input that Upload opens. No rights dialog appeared.
 - **Generate:** type the prompt in the prompt box, press Generate. The free queue said "about 4 minutes" and took

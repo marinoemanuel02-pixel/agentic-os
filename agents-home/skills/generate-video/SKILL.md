@@ -25,7 +25,8 @@ page says they reset.
    (`tools/still.sh`), 1280x720 (720x1280 vertical).
 3. **Generate.** Open the platform, check the credits it shows, follow its recipe. Write the prompt from the film's
    style lock: locked-off camera unless the shot needs a move, no text, same background, and ask for the motion to
-   resolve into the last frame (both platforms otherwise land it abruptly or fade it in).
+   resolve into the last frame (in the 2026-11-12 spikes, one take per platform, Flow faded the target in and Kling
+   started its motion abruptly).
 4. **Take it in.** Get the take's file link (recipe), then:
    `aos asset fetch --film <dir> --id <aNN> --url <file link> --kind clip --basis generated --acquisition platform-feature --platform <flow|kling> --license-url <terms page> --terms-read <YYYY-MM-DD> --watermark yes|no --commercial yes|no|unknown --prompt "<prompt>" --why "<need>"`.
    The film's `sourcing.json` must have `"generated": {"allowed": true}`; a monetized film admits only `--commercial yes`.
