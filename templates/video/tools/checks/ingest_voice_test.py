@@ -82,6 +82,21 @@ class PhonePolish(unittest.TestCase):
         self.assertLess(polished, raw - 20, f"clicks above 11 kHz: {raw:.1f} dB raw, {polished:.1f} dB polished")
 
 
+class VoiceEnd(unittest.TestCase):
+    """pauseai-it L10, 2026-10-27: Whisper heard "cinquanta per cento" as one token, "50%", which ended before the
+    voice did; the line was cut at that token's end plus a short pad and lost "-to". A line must not end while the
+    voice is still above the take's noise floor."""
+
+    def test_line_end_waits_for_silence(self):
+        mod = load()
+        rms = [0.001] * 400  # 4 s of 10 ms steps at the noise floor
+        rms[100:220] = [0.1] * 120  # speech from 1.0 s to 2.2 s
+        self.assertTrue(hasattr(mod, "voice_end"), "ingest-voice.py finds where the voice falls silent")
+        self.assertAlmostEqual(mod.voice_end(rms, 1.8, 4.0), 2.2, delta=0.02)
+        self.assertAlmostEqual(mod.voice_end(rms, 2.3, 4.0), 2.3, delta=0.02, msg="already silent: no extension")
+        self.assertLessEqual(mod.voice_end(rms, 1.8, 2.0), 2.0, "never past the next line's cut")
+
+
 if __name__ == "__main__":
     # report on stdout: Windows PowerShell 5.1 turns native stderr into an error record under $ErrorActionPreference Stop
     unittest.main(testRunner=unittest.TextTestRunner(stream=sys.stdout))

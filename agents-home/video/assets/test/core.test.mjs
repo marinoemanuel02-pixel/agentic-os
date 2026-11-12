@@ -110,6 +110,72 @@ test('fetchAsset: over budget stops before writing a row', async () => {
   } finally { s.close(); }
 });
 
+const genOpts = url => ({url, id: 'a07', basis: 'generated', licenseUrl: 'https://example.org/terms', acquisition: 'platform-feature', platform: 'flow', why: 'transition S07', kind: 'clip', measure: false, termsRead: '2026-11-12', watermark: false, commercial: 'unknown', prompt: 'Locked-off camera'});
+function genFilm(generated = {allowed: true, monetized: false}) {
+  const d = film();
+  const s = JSON.parse(readFileSync(join(d, 'sourcing.json'), 'utf8'));
+  writeFileSync(join(d, 'sourcing.json'), JSON.stringify({...s, generated}));
+  return d;
+}
+
+test('fetchAsset: a generated take is refused before any transfer when the film does not allow it', async () => {
+  const {fetchAsset} = await import('../asset.mjs');
+  const s = await server(500);
+  try {
+    const d = film();
+    await assert.rejects(fetchAsset(d, genOpts(s.url), {fetchPage: async () => 'p'}), /a07: generated material not allowed in sourcing\.json \(set "generated": \{"allowed": true\}\)/);
+    const m = genFilm({allowed: true, monetized: true});
+    await assert.rejects(fetchAsset(m, genOpts(s.url), {fetchPage: async () => 'p'}), /a07: commercial use unknown not allowed in a monetized film/);
+    assert.equal(budgetFor(d).usedBytes + budgetFor(m).usedBytes, 0);
+  } finally { s.close(); }
+});
+
+test('fetchAsset: a watermark value other than yes or no is refused', async () => {
+  const {fetchAsset} = await import('../asset.mjs');
+  await assert.rejects(fetchAsset(genFilm(), {...genOpts('http://127.0.0.1:9/x.mp4'), watermark: 'Yes'}), /a07: --watermark must be yes or no/);
+});
+
+test('fetchAsset: a generated take records platform, terms and the generated block', async () => {
+  const {fetchAsset} = await import('../asset.mjs');
+  const s = await server(500);
+  try {
+    const d = genFilm();
+    const row = await fetchAsset(d, genOpts(s.url), {fetchPage: async () => 'terms page'});
+    assert.deepEqual(row.generated, {termsRead: '2026-11-12', watermark: false, commercial: 'unknown', prompt: 'Locked-off camera'});
+    assert.equal(row.licenseUrl, 'https://example.org/terms');
+    assert.ok(existsSync(join(d, 'research', 'rights', 'a07.json')));
+  } finally { s.close(); }
+});
+
+test('fetchAsset: a generated take without its fields is refused before any transfer', async () => {
+  const {fetchAsset} = await import('../asset.mjs');
+  const s = await server(500);
+  try {
+    const d = film();
+    const {prompt, ...opts} = genOpts(s.url);
+    await assert.rejects(fetchAsset(d, opts, {fetchPage: async () => 'p'}), /a07: generated needs --license-url, --terms-read, --watermark, --commercial and --prompt/);
+    assert.equal(budgetFor(d).usedBytes, 0);
+    assert.equal(readLedger(d).rows.length, 0);
+  } finally { s.close(); }
+});
+
+test('fetchAsset: a generated take with a bad commercial value or date is refused', async () => {
+  const {fetchAsset} = await import('../asset.mjs');
+  const d = film();
+  await assert.rejects(fetchAsset(d, {...genOpts('http://127.0.0.1:9/x.mp4'), commercial: 'maybe'}), /a07: --commercial must be yes, no or unknown/);
+  await assert.rejects(fetchAsset(d, {...genOpts('http://127.0.0.1:9/x.mp4'), termsRead: 'last week'}), /a07: --terms-read must be a date \(YYYY-MM-DD\)/);
+});
+
+test('fetchAsset: other bases get no generated block', async () => {
+  const {fetchAsset} = await import('../asset.mjs');
+  const s = await server(500);
+  try {
+    const d = film();
+    const row = await fetchAsset(d, {url: s.url, id: 'a08', basis: 'cc0', license: 'cc0-1.0', licenseUrl: 'https://example.org/license', acquisition: 'direct-file', platform: 'test', why: 'x', kind: 'clip', credit: '', measure: false}, {fetchPage: async () => 'p'});
+    assert.ok(!('generated' in row));
+  } finally { s.close(); }
+});
+
 test('ledger refuses a duplicate id', () => {
   const d = film();
   addRow(d, {id: 'a01', kind: 'clip'});

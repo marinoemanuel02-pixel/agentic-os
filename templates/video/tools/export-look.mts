@@ -1,4 +1,4 @@
-// The film's look for the engines (R56): src/lib/look.ts stays the one place the style lives; this writes it to
+// The film's look for the engines (R57): src/lib/look.ts stays the one place the style lives; this writes it to
 // engines/look.json, which Godot, Manim, Unity and Unreal read, with the frame rate and the calm curve's control points.
 //   node --no-warnings tools/export-look.mts            write engines/look.json
 //   node --no-warnings tools/export-look.mts --check    fail if engines/look.json is stale (render-shot runs this)

@@ -2,7 +2,7 @@
 
 Status: built on branch `feat/video-engines` (2026-10-27). Inputs: two deep-research reports the user ran (Perplexity
 and ChatGPT), used as leads only; every claim the build relies on was re-checked against the machine, the repo or a
-vendor page. Rules R55-R57; decision entry 2026-10-27 in `docs/decisions.md`; how-to in
+vendor page. Rules R56-R58; decision entry 2026-10-27 in `docs/decisions.md`; how-to in
 `templates/video/engines/README.md`.
 
 ## Why
@@ -37,7 +37,7 @@ available, each in its own lane, under one design system (R28).
 | Rive: free tier usable for video | P: unverified; G: splash | Rive blog | **Exports moved to paid plans on 2025-10-20.** Excluded |
 | TouchDesigner, Houdini Apprentice, vvvv, Notch: free tiers non-commercial or trial | both agree | consistent with known terms | Excluded for monetized/client work; study only |
 
-## Lanes (R55)
+## Lanes (R56)
 
 | Lane | Tool | Status |
 |---|---|---|
@@ -70,7 +70,7 @@ available, each in its own lane, under one design system (R28).
   (`aos.py`, demo `s_attention`), `engines/unity/Editor/AosRender.cs`, `engines/README.md`.
 - Tests: `tools/checks/engines_test.py` (17, a stand-in engine writes frames; render cases skip without ffmpeg) and
   two cache tests; Pester runs both and the look check. Guards were mutation-checked (frame-count and preroll).
-- Rules R55-R57, template AGENTS.md line, tool-catalog entry, decision entry.
+- Rules R56-R58, template AGENTS.md line, tool-catalog entry, decision entry.
 
 ## Found while building (each now guarded)
 

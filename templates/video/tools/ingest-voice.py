@@ -95,6 +95,20 @@ def quietest(rms: np.ndarray, t0: float, t1: float) -> float:
     return (a + int(np.argmin(rms[a:b + 1]))) / 100
 
 
+def voice_end(rms, t1: float, limit: float, hold: int = 12) -> float:
+    """First time after t1 where the 10 ms RMS stays under the take's noise floor for `hold` steps (120 ms).
+    The floor is 2.5x the take's 20th percentile level; plain Python, so it works on arrays and lists."""
+    vals = sorted(float(v) for v in rms)
+    floor = 2.5 * vals[int(0.2 * (len(vals) - 1))]
+    a, b = int(round(t1 * 100)), min(len(rms), int(round(min(limit, t1 + 0.8) * 100)))
+    quiet = 0
+    for i in range(a, b):
+        quiet = quiet + 1 if rms[i] < floor else 0
+        if quiet >= hold:
+            return (i - hold + 1) / 100
+    return b / 100
+
+
 def main() -> None:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     dry, verify = "--dry" in sys.argv, "--verify" in sys.argv
@@ -183,6 +197,9 @@ def main() -> None:
         cut_prev = quietest(rms[take], heard[prev[2]][3], t0) if prev and prev[0] == take and heard[prev[2]][3] < t0 else 0.0
         cut_next = quietest(rms[take], t1, heard[nxt[1]][2]) if nxt and nxt[0] == take and heard[nxt[1]][2] > t1 else dur
         s, e = max(cut_prev, t0 - PAD_BEFORE), min(cut_next, t1 + PAD_AFTER)
+        # the recognizer can end a line early (a number heard as one token, "50%", ends before "cento" does):
+        # never cut while the voice is still above the take's noise floor
+        e = min(cut_next, max(e, voice_end(rms[take], t1, cut_next) + PAD_AFTER / 2))
         x = audio[take][int(s * SR):int(e * SR)].copy()
         fi, fo = int(0.008 * SR), int(0.015 * SR)
         x[:fi] *= np.linspace(0, 1, fi)

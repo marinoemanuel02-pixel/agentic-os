@@ -5,9 +5,9 @@ Reads blender/shots.json ({shot: {script, shot, offset?}}) and src/data/edit.jso
 `blender -b --python-expr` with SHOT set, renders frames offset+1 .. offset+frames+HANDLE to an H.264 MP4 in
 <media>/app/public/clips/<shot>.mp4, and records it in src/data/media.json. Logs seconds per frame to
 <media>/renders/render-log.jsonl so render budgets are measured, not guessed (R32).
-Engine shots (engines/shots.json: Godot, Manim, Unreal, Unity, cmd, import; see tools/engines.py and R55-R57) go
+Engine shots (engines/shots.json: Godot, Manim, Unreal, Unity, cmd, import; see tools/engines.py and R56-R58) go
 through the same clip, log, state and exposure gate. Without edit.json a shot takes "frames" from its table entry.
---repeat K renders an engine shot's first K frames twice and records whether the rerun is pixel-identical (R57).
+--repeat K renders an engine shot's first K frames twice and records whether the rerun is pixel-identical (R58).
 """
 import hashlib
 import json
@@ -148,7 +148,7 @@ def render_engine(sid, engine, spec, n, scale, repeat_k, out, partial, media_pat
         # a dark graphic shot (thin notation on a near-black look) may move the R50 gate, never silently
         sys.exit(f"{sid}: \"luma\" moves the exposure gate and needs \"luma_why\" saying why this shot is darker or brighter")
     if engine != "import" and (ROOT / "tools/export-look.mts").exists() and (ROOT / "src/lib/look.ts").exists():
-        # engines read engines/look.json; a look changed in look.ts must reach them before they render (R56)
+        # engines read engines/look.json; a look changed in look.ts must reach them before they render (R57)
         p = subprocess.run(["node", "--no-warnings", str(ROOT / "tools/export-look.mts"), "--check"], capture_output=True,
                            text=True, encoding="utf-8", errors="replace")
         if p.returncode != 0:
