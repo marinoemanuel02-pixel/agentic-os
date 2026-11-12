@@ -5,7 +5,7 @@ Grid: BPM and beat in `src/lib/look.ts`; cuts and dissolves on beats. Each shot:
 
 Need: what the viewer must see and why, in one sentence. Source: built, clip, photo, capture, model, lottie, generated, mixed
 (imported sources by asset id from `assets.json`; search the subject's own material first, R39). A generated shot
-names why code or real material will not do, and follows the `generate-video` skill (R55).
+names why code or real material will not do, and follows the `generate-video` skill (R59).
 
 | Shot | Line | Beats | Need | Source | Purpose | Motion | Type | Sound | Out |
 |---|---|---|---|---|---|---|---|---|---|

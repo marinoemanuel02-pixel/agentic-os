@@ -5,7 +5,7 @@ description: Make a generated transition, asset or clip for a film on a free vid
 
 # Generate video
 
-Generated material is opt-in per shot (rule R55): the shot list says why code or real material will not do, and a
+Generated material is opt-in per shot (rule R59): the shot list says why code or real material will not do, and a
 take that reads as generic AI output is discarded. Platform recipes: `flow.md`, `kling.md` in this folder. Each holds
 only what was seen on the page, dated; a step that no longer matches the page stops the run and is reported.
 

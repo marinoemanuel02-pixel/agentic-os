@@ -170,7 +170,7 @@ export function checkAssets(dir, opts = {}) {
     bySearchStep[r.searchStep ?? 'unknown'] = (bySearchStep[r.searchStep ?? 'unknown'] || 0) + 1;
     if (!BASES.includes(r.basis)) errors.push(`${id}: unknown basis ${r.basis}`);
 
-    // Generated material (R55): terms recorded, allowed by the brief, commercial use cleared in a monetized film.
+    // Generated material (R59): terms recorded, allowed by the brief, commercial use cleared in a monetized film.
     if (r.basis === 'generated') {
       const g = r.generated || {};
       if (!r.platform || !r.licenseUrl || !g.termsRead || typeof g.watermark !== 'boolean' || !['yes', 'no', 'unknown'].includes(g.commercial) || !String(g.prompt || '').trim()) {
