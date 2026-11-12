@@ -5,5 +5,6 @@
     "youtube": ["api", "platform-feature"],
     "*": ["api", "direct-file", "platform-feature"]
   },
-  "budget": null
+  "budget": null,
+  "generated": {"allowed": true, "monetized": false}
 }

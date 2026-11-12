@@ -18,7 +18,11 @@ test('the brief has a Sourcing section with the channel policy and the download 
 
 test('every shot states its need and its source', () => {
   assert.match(read('shots.md'), /^\| Shot \| Line \| Beats \| Need \| Source \|/m);
-  assert.match(read('shots.md'), /built, clip, photo, capture, model, lottie, mixed/);
+  assert.match(read('shots.md'), /built, clip, photo, capture, model, lottie, generated, mixed/);
+});
+
+test('the template allows generated material, not monetized', () => {
+  assert.deepEqual(JSON.parse(read('sourcing.json')).generated, {allowed: true, monetized: false});
 });
 
 test('the rubric judges imported material and what a first-time viewer recognises', () => {
@@ -33,6 +37,7 @@ test('the template contract names the asset commands and the human checks', () =
   for (const c of ['aos asset search', 'aos asset fetch', 'aos asset capture', 'aos asset proxy', 'aos asset registry', 'aos asset credits', 'aos asset budget']) assert.ok(agents.includes(c), c);
   assert.match(agents, /asset id/);
   assert.match(agents, /qa\/assets\.md/);
+  assert.match(agents, /generate-video/);
 });
 
 test('the reference-pack skill exists with frontmatter', () => {
