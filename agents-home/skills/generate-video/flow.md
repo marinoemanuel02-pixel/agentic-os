@@ -10,12 +10,14 @@ Last verified 2026-11-12 (one spike, account UI in Italian; labels follow the ac
 - **Model:** pick the cheapest model in the list that supports frames; its cost was 10 credits per take
   (x2 = 20 credits). Some models in the list carried an end-of-availability date.
 - **Upload:** a drop event with the image files on the project's media area (the "drag media here" area) worked;
-  the built-in browser could not use the file picker. The first upload opens an image-rights confirmation: the
+  the built-in browser could not use the file picker. The files were built in the page (canvas redraws of the
+  keyframes), not local PNGs: see SKILL.md, local files. The first upload opens an image-rights confirmation: the
   operator's OK.
 - **Slots:** click Start, pick the uploaded image from the project's media list; same for End.
 - **Generate:** type the prompt, press the generate arrow. Two takes took about 1.5 minutes.
 - **File link:** open the take (its page is `/project/<id>/edit/<id>`); `document.querySelector('video').currentSrc`
-  is a signed link, valid for hours. Pass it to `aos asset fetch --url`.
+  is a signed link with an expiry in its query (lifetime not measured; fetch it soon). Pass it to
+  `aos asset fetch --url`.
 - **Output:** 1280x720, 24 fps, 7.9 s, with an audio track (drop it unless the shot needs it).
 - **Behaviour:** the end keyframe's geometry is matched exactly, slightly darker; the target faded in instead of
   being reached by the motion, then held still about 2.5 s.

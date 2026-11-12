@@ -49,17 +49,30 @@ const extOf = url => {
 // allows commercial use, and the prompt. Checked before any transfer.
 export function generatedFields(opts) {
   if (opts.basis !== 'generated') return null;
-  const {termsRead, watermark, commercial, prompt} = opts;
-  if (!opts.licenseUrl || !termsRead || typeof watermark !== 'boolean' || !commercial || !String(prompt || '').trim()) {
+  const {termsRead, commercial, prompt} = opts;
+  let {watermark} = opts;
+  if (!opts.licenseUrl || !termsRead || watermark === undefined || watermark === null || !commercial || !String(prompt || '').trim()) {
     throw new Error(`${opts.id}: generated needs --license-url, --terms-read, --watermark, --commercial and --prompt`);
+  }
+  if (typeof watermark !== 'boolean') {
+    if (watermark !== 'yes' && watermark !== 'no') throw new Error(`${opts.id}: --watermark must be yes or no`);
+    watermark = watermark === 'yes';
   }
   if (!['yes', 'no', 'unknown'].includes(commercial)) throw new Error(`${opts.id}: --commercial must be yes, no or unknown`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(termsRead) || Number.isNaN(Date.parse(termsRead))) throw new Error(`${opts.id}: --terms-read must be a date (YYYY-MM-DD)`);
   return {termsRead, watermark, commercial, prompt: String(prompt).trim()};
 }
 
+// The film's own switch (sourcing.json "generated"), checked here too so no budget is spent on a take the gate refuses.
+function allowGenerated(filmDir, opts, gen) {
+  const s = JSON.parse(readFileSync(join(filmDir, 'sourcing.json'), 'utf8')).generated;
+  if (s?.allowed !== true) throw new Error(`${opts.id}: generated material not allowed in sourcing.json (set "generated": {"allowed": true})`);
+  if (s.monetized === true && gen.commercial !== 'yes') throw new Error(`${opts.id}: commercial use ${gen.commercial} not allowed in a monetized film`);
+}
+
 export async function fetchAsset(filmDir, opts, io = {}) {
   const gen = generatedFields(opts);
+  if (gen) allowGenerated(filmDir, opts, gen);
   const fetchPage = io.fetchPage || defaultFetchPage;
   const excerpt = opts.sourceIn !== undefined && opts.sourceIn !== null;
   const key = cacheKey(excerpt ? `${opts.url}#t=${opts.sourceIn},${opts.sourceOut}` : opts.url);
@@ -204,7 +217,7 @@ async function main(argv) {
         license: v.license, licenseUrl: v['license-url'], credit: v.credit, author: v.author, page: v.page,
         searchStep: v.step ? Number(v.step) : null, subjects: v.subjects ? v.subjects.split(',') : [],
         sourceIn: v['source-in'] !== undefined ? Number(v['source-in']) : null, sourceOut: v['source-out'] !== undefined ? Number(v['source-out']) : null,
-        termsRead: v['terms-read'], watermark: v.watermark === undefined ? undefined : v.watermark === 'yes',
+        termsRead: v['terms-read'], watermark: v.watermark,
         commercial: v.commercial, prompt: v.prompt,
       });
       console.log(`${row.id}: ${row.media.duration ?? '-'} s measured, cached as ${basename(row.media.cache)}; add its uses to assets.json, then aos asset proxy and registry`);
