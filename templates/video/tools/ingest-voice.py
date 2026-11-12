@@ -87,6 +87,7 @@ def write_wav(p: Path, x: np.ndarray) -> None:
 def whisper_words(wav: Path, prompt: str, model):
     pcm = subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(wav), "-f", "f32le", "-ac", "1", "-ar", "16000", "-"],
                          capture_output=True, check=True).stdout
+    # the narration language (AOS_VO_LANG, default en), as in word-times.py: English forced on Italian takes heard nothing
     seg, _ = model.transcribe(np.frombuffer(pcm, dtype=np.float32), language=os.environ.get("AOS_VO_LANG", "en"), beam_size=8, word_timestamps=True,
                               condition_on_previous_text=False, initial_prompt=prompt or None)
     return [(w.word.strip(), w.start, w.end) for s in seg for w in s.words]
@@ -100,10 +101,12 @@ def quietest(rms: np.ndarray, t0: float, t1: float) -> float:
     return (a + int(np.argmin(rms[a:b + 1]))) / 100
 
 
-def voice_end(rms: np.ndarray, t1: float, limit: float, hold: int = 12) -> float:
-    """First time after t1 where the 10 ms RMS stays under the take's noise floor for `hold` steps (120 ms)."""
-    floor = 2.5 * float(np.percentile(rms, 20))
-    a, b = int(t1 * 100), min(len(rms), int(min(limit, t1 + 0.8) * 100))
+def voice_end(rms, t1: float, limit: float, hold: int = 12) -> float:
+    """First time after t1 where the 10 ms RMS stays under the take's noise floor for `hold` steps (120 ms).
+    The floor is 2.5x the take's 20th percentile level; plain Python, so it works on arrays and lists."""
+    vals = sorted(float(v) for v in rms)
+    floor = 2.5 * vals[int(0.2 * (len(vals) - 1))]
+    a, b = int(round(t1 * 100)), min(len(rms), int(round(min(limit, t1 + 0.8) * 100)))
     quiet = 0
     for i in range(a, b):
         quiet = quiet + 1 if rms[i] < floor else 0
@@ -130,13 +133,13 @@ def ltas(x: np.ndarray) -> np.ndarray:
     return np.mean([np.abs(np.fft.rfft(f, n)) ** 2 for f in frames], axis=0) + 1e-12
 
 
-BANDS = 80.0 * 2 ** (np.arange(0, 22) / 3)  # third-octave centres, 80 Hz .. ~10 kHz
+BAND_HZ = [80.0 * 2 ** (i / 3) for i in range(22)]  # third-octave centres, 80 Hz .. ~10 kHz (plain list: the module imports with numpy stubbed)
 
 
 def band_db(P: np.ndarray) -> np.ndarray:
     fr = np.fft.rfftfreq(8192, 1 / SR)
     out = []
-    for c in BANDS:
+    for c in BAND_HZ:
         sel = (fr >= c / 2 ** (1 / 6)) & (fr < c * 2 ** (1 / 6))
         out.append(10 * np.log10(P[sel].mean()))
     return np.array(out)
@@ -150,6 +153,7 @@ def active_rms(x: np.ndarray) -> float:
 def match_to(x: np.ndarray, ref_db: np.ndarray, ref_rms: float) -> tuple[np.ndarray, np.ndarray]:
     """Zero-phase EQ from x's third-octave spectrum to the reference's, level-neutral in 300-3000 Hz, boosts capped
     at +9 dB and none above the line's own band edge (no noise lifted where the take has no voice), cuts at -12 dB."""
+    BANDS = np.array(BAND_HZ)
     db = band_db(ltas(x))
     if not (np.isfinite(db).all() and np.isfinite(ref_db).all()):
         sys.exit("timbre match: a band without spectrum (NaN); check BANDS against the FFT size")
@@ -310,7 +314,7 @@ def main() -> None:
             if lid in match:
                 continue
             xs[lid], g = match_to(xs[lid], ref_db, ref_rms)
-            at = [int(np.argmin(np.abs(BANDS - f))) for f in (125, 1000, 4000, 6300)]
+            at = [int(np.argmin(np.abs(np.array(BAND_HZ) - f))) for f in (125, 1000, 4000, 6300)]
             report.append(f"- {lid}: " + " / ".join(f"{g[i]:+.1f}" for i in at))
     for lid, x in xs.items():
         if not dry:

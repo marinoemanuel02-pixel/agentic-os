@@ -104,6 +104,19 @@ don't rewrite the old one: the record of what was rejected is the part that ages
   subscriptions, and free models handle tools poorly. A generic "ask a model" tool: nothing to verify against.
 - **Open.** Acceptance per tool is measured by `pool_feedback`, not assumed; revisit routing after about twenty
   judged results per tool. The 6 GB GPU swaps models (about a minute cold).
+
+## 2026-10-26 - 2D films start from a tested cast kit, judged on sheets before shots
+
+- **Why.** The people appear in almost every film, and each film redrew them inside its own `Person.tsx`. Two
+  rounds of fixes on proportions (v8, v9) still left them reading as low quality: the gap was general craft
+  (hands, feet, shoulders, faces, line weight), which proportion tweaks do not reach.
+- **Decision.** The template carries the cast (`templates/video/src/lib/cast/`): a pure geometry module under
+  `node --test` and drawing components built from a researched spec in head units. A film changes colours in
+  `palette.ts` and adds props through `hold` and `badge`; it does not fork the construction. The cast is
+  reviewed on four sheet compositions, at film scale and close up, by both vendors, before people go into shots.
+- **Rejected.** Image-generated or traced characters (the stack stays code-drawn and generation-free); a skeletal
+  rig library (Spine/Rive runtimes) for a few dozen still-pose characters per film, where parametric paths suffice.
+
 ## 2026-10-26 - Video learning is longitudinal: a craft frontier replaces quoted verdicts
 
 - **Why.** The operator observed that past critiques of videos ("shape-like", "too snappy", "stiff") were being

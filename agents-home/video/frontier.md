@@ -16,6 +16,9 @@ operator then rejected that cast in six verdicts (v8-v16) before accepting a dif
   faces, two-segment limbs solved per joint; rig tests in `tools/checks/toon-rig.test.mjs`). Not yet in the template.
   Superseded: `Person.tsx` (2026-10-26), judged better than alignment-3's Pip from stills by both vendors, rejected
   by the operator on the film. `src/lib/Mind.tsx` (one-eyed creature with breathing lobes) was not part of that verdict.
+  Superseded: the cast kit in `templates/video/src/lib/cast/` (PR #2) is the v9 redesign, which did not pass the
+  operator on the v9 and v10 films (verdicts in the ledger); it stays in the template as merged work until the Toon
+  cast replaces it.
 - how: SVG rig as pure functions of the frame, poses as props, blinks/breathe/lag from motion.ts; the look set
   against operator-named reference frames (Rational Animations) before production.
 - next: characters that change shape language with emotion (squash, stretch, overlap) and hands that grip.
