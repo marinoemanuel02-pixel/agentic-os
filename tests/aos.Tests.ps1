@@ -1149,7 +1149,8 @@ Describe 'Video input provenance' {
         @{ Check = 'screen text'; File = 'screen-text.test.mjs' },
         @{ Check = 'pipeline'; File = 'pipeline.test.mjs' },
         @{ Check = 'review sheets'; File = 'review-sheets.test.mts' },
-        @{ Check = 'grade (no fringes, no SAO halos)'; File = 'grade.test.mjs' }
+        @{ Check = 'grade (no fringes, no SAO halos)'; File = 'grade.test.mjs' },
+        @{ Check = 'cast geometry (limb caps, head units, hand attachment, poses, faces)'; File = 'cast.test.mts' }
     ) {
         $testFile = Join-Path $PSScriptRoot "..\templates\video\tools\checks\$File"
         $savedScratch = $env:AOS_VIDEO_TEST_ROOT
@@ -1216,6 +1217,12 @@ Describe 'Video input provenance' {
         if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { Set-ItResult -Skipped -Because 'ffmpeg is not on PATH (CI runners have none); the tests build synthetic H.264 clips' ; return }
         $testFile = Join-Path $PSScriptRoot "..\templates\video\tools\$File"
         $result = & node --no-warnings --test $testFile 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 0 -Because $result
+    }
+
+    It 'ingests a non-English voiceover: takes heard in AOS_VO_LANG, accented words kept, phone crackle removed (python unittest)' {
+        if (-not (Get-Command python -ErrorAction SilentlyContinue)) { Set-ItResult -Skipped -Because 'python is not on PATH'; return }
+        $result = & python (Join-Path $PSScriptRoot '..\templates\video\tools\checks\ingest_voice_test.py') 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
 

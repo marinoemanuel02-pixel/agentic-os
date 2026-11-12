@@ -11,6 +11,7 @@ key on) and src/data/words.sha256.json, plus voice/ingest-report.md listing what
 Usage: python tools/ingest-voice.py take1.m4a take2.m4a ... [--dry] [--verify]
   --dry     align and report only, write nothing
   --verify  transcribe each written line again and compare its first and last word (catches clipped words)
+  --phone   de-click and band-limit phone/messaging-app recordings (removes their crackle)
 Needs AOS_WHISPER_MODEL (a local faster-whisper model folder; nothing is downloaded) and ffmpeg on PATH.
 """
 import difflib
@@ -20,6 +21,7 @@ import os
 import re
 import subprocess
 import sys
+import unicodedata
 import wave
 from pathlib import Path
 
@@ -32,10 +34,17 @@ SR = 48000
 TARGET_LUFS = -19.0
 PAD_BEFORE, PAD_AFTER = 0.10, 0.14  # seconds of air kept around a line
 CHAIN = "highpass=f=70"
+# --phone: takes recorded on a phone and sent through a messaging app arrive band-limited near 9 kHz with short clicks
+# that reach far above the voice (heard as crackle). Remove the clicks, then cut steeply above the voice band. A
+# de-esser was tried and rejected: it added broadband clicks of its own (pauseai-it, 2026-10-27).
+PHONE_CHAIN = "highpass=f=70,adeclick=w=55:o=75:a=2:t=2:b=2,lowpass=f=9000,lowpass=f=9000,lowpass=f=9000"
 
 
 def norm(w: str) -> str:
-    return re.sub(r"[^a-z0-9']", "", w.lower().replace("’", "'"))
+    # accents fold to their base letter ("È" -> "e"): stripping them dropped one-letter words such as Italian "è",
+    # so a line starting with one was cut after it
+    w = unicodedata.normalize("NFKD", w.lower().replace("’", "'"))
+    return re.sub(r"[^a-z0-9']", "", "".join(c for c in w if not unicodedata.combining(c)))
 
 
 def ff(*args) -> subprocess.CompletedProcess:
@@ -72,7 +81,8 @@ def write_wav(p: Path, x: np.ndarray) -> None:
 def whisper_words(wav: Path, prompt: str, model):
     pcm = subprocess.run(["ffmpeg", "-nostdin", "-loglevel", "error", "-i", str(wav), "-f", "f32le", "-ac", "1", "-ar", "16000", "-"],
                          capture_output=True, check=True).stdout
-    seg, _ = model.transcribe(np.frombuffer(pcm, dtype=np.float32), language="en", beam_size=8, word_timestamps=True,
+    # the narration language (AOS_VO_LANG, default en), as in word-times.py: English forced on Italian takes heard nothing
+    seg, _ = model.transcribe(np.frombuffer(pcm, dtype=np.float32), language=os.environ.get("AOS_VO_LANG", "en"), beam_size=8, word_timestamps=True,
                               condition_on_previous_text=False, initial_prompt=prompt or None)
     return [(w.word.strip(), w.start, w.end) for s in seg for w in s.words]
 
@@ -85,9 +95,26 @@ def quietest(rms: np.ndarray, t0: float, t1: float) -> float:
     return (a + int(np.argmin(rms[a:b + 1]))) / 100
 
 
+def voice_end(rms, t1: float, limit: float, hold: int = 12) -> float:
+    """First time after t1 where the 10 ms RMS stays under the take's noise floor for `hold` steps (120 ms).
+    The floor is 2.5x the take's 20th percentile level; plain Python, so it works on arrays and lists."""
+    vals = sorted(float(v) for v in rms)
+    floor = 2.5 * vals[int(0.2 * (len(vals) - 1))]
+    a, b = int(round(t1 * 100)), min(len(rms), int(round(min(limit, t1 + 0.8) * 100)))
+    quiet = 0
+    for i in range(a, b):
+        quiet = quiet + 1 if rms[i] < floor else 0
+        if quiet >= hold:
+            return (i - hold + 1) / 100
+    return b / 100
+
+
 def main() -> None:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     dry, verify = "--dry" in sys.argv, "--verify" in sys.argv
+    if "--phone" in sys.argv:
+        global CHAIN
+        CHAIN = PHONE_CHAIN
     if not args:
         sys.exit(__doc__)
     lines = json.loads((ROOT / "src/data/lines.json").read_text(encoding="utf-8"))
@@ -170,6 +197,9 @@ def main() -> None:
         cut_prev = quietest(rms[take], heard[prev[2]][3], t0) if prev and prev[0] == take and heard[prev[2]][3] < t0 else 0.0
         cut_next = quietest(rms[take], t1, heard[nxt[1]][2]) if nxt and nxt[0] == take and heard[nxt[1]][2] > t1 else dur
         s, e = max(cut_prev, t0 - PAD_BEFORE), min(cut_next, t1 + PAD_AFTER)
+        # the recognizer can end a line early (a number heard as one token, "50%", ends before "cento" does):
+        # never cut while the voice is still above the take's noise floor
+        e = min(cut_next, max(e, voice_end(rms[take], t1, cut_next) + PAD_AFTER / 2))
         x = audio[take][int(s * SR):int(e * SR)].copy()
         fi, fo = int(0.008 * SR), int(0.015 * SR)
         x[:fi] *= np.linspace(0, 1, fi)

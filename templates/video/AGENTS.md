@@ -25,6 +25,9 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
 - Review sheet of chosen frames (the director's main loop): `bash tools/frames.sh <sheet> S01:20 S02:140 ...`
 - Stills: `bash tools/still.sh <frame> <CompositionId>...`; verify a checkout: `node --no-warnings tools/verify.mjs S01 S02 ...`
   (bundles, renders first/middle/last frame per shot, writes a contact sheet)
+- People in 2D films: `src/lib/cast/` (`Person`, `POSES`, `walk`, `talk`, `handPos`; colours in `palette.ts`). Review
+  the cast before it goes into shots and after any kit change: `bash tools/still.sh 0 CastSheet CastTrio CastFaces
+  CastHands`; geometry tests `node --no-warnings --test tools/checks/cast.test.mts`
 - Soundtrack stems: `node --no-warnings tools/audio.mts`; full build: `bash tools/build.sh v1`
 - QA: `bash tools/qa.sh exports/{{name}}.mp4 exports/{{name}}.srt` (length from `qa.env`; includes the motion
   check on a texture-free proxy, report `qa/motion.md`), then `node tools/screen.mjs` (on-screen text)
@@ -35,7 +38,7 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
 - Page captures (R45): `node tools/capture.mjs [name...]` from `research/capture-pages.json` -> `app/public/captures/`, ledger `research/captures.json`
 - Real material (R42, R52): `python tools/commons.py search|info|fetch|ia-search|ia-fetch ...` (Wikimedia Commons / Internet Archive, licence and author into `research/assets.md`, counted against `BUDGET_MB`); real face detection on footage: `~/.aos/venvs/cv/Scripts/python.exe tools/detect.py <video> <start> <dur> <crop x> <shot id> [--pan x2]`
 - Review sheet of the assembled composition: `bash tools/stills.sh <name> S05:0.9 S11:0.5 ...` (one bundle, one still per shot)
-- Human voiceover (R53): `python tools/ingest-voice.py take1.m4a take2.m4a ... [--dry] [--verify]` (takes in script order; needs `AOS_WHISPER_MODEL`) -> `app/public/vo/<id>.wav`, `src/data/vo.json`, `words.json`, `words.sha256.json`; report in `<media>/voice/ingest-report.md`. A loop (R54) is set in `src/data/cuts.json`: `"head"`, `"gap"`, `"outro_frames"`.
+- Human voiceover (R53): `python tools/ingest-voice.py take1.m4a take2.m4a ... [--dry] [--verify] [--phone]` (`--phone` removes the crackle of phone or messaging-app takes) (takes in script order; needs `AOS_WHISPER_MODEL`, and `AOS_VO_LANG=it` or the narration's language when it is not English) -> `app/public/vo/<id>.wav`, `src/data/vo.json`, `words.json`, `words.sha256.json`; report in `<media>/voice/ingest-report.md`. A loop (R54) is set in `src/data/cuts.json`: `"head"`, `"gap"`, `"outro_frames"`.
 - Pacing report (R29): `node tools/checks/pacing.mjs <film.mp4> --shots src/data/shots.json --claims claims.json --lines src/data/lines.json --out qa/pacing`
 - Render cache (R32, default in build.sh): `bash tools/render-cached.sh`; `AOS_RENDER_CACHE=0` renders Main whole; tests `node --test tools/cache/cache.test.mjs`
 - Motion check alone: `node --no-warnings tools/checks/motion.mjs <proxy.mp4>`; its tests: `node --test tools/checks/`
