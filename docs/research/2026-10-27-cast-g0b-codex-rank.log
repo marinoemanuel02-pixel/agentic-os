@@ -1,0 +1,90 @@
+Reading prompt from stdin...
+OpenAI Codex v0.163.0
+--------
+workdir: C:\Users\marin\OneDrive\Desktop\1-Projects\videos\pauseai-it
+model: gpt-6-luna
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 01a17a97-6313-7730-a6ae-d4273701a1a7
+--------
+user
+You are judging human characters in animation frames for a director who makes explainer films. The attached image is
+a sheet of numbered tiles (1 to N, number in the top-left corner). Some tiles come from professional studios, some
+from candidate character designs; you are not told which.
+
+Judge ONLY the human characters (construction, shape design, silhouette, faces, hands, feet, posing, how finished and
+intentional they look, how they sit in their frame). Ignore backgrounds, text and colour grading.
+
+Answer in Markdown:
+1. A ranking of all tiles from most to least professional, one line each: number, a score 1-10, and one short reason.
+2. Which tiles you believe are professional studio work, and which are not, with your confidence.
+3. For the tiles you judged NOT professional: the single most visible reason for each.
+Be blunt. Read-only: do not edit files.
+
+warning: clamping SessionEnd hook timeout to 3s in C:\Users\marin\.codex\hooks.json
+hook: SessionStart
+hook: SessionStart
+hook: SessionStart Failed
+hook: SessionStart Completed
+hook: UserPromptSubmit
+hook: UserPromptSubmit Completed
+codex
+## Ranking
+
+1. **01 — 9/10.** Refined 3D models, clear silhouettes, and natural-looking poses.
+2. **07 — 9/10.** Strong facial construction and expressive posing; the characters feel deliberately designed.
+3. **11 — 8.5/10.** Consistent proportions and expressive faces, with confident, readable poses.
+4. **12 — 8.5/10.** Distinct character shapes and faces; the group reads clearly without looking generic.
+5. **09 — 8/10.** Strong silhouettes and personality in the faces and poses.
+6. **02 — 8/10.** Clean, consistent shapes and readable expressions; the characters feel intentionally stylized.
+7. **04 — 7.5/10.** Memorable shapes and clear poses, though some figures feel less carefully resolved.
+8. **03 — 7.5/10.** Expressive faces and recognizable silhouettes, but the body shapes feel fairly generic.
+9. **05 — 7/10.** The figures are expressive, though the poses and body construction feel uneven.
+10. **08 — 6.5/10.** The characters are recognizable, but the body proportions and hands feel stiff.
+11. **06 — 6/10.** The main figure has a clear silhouette, but the face and limbs feel under-resolved.
+12. **10 — 5.5/10.** The silhouettes are readable, but this frame gives little evidence of finished faces or anatomy.
+
+## Likely studio work
+
+**Likely professional:** 01, 02, 03, 04, 05, 07, 09, 11, 12. **Confidence: high overall.** The characters show consistent construction, controlled shapes, and deliberate posing.
+
+**Likely not professional:** 06, 08, 10. **Confidence: moderate.** They appear to share the same character designs, whose anatomy and posing look less resolved than the likely studio examples.
+
+## Most visible reason for each likely nonprofessional tile
+
+- **06:** The face and limbs look stiff and simplified.
+- **08:** The hands and body proportions feel awkward beside the more expressive face.
+- **10:** The silhouettes are readable, but the frame doesn’t show enough character detail to feel finished.
+hook: Stop
+hook: Stop Completed
+tokens used
+28,179
+## Ranking
+
+1. **01 — 9/10.** Refined 3D models, clear silhouettes, and natural-looking poses.
+2. **07 — 9/10.** Strong facial construction and expressive posing; the characters feel deliberately designed.
+3. **11 — 8.5/10.** Consistent proportions and expressive faces, with confident, readable poses.
+4. **12 — 8.5/10.** Distinct character shapes and faces; the group reads clearly without looking generic.
+5. **09 — 8/10.** Strong silhouettes and personality in the faces and poses.
+6. **02 — 8/10.** Clean, consistent shapes and readable expressions; the characters feel intentionally stylized.
+7. **04 — 7.5/10.** Memorable shapes and clear poses, though some figures feel less carefully resolved.
+8. **03 — 7.5/10.** Expressive faces and recognizable silhouettes, but the body shapes feel fairly generic.
+9. **05 — 7/10.** The figures are expressive, though the poses and body construction feel uneven.
+10. **08 — 6.5/10.** The characters are recognizable, but the body proportions and hands feel stiff.
+11. **06 — 6/10.** The main figure has a clear silhouette, but the face and limbs feel under-resolved.
+12. **10 — 5.5/10.** The silhouettes are readable, but this frame gives little evidence of finished faces or anatomy.
+
+## Likely studio work
+
+**Likely professional:** 01, 02, 03, 04, 05, 07, 09, 11, 12. **Confidence: high overall.** The characters show consistent construction, controlled shapes, and deliberate posing.
+
+**Likely not professional:** 06, 08, 10. **Confidence: moderate.** They appear to share the same character designs, whose anatomy and posing look less resolved than the likely studio examples.
+
+## Most visible reason for each likely nonprofessional tile
+
+- **06:** The face and limbs look stiff and simplified.
+- **08:** The hands and body proportions feel awkward beside the more expressive face.
+- **10:** The silhouettes are readable, but the frame doesn’t show enough character detail to feel finished.
