@@ -24,6 +24,7 @@ subscriptions (Claude and ChatGPT).
 | `penpot-local` | Penpot design work through its local MCP server, started only when needed |
 | `research` | cited web research with the agents' own free web search and fetch |
 | `video-references` | a reference pack for a film's niche: strong channels watched in the browser without downloading, notes per beat |
+| `generate-video` | a generated transition, asset or clip from a free video generator (Flow, Kling) in the built-in browser, taken into the film with its rights (R55) |
 | `caveman` | opt-in terse replies, only on an explicit `/caveman` (about a quarter fewer visible tokens in a 3-prompt Haiku test; total tokens did not fall); not for reports or prose |
 | `tool-catalog` | this list |
 
