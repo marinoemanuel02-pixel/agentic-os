@@ -21,3 +21,7 @@ CLAUDE.local.md
 *.wav
 *.mp3
 style/candidate-*.png
+
+# engine caches (Godot imports, Manim media)
+engines/godot/.godot/
+engines/manim/media/

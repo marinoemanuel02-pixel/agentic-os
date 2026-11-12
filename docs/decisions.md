@@ -87,6 +87,22 @@ don't rewrite the old one: the record of what was rejected is the part that ages
   that is explicitly not a cross-vendor second opinion. No vendor-home/PATH configuration sync.
   See [audit validation](validation/2026-10-28-orchestration-audit.md).
 
+## 2026-10-27 - Engines join the video stack as shot renderers behind render-shot
+
+- **Why.** Nothing in the stack simulated many interacting things in real time, and Blender's EEVEE costs 5.6-16 s
+  per frame on the GTX 1660 Ti (R43). The operator wanted more tools available, not fewer.
+- **Decision.** Godot 4.7 and Manim CE (with TinyTeX) are installed and render through `tools/render-shot.py` like
+  Blender sets: frame-complete, seeded, frame-driven, one clip per shot, the same log, media row and exposure gate,
+  plus a measured repeatability (`--repeat`). Unreal, Unity, Autograph (`cmd`) and Cavalry (`import`) have adapters
+  that wait for a spike with accounts the operator creates. A re-rendered clip now re-renders only its own segment.
+  The look reaches every engine as `engines/look.json` generated from `look.ts`. Rules R59-R61 (numbered R55-R57 on their branch, renumbered at the merge
+  because R55-R57 already held the voice rules).
+- **Measured.** Demo shots at 1920x1080: Godot 186 frames at about 0.5 s/frame, Manim 426 frames at 0.14 s/frame,
+  both pixel-identical over 30 rerun frames.
+- **Rejected.** Omniverse (needs an RTX GPU; this one is a GTX); TouchDesigner, Houdini Apprentice, vvvv and Notch
+  (free tiers are non-commercial or trials); Rive (exports are paid since 2025-10); Cavalry's CLI renderer (not in
+  2.7+); a second asset contract beside Blender's; MCP-driven finals (MCPs stay look-dev only).
+
 ## 2026-10-26 - Make the local model and the free API pool a default worker (`aos-pool` MCP)
 
 - **Why.** The swarm and the local model existed but went unused: the swarm needs a packet and a lead-written
