@@ -25,7 +25,8 @@ page says they reset.
    flow.google.com, app.klingai.com to kling.ai) and both showed sign-in pages again.
 1. **Terms first.** Before a platform's first use in a film, read its terms on automated use and on commercial use of
    free-plan output; note the URL and date. If they forbid automated access, do not drive it: write a prompt sheet
-   (keyframes, prompt, seconds, aspect) for the operator instead.
+   (keyframes, prompt, seconds, aspect) for the operator instead, unless the operator has decided otherwise for that
+   platform in its recipe (Kling: driven, operator's decision 2026-11-14).
 2. **Keyframes from the film's code.** Render the last frame of the shot before and the first frame of the shot after
    (`tools/still.sh <frame> <CompositionId>`, film resolution), then scale to the platforms' 1280x720 (720x1280
    vertical): `magick in.png -resize 1280x720 out.png`.
