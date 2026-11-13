@@ -18,6 +18,11 @@ page says they reset.
 
 ## Steps
 
+0. **Sign-ins first.** At the start of the run, open each platform the film will use in the built-in browser and
+   check that it shows the account, not a sign-in page; ask for every missing sign-in in one message before building
+   anything, so the operator is not interrupted mid-run. The built-in browser's profile persists across sessions, but
+   a sign-in belongs to the platform's domain: on 2026-11-13 both platforms had moved (labs.google/fx to
+   flow.google.com, app.klingai.com to kling.ai) and both showed sign-in pages again.
 1. **Terms first.** Before a platform's first use in a film, read its terms on automated use and on commercial use of
    free-plan output; note the URL and date. If they forbid automated access, do not drive it: write a prompt sheet
    (keyframes, prompt, seconds, aspect) for the operator instead.
@@ -46,3 +51,8 @@ The built-in browser cannot hand a local file to a page (no file picker, no fetc
 paste). Try, with one real call each (R08): Claude in Chrome's `file_upload` tool on the platform signed in there;
 else pass the PNG's bytes into the page and build a `File` there. The 2026-11-12 spikes redrew simple keyframes on a
 canvas inside the page, which only matches the film exactly for simple geometry.
+
+Exact keyframes (metacognition-explainer, 2026-11-13): draw the boundary frames as a pure SVG string in the film's
+code (one function of a state, which the shots also draw every frame), pass that markup into the page (6-10 KB per
+key; send only the part that differs from a key already there), draw it on a 1280x720 canvas, `toBlob` a PNG, wrap it
+in a `File` and drop it. The page draws the same markup Remotion renders, so the keyframes match the film exactly.
