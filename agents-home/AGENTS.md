@@ -75,8 +75,8 @@ tier. Follow the user's authorization, project requirements and the risk rules b
 
 **Second opinion** — run the `second-opinion` skill when being wrong is expensive (auth, money,
 data, migrations, deletes, releases, security) or when no test could catch the mistake.
-- From Claude Code, the agent itself: `codex exec --profile review "<prompt>" </dev/null` (read-only
-  review; without `</dev/null` it waits for stdin in Git Bash), or
+- From Claude Code, the agent itself: `aos delegate codex --task <file>` (read-only; its receipt keeps
+  tokens and outcome), falling back to `codex exec --profile review "<prompt>" </dev/null`, or
   `/codex:rescue <task>` / the `codex-rescue` subagent to hand Codex a task. `/codex:review` and
   `/codex:adversarial-review` are user-only commands: suggest them to the user, don't try to call them.
 - From Codex: `$cc:review`, `$cc:adversarial-review <focus>`, `$cc:rescue <task>`.
@@ -89,7 +89,9 @@ data, migrations, deletes, releases, security) or when no test could catch the m
 **Plans before big work** — for work over about an hour, write the plan to a file. Choose an
 independent critique when its risk or uncertainty makes it useful.
 
-**Capacity** — when a limit is close, don't stall: run the `handoff` skill (writes `HANDOFF.md`),
+**Capacity** — `aos capacity` reads Codex's own logs but cannot read Claude's usage: a Claude lead records
+its usage card with `aos capacity set claude <left> --resets <time>`. When a limit is close, don't stall:
+run the `handoff` skill (writes `HANDOFF.md`),
 then continue on the other vendor from that file.
 
 ## Coordination (one PC, several agents)

@@ -837,6 +837,28 @@ Describe 'aos video verdict and log' {
             Should -Match ([regex]::Escape('then' + [char]0x2014 + 'cut.'))
     }
 
+    It 'keeps the date a backfilled verdict was given beside the time it was recorded' {
+        aos video verdict align-1 --at 2026-10-31 'va bene,' 'finalizzala'
+        $events = @(InModuleScope aos { Get-AosLedger -Last 0 })
+        $events.Count | Should -Be 1
+        $events[0].text | Should -BeExactly 'va bene, finalizzala'
+        $events[0].given | Should -BeExactly '2026-10-31'
+        $events[0].ts | Should -Not -BeLike '2026-10-31*'
+        $line = InModuleScope aos { param($e) Format-AosVideoVerdictLine $e } -Parameters @{ e = $events[0] }
+        $line | Should -Match '^- 2026-10-31 align-1: "va bene, finalizzala" \(recorded \d{4}-\d{2}-\d{2}\)$'
+    }
+
+    It 'refuses a backfill date that is <Case> and writes nothing' -ForEach @(
+        @{ Case = 'not a date'; At = 'yesterday' },
+        @{ Case = 'in the future'; At = ([datetime]::UtcNow.AddDays(2).ToString('yyyy-MM-dd')) },
+        @{ Case = 'missing its words'; At = '2026-10-31' }
+    ) {
+        Mock Write-AosWarn -ModuleName aos { }
+        if ($Case -eq 'missing its words') { aos video verdict align-1 --at $At } else { aos video verdict align-1 --at $At 'words' }
+        Test-Path -LiteralPath (Join-Path $env:AOS_COORD 'ledger.jsonl') | Should -BeFalse
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Text -match 'usage: aos video verdict' }
+    }
+
     It 'warns and writes no verdict for <Case>' -ForEach @(
         @{ Case = 'invalid name'; Name = '../escape'; Text = 'good' },
         @{ Case = 'empty text'; Name = 'align-1'; Text = '' }
@@ -3294,6 +3316,15 @@ Describe 'Vendor capacity (R34)' {
         (InModuleScope aos { Get-AosCapacity -Now ([datetime]::UtcNow.AddHours(6)) })['codex'].state | Should -Be 'reset'
         InModuleScope aos { Add-AosCapacityEvent -Vendor 'claude' -Remaining 40 -Resets '' -Source 'agent' -Note '' }
         (InModuleScope aos { Get-AosCapacity -Now ([datetime]::UtcNow.AddHours(6)) })['claude'].state | Should -Be 'stale'
+    }
+    It 'shows a report whose reset has passed as unknown, not as its old percentage' {
+        InModuleScope aos { Add-AosCapacityEvent -Vendor 'claude' -Remaining 28 -Resets ([datetime]::UtcNow.AddDays(-2).ToString('yyyy-MM-ddTHH:mm:ssZ')) -Source 'reported' -Note '' }
+        Mock Write-AosInfo -ModuleName aos { }
+        aos capacity
+        Should -Invoke Write-AosInfo -ModuleName aos -Times 1 -Exactly -ParameterFilter {
+            $Text -match '^claude\s+\? % left' -and $Text -match 'last report 28 %' -and $Text -match 'aos capacity set claude'
+        }
+        Should -Invoke Write-AosInfo -ModuleName aos -Times 0 -Exactly -ParameterFilter { $Text -match '^claude\s+28 % left' }
     }
     It 'reads Codex''s own logged limits (5 h and weekly) so a reset is noticed without anyone reporting it' {
         $saved = $env:CODEX_HOME

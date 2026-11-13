@@ -1791,13 +1791,32 @@ function Get-AosVideoFamily([string]$Name) {
     return ($Name.ToLowerInvariant() -replace '-v?\d+$', '')
 }
 
-function Add-AosVideoVerdict([string]$Name, [string]$Text) {
+$script:VideoVerdictUsage = 'usage: aos video verdict <name> [--at <yyyy-MM-dd>] <the user''s words, verbatim>'
+
+function Add-AosVideoVerdict([string]$Name, [string]$Text, [string]$At = '') {
     if (-not (Test-AosVideoName $Name) -or -not $Text -or -not $Text.Trim()) {
-        Write-AosWarn 'usage: aos video verdict <name> <the user''s words, verbatim>'
+        Write-AosWarn $script:VideoVerdictUsage
         return
     }
-    Add-AosLedgerEvent ([ordered]@{ type = 'video-verdict'; video = $Name; text = $Text })
+    $event = [ordered]@{ type = 'video-verdict'; video = $Name; text = $Text }
+    if ($At) {
+        # A verdict recorded late keeps the day it was given; ts stays the time it was recorded.
+        $day = [datetime]::MinValue
+        $parsed = [datetime]::TryParseExact($At, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture,
+            [System.Globalization.DateTimeStyles]::None, [ref]$day)
+        if (-not $parsed -or $day.Date -gt [datetime]::UtcNow.Date) { Write-AosWarn $script:VideoVerdictUsage; return }
+        $event['given'] = $day.ToString('yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)
+    }
+    Add-AosLedgerEvent $event
     Write-AosOk "verdict on $Name recorded"
+}
+
+function Format-AosVideoVerdictLine([System.Collections.IDictionary]$Event) {
+    $recorded = ([string]$Event['ts']).Substring(0, 10)
+    $given = $Event['given']
+    if (-not $given) { return '- ' + $recorded + ' ' + $Event['video'] + ': "' + $Event['text'] + '"' }
+    if ($given -is [datetime]) { $given = $given.ToString('yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture) }
+    return '- ' + ([string]$given).Substring(0, 10) + ' ' + $Event['video'] + ': "' + $Event['text'] + '" (recorded ' + $recorded + ')'
 }
 
 function Add-AosVideoStage([string]$Name, [string]$Stage, [string]$Minutes, [string]$Note = '') {
@@ -1880,7 +1899,7 @@ function Write-AosVideoPreflight([string]$Name, [switch]$Verdicts) {
         Write-AosText -Path (Join-Path $folder 'PREFLIGHT.md') -Text $report
     }
     if (-not $Verdicts) { return $report }
-    $fmt = { param($e) '- ' + ([string]$e['ts']).Substring(0, 10) + ' ' + $e['video'] + ': "' + $e['text'] + '"' }
+    $fmt = { param($e) Format-AosVideoVerdictLine $e }
     $all = @($events | Where-Object { $_['type'] -eq 'video-verdict' -and $_['video'] })
     $mine = @($all | Where-Object { (Get-AosVideoFamily ([string]$_['video'])) -eq $family })
     $others = @($all | Where-Object { (Get-AosVideoFamily ([string]$_['video'])) -ne $family })
@@ -1902,8 +1921,15 @@ function Invoke-AosVideo([string[]]$Arguments) {
         'new' { New-AosVideo -Name $name }
         'verdict' {
             $text = ''
-            if ($a.Count -gt 2) { $text = ($a[2..($a.Count - 1)] -join ' ') }
-            Add-AosVideoVerdict -Name $name -Text $text
+            $at = ''
+            $first = 2
+            if ($a.Count -gt 2 -and $a[2] -eq '--at') {
+                if ($a.Count -lt 4 -or -not $a[3]) { Write-AosWarn $script:VideoVerdictUsage; return }
+                $at = [string]$a[3]
+                $first = 4
+            }
+            if ($a.Count -gt $first) { $text = ($a[$first..($a.Count - 1)] -join ' ') }
+            Add-AosVideoVerdict -Name $name -Text $text -At $at
         }
         'log' {
             $stage = $null; $min = $null; $note = ''
@@ -2081,7 +2107,7 @@ aos - agentic-os control
   aos test                   parse/ASCII checks + the Pester suite under PowerShell 5.1 and 7 (Python/Node suites once)
   aos new <name>             new project in Desktop\1-Projects: AGENTS.md, CLAUDE.md (@AGENTS.md), .gitignore, git init
   aos video new <name>       new video project in Desktop\1-Projects\videos (video template + render app in ~\.aos\video)
-  aos video verdict <name> <words>         record the user's verdict on a video, verbatim (coordination ledger)
+  aos video verdict <name> [--at <date>] <words>  the user's verdict, verbatim (ledger); --at keeps the day it was given
   aos video log <name> <stage> <min> [note] record how long a stage took (brief|look|structure|production|qa|...)
   aos video preflight <name> [--verdicts]  rules + craft frontier + stage times -> PREFLIGHT.md (--verdicts: audit, output only)
   aos asset <search|fetch|capture|proxy|registry|credits|budget>   import real material into a film (rights ledger, budget)
@@ -3413,10 +3439,15 @@ function Invoke-AosCapacity([string[]]$Arguments) {
             $hint = 'limited; reset time unknown: hand work to the other vendor'
             if ($c.resets) { $hint = 'limited until ' + $c.resets.ToLocalTime().ToString('HH:mm') + ': hand work to the other vendor' }
         }
-        elseif ($c.state -eq 'reset') { $hint = 'its reset has passed: check its real usage before a big task' }
+        elseif ($c.state -eq 'reset') {
+            $hint = 'its reset has passed (last report ' + $c.remaining + ' %): read its usage and record it with aos capacity set ' + $v
+        }
         elseif ($c.state -eq 'stale') { $hint = 'report is old: ask for a fresh number before planning' }
         $age = [int]([datetime]::UtcNow - $c.reported).TotalMinutes
-        Write-AosInfo ("{0,-6} {1,3} % left, {2} ({3}, {4} min ago) -> {5}" -f $v, $c.remaining, $c.state, $c.source, $age, $hint)
+        # After its reset a report says nothing about the new window: no percentage is shown as if it were current.
+        $left = [string]$c.remaining
+        if ($c.state -eq 'reset') { $left = '?' }
+        Write-AosInfo ("{0,-6} {1,3} % left, {2} ({3}, {4} min ago) -> {5}" -f $v, $left, $c.state, $c.source, $age, $hint)
         if ($c.source -eq 'codex-log') { Write-AosInfo ("       {0} binds; {1}" -f $c.window, $c.note) }
     }
 }
