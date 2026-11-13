@@ -28,6 +28,11 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
 - People in 2D films: `src/lib/cast/` (`Person`, `POSES`, `walk`, `talk`, `handPos`; colours in `palette.ts`). Review
   the cast before it goes into shots and after any kit change: `bash tools/still.sh 0 CastSheet CastTrio CastFaces
   CastHands`; geometry tests `node --no-warnings --test tools/checks/cast.test.mts`
+- Formats: one source renders 16:9 and native 9:16; wrap a composition in `<FormatProvider format={TALL}>` and stage
+  shots with `useFormat()` / `useLayout(wide, tall)`; keep type and faces inside `SAFE` in 9:16 (`src/lib/format.tsx`)
+- Captions drawn into the picture (feeds autoplay muted): `<Captions lines={...} shots={...} words={words} off={[...]} />`
+  from `src/lib/Captions.tsx`, timing in `src/lib/caption-timing.ts` (`readableShare()` reports readable time); tests
+  `node --no-warnings --test tools/checks/captions.test.mts`
 - Soundtrack stems: `node --no-warnings tools/audio.mts`; full build: `bash tools/build.sh v1`
 - QA: `bash tools/qa.sh exports/{{name}}.mp4 exports/{{name}}.srt` (length from `qa.env`; includes the motion
   check on a texture-free proxy, report `qa/motion.md`), then `node tools/screen.mjs` (on-screen text)

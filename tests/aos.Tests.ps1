@@ -1172,7 +1172,8 @@ Describe 'Video input provenance' {
         @{ Check = 'voice scale (R55)'; File = 'voice-scale.test.mjs' },
         @{ Check = 'render-shot media entry and kit key'; File = 'render-shot.test.mjs' },
         @{ Check = 'cast geometry (limb caps, head units, hand attachment, poses, faces)'; File = 'cast.test.mts' },
-        @{ Check = 'easing helpers (mix for an eased progress)'; File = 'ease.test.mts' }
+        @{ Check = 'easing helpers (mix for an eased progress)'; File = 'ease.test.mts' },
+        @{ Check = 'caption timing (chunks, shared boxes, same-frame swaps, readable time)'; File = 'captions.test.mts' }
     ) {
         $testFile = Join-Path $PSScriptRoot "..\templates\video\tools\checks\$File"
         $savedScratch = $env:AOS_VIDEO_TEST_ROOT

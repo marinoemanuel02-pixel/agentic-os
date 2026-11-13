@@ -76,8 +76,9 @@ operator then rejected that cast in six verdicts (v8-v16) before accepting a dif
   the next chunk's first word.
 - next: readable time measured rather than judged from sheets: the share of narrated frames that show a whole chunk
   at full opacity, reported per film, so the next fast short beats this one's number.
-- try: a readable-time report computed from words.json and the caption timing, run beside the pacing report; the
-  template's `src/lib` has no caption component yet, so start from huggingface-it's.
+- try: the template now carries this timing (`src/lib/caption-timing.ts`, drawn by `Captions.tsx`, tests in
+  `tools/checks/captions.test.mts`) and `readableShare()` computes the readable time: report it per film beside
+  the pacing report. A 16:9 caption layout exists but no film has been judged on it.
 ## Type size
 - best: huggingface-it v6: every size on screen at 36 px or more at 1080p (quote-card original and source lines,
   counter source, headline tag at 36 px, the headline's Italian note at 48 px), held by `tools/checks/type-size.mjs`
