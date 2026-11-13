@@ -1,5 +1,5 @@
 extends Node3D
-## Base for every Godot shot (R60): the picture is a function of the frame number, never of wall-clock time, so Movie
+## Base for every Godot shot (R61): the picture is a function of the frame number, never of wall-clock time, so Movie
 ## Maker writes the same frames on any machine speed. tools/render-shot.py passes --shot, --size, --frames and --seed
 ## after "--". A shot script extends this file, builds its world in build() and places everything in pose(frame).
 

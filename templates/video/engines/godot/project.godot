@@ -1,4 +1,4 @@
-; Godot 4.7 project for the film's engine shots (R59-R61). Scenes in shots/, shared code in lib/.
+; Godot 4.7 project for the film's engine shots (R60-R62). Scenes in shots/, shared code in lib/.
 ; Finals render headless through tools/render-shot.py (Movie Maker); look-dev may use the Godot editor or MCP.
 config_version=5
 

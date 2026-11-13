@@ -1,4 +1,4 @@
-"""render-shot.py with engine shots (tools/engines.py, R59-R61): frame-complete renders, preroll dropped, incremental
+"""render-shot.py with engine shots (tools/engines.py, R60-R62): frame-complete renders, preroll dropped, incremental
 keys, a failed render never replaces a good clip, --repeat tells repeatable from noisy, hand-rendered imports, and the
 command lines each real engine gets. A stand-in engine (fixtures/engines/fake_engine.py) writes the frames, so no
 engine needs to be installed; the render cases need ffmpeg and are skipped without it.

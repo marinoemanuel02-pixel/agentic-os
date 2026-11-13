@@ -3,6 +3,19 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-11-12 - Generated video is a case-by-case material source
+
+- **Why.** Free tiers of hosted video generators make fluid, organic motion that code makes poorly. Spikes on Flow and
+  Kling joined a code segment, a generated transition and a code segment without a visible seam, by giving the
+  generator keyframes rendered from the film's own code. The operator judged the two platforms equal in look.
+- **Decision.** Generated material is opt-in per shot and judged case by case (R04); it enters through
+  `aos asset fetch --basis generated` with terms, watermark and commercial fields, the template gate admits it when the
+  film's `sourcing.json` allows it, and films are treated as not monetized unless they say so. The skill
+  `generate-video` records each platform's procedure as observed, dated (rule R59).
+- **Rejected.** Rotating accounts to stretch free quotas (it breaks every platform's terms and risks linked bans);
+  a queue, quota ledger, trim and seam tools before more platforms are tested; a separate ingest command (fetch
+  already does the budget, cache, evidence and row).
+
 ## 2026-10-31 - Session audit: guard scope, aos for agent shells, shorts QA, long-work guidance
 
 - **Evidence.** Two independent passes over the same package: Claude measured 156 Claude sessions, 24 subagent
@@ -95,8 +108,8 @@ don't rewrite the old one: the record of what was rejected is the part that ages
   Blender sets: frame-complete, seeded, frame-driven, one clip per shot, the same log, media row and exposure gate,
   plus a measured repeatability (`--repeat`). Unreal, Unity, Autograph (`cmd`) and Cavalry (`import`) have adapters
   that wait for a spike with accounts the operator creates. A re-rendered clip now re-renders only its own segment.
-  The look reaches every engine as `engines/look.json` generated from `look.ts`. Rules R59-R61 (numbered R55-R57 on their branch, renumbered at the merge
-  because R55-R57 already held the voice rules).
+  The look reaches every engine as `engines/look.json` generated from `look.ts`. Rules R60-R62 (numbered R55-R57 on their branch, renumbered at the merge
+  because R55-R59 were taken by the voice, type-size and generated-material rules).
 - **Measured.** Demo shots at 1920x1080: Godot 186 frames at about 0.5 s/frame, Manim 426 frames at 0.14 s/frame,
   both pixel-identical over 30 rerun frames.
 - **Rejected.** Omniverse (needs an RTX GPU; this one is a GTX); TouchDesigner, Houdini Apprentice, vvvv and Notch

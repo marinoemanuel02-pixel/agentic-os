@@ -7,9 +7,9 @@ Reads blender/shots.json ({shot: {script, shot, offset?, speed?}}) and src/data/
 <media>/renders/render-log.jsonl so render budgets are measured, not guessed (R32).
 `speed` (default 1) plays every keyframed action that much faster (key x -> 1 + (x - 1) / speed, camera included),
 so a variant designed longer than its slot in the edit keeps its whole action; drivers and particles keep their pace.
-Engine shots (engines/shots.json: Godot, Manim, Unreal, Unity, cmd, import; see tools/engines.py and R59-R61) go
+Engine shots (engines/shots.json: Godot, Manim, Unreal, Unity, cmd, import; see tools/engines.py and R60-R62) go
 through the same clip, log, state and exposure gate. Without edit.json a shot takes "frames" from its table entry.
---repeat K renders an engine shot's first K frames twice and records whether the rerun is pixel-identical (R61).
+--repeat K renders an engine shot's first K frames twice and records whether the rerun is pixel-identical (R62).
 """
 import hashlib
 import json
@@ -190,7 +190,7 @@ def render_engine(sid, engine, spec, n, scale, repeat_k, out, partial, media_pat
         # a dark graphic shot (thin notation on a near-black look) may move the R50 gate, never silently
         sys.exit(f"{sid}: \"luma\" moves the exposure gate and needs \"luma_why\" saying why this shot is darker or brighter")
     if engine != "import" and (ROOT / "tools/export-look.mts").exists() and (ROOT / "src/lib/look.ts").exists():
-        # engines read engines/look.json; a look changed in look.ts must reach them before they render (R60)
+        # engines read engines/look.json; a look changed in look.ts must reach them before they render (R61)
         p = subprocess.run(["node", "--no-warnings", str(ROOT / "tools/export-look.mts"), "--check"], capture_output=True,
                            text=True, encoding="utf-8", errors="replace")
         if p.returncode != 0:

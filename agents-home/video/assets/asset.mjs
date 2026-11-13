@@ -3,6 +3,8 @@
 //   search <query> --kind clip|photo|model|hdri|texture|sfx [--source id]... [--limit n] [--json]
 //   fetch --film <dir> --id <aNN> --url <url> --kind <k> --basis <b> --acquisition <a> --platform <p> --why "<need>"
 //         [--license id --license-url url --credit text --author name --page url --step 1-4 --source-in s --source-out s]
+//         basis generated (skill generate-video): --license-url <terms page> --terms-read <YYYY-MM-DD>
+//         --watermark yes|no --commercial yes|no|unknown --prompt "<prompt>"
 //   capture --film <dir> --id <aNN> --url <url> --mode shot|scroll|record [--seconds n] --why "<need>"
 //   proxy --film <dir> [--force]      registry --film <dir>      credits --film <dir>
 //   budget --film <dir> [--approve <MB> --by-user]
@@ -43,7 +45,34 @@ const extOf = url => {
 // partial transfers too), then the rights evidence (its page is charged as well) and the ledger row. Every URL that
 // is stored or printed is sanitized; the cache key is an opaque hash of the full request. Uses are added by the
 // director afterwards (they need the shot plan).
+// A generated take (rule R59) records the platform's terms page, when they were read, its watermark, whether its plan
+// allows commercial use, and the prompt. Checked before any transfer.
+export function generatedFields(opts) {
+  if (opts.basis !== 'generated') return null;
+  const {termsRead, commercial, prompt} = opts;
+  let {watermark} = opts;
+  if (!opts.licenseUrl || !termsRead || watermark === undefined || watermark === null || !commercial || !String(prompt || '').trim()) {
+    throw new Error(`${opts.id}: generated needs --license-url, --terms-read, --watermark, --commercial and --prompt`);
+  }
+  if (typeof watermark !== 'boolean') {
+    if (watermark !== 'yes' && watermark !== 'no') throw new Error(`${opts.id}: --watermark must be yes or no`);
+    watermark = watermark === 'yes';
+  }
+  if (!['yes', 'no', 'unknown'].includes(commercial)) throw new Error(`${opts.id}: --commercial must be yes, no or unknown`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(termsRead) || Number.isNaN(Date.parse(termsRead))) throw new Error(`${opts.id}: --terms-read must be a date (YYYY-MM-DD)`);
+  return {termsRead, watermark, commercial, prompt: String(prompt).trim()};
+}
+
+// The film's own switch (sourcing.json "generated"), checked here too so no budget is spent on a take the gate refuses.
+function allowGenerated(filmDir, opts, gen) {
+  const s = JSON.parse(readFileSync(join(filmDir, 'sourcing.json'), 'utf8')).generated;
+  if (s?.allowed !== true) throw new Error(`${opts.id}: generated material not allowed in sourcing.json (set "generated": {"allowed": true})`);
+  if (s.monetized === true && gen.commercial !== 'yes') throw new Error(`${opts.id}: commercial use ${gen.commercial} not allowed in a monetized film`);
+}
+
 export async function fetchAsset(filmDir, opts, io = {}) {
+  const gen = generatedFields(opts);
+  if (gen) allowGenerated(filmDir, opts, gen);
   const fetchPage = io.fetchPage || defaultFetchPage;
   const excerpt = opts.sourceIn !== undefined && opts.sourceIn !== null;
   const key = cacheKey(excerpt ? `${opts.url}#t=${opts.sourceIn},${opts.sourceOut}` : opts.url);
@@ -108,6 +137,7 @@ export async function fetchAsset(filmDir, opts, io = {}) {
       source: excerpt ? {in: opts.sourceIn, out: opts.sourceOut} : null,
       media: {sha256: hit.sha256, cache: relative(cacheRoot(), hit.path).replaceAll('\\', '/'), start: excerpt ? opts.sourceIn : 0, duration: measured.duration},
       derivatives: [], uses: [], credit: opts.credit || '', clearance: null, subjects: opts.subjects || [],
+      ...(gen ? {generated: gen} : {}),
     });
   });
 }
@@ -166,6 +196,7 @@ async function main(argv) {
     step: {type: 'string'}, 'source-in': {type: 'string'}, 'source-out': {type: 'string'}, subjects: {type: 'string'},
     mode: {type: 'string'}, seconds: {type: 'string'}, source: {type: 'string', multiple: true}, limit: {type: 'string'},
     json: {type: 'boolean'}, force: {type: 'boolean'}, approve: {type: 'string'}, 'by-user': {type: 'boolean'},
+    'terms-read': {type: 'string'}, watermark: {type: 'string'}, commercial: {type: 'string'}, prompt: {type: 'string'},
   }});
   const film = v.film ? resolve(v.film) : null;
   const needFilm = () => { if (!film || !existsSync(join(film, 'sourcing.json'))) throw new Error('--film <project folder with sourcing.json> is required'); return film; };
@@ -186,6 +217,8 @@ async function main(argv) {
         license: v.license, licenseUrl: v['license-url'], credit: v.credit, author: v.author, page: v.page,
         searchStep: v.step ? Number(v.step) : null, subjects: v.subjects ? v.subjects.split(',') : [],
         sourceIn: v['source-in'] !== undefined ? Number(v['source-in']) : null, sourceOut: v['source-out'] !== undefined ? Number(v['source-out']) : null,
+        termsRead: v['terms-read'], watermark: v.watermark,
+        commercial: v.commercial, prompt: v.prompt,
       });
       console.log(`${row.id}: ${row.media.duration ?? '-'} s measured, cached as ${basename(row.media.cache)}; add its uses to assets.json, then aos asset proxy and registry`);
       return;

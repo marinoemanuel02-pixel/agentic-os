@@ -24,6 +24,7 @@ subscriptions (Claude and ChatGPT).
 | `penpot-local` | Penpot design work through its local MCP server, started only when needed |
 | `research` | cited web research with the agents' own free web search and fetch |
 | `video-references` | a reference pack for a film's niche: strong channels watched in the browser without downloading, notes per beat |
+| `generate-video` | a generated transition, asset or clip from a free video generator (Flow, Kling) in the built-in browser, taken into the film with its rights (R59) |
 | `caveman` | opt-in terse replies, only on an explicit `/caveman` (about a quarter fewer visible tokens in a 3-prompt Haiku test; total tokens did not fall); not for reports or prose |
 | `tool-catalog` | this list |
 
@@ -53,7 +54,7 @@ for checked dependencies and compact packets, `report`/`annotate` for routing ev
 a cold quota handoff to the other existing vendor without replaying work. The six-case
 `tools/coordination-eval.ps1` defaults to model-free preparation. See `docs/coordination-tuning.md`.
 
-Engine shots for video films: Godot 4.7 (`~/.local/bin/godot/`, Movie Maker), Manim CE (venv `~/.aos/venvs/manim`) with TinyTeX (`~/.aos/tinytex`, never on the user PATH); driven only through a film's `tools/render-shot.py` (see the template's `engines/README.md`, rules R59-R61). Unreal, Unity, Autograph and Cavalry need accounts the user creates; their adapters are written but not yet run.
+Engine shots for video films: Godot 4.7 (`~/.local/bin/godot/`, Movie Maker), Manim CE (venv `~/.aos/venvs/manim`) with TinyTeX (`~/.aos/tinytex`, never on the user PATH); driven only through a film's `tools/render-shot.py` (see the template's `engines/README.md`, rules R60-R62). Unreal, Unity, Autograph and Cavalry need accounts the user creates; their adapters are written but not yet run.
 
 Existing-footage editing: `tools/footage/footage.py` in the setup repo, reached through the `aos`
 module's directory. Offline inventory/transcription, timestamp search, draft cuts and checked FFmpeg

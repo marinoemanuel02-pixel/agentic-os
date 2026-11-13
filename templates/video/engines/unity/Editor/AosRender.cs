@@ -1,4 +1,4 @@
-// Headless shot render for tools/render-shot.py (engine "unity", R59-R61). Copy this folder's Editor/ into the Unity
+// Headless shot render for tools/render-shot.py (engine "unity", R60-R62). Copy this folder's Editor/ into the Unity
 // project's Assets/ and install the Recorder package (com.unity.recorder). render-shot runs:
 //   Unity.exe -batchmode -projectPath <project> -executeMethod AosRender.RenderShot -logFile - -aosScene <scene>
 //     -aosShot <variant> -aosFrames <n> -aosSize <w>x<h> -aosFps <fps> -aosOut <frames folder>

@@ -7,7 +7,7 @@ import {existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSyn
 import {dirname, join, relative, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-export const BASES = ['license', 'public-domain', 'cc0', 'fair-use', 'capture', 'own'];
+export const BASES = ['license', 'public-domain', 'cc0', 'fair-use', 'capture', 'own', 'generated'];
 export const ACQUISITIONS = ['api', 'direct-file', 'platform-feature', 'download-tool'];
 export const LICENSES = ['cc0-1.0', 'pd', 'cc-by-3.0', 'cc-by-4.0', 'pexels', 'pixabay', 'mit', 'bsd-3-clause', 'lottie-simple'];
 const MAX_USE_S = 8;
@@ -160,6 +160,7 @@ export function checkAssets(dir, opts = {}) {
   const perBasis = {};
   const bySearchStep = {};
   let limitedSeconds = 0;
+  const watermarked = [];
 
   for (const r of rows) {
     const id = r.id;
@@ -168,6 +169,17 @@ export function checkAssets(dir, opts = {}) {
     perBasis[r.basis] = (perBasis[r.basis] || 0) + 1;
     bySearchStep[r.searchStep ?? 'unknown'] = (bySearchStep[r.searchStep ?? 'unknown'] || 0) + 1;
     if (!BASES.includes(r.basis)) errors.push(`${id}: unknown basis ${r.basis}`);
+
+    // Generated material (R59): terms recorded, allowed by the brief, commercial use cleared in a monetized film.
+    if (r.basis === 'generated') {
+      const g = r.generated || {};
+      if (!r.platform || !r.licenseUrl || !g.termsRead || typeof g.watermark !== 'boolean' || !['yes', 'no', 'unknown'].includes(g.commercial) || !String(g.prompt || '').trim()) {
+        errors.push(`${id}: generated row needs platform, licenseUrl and generated.termsRead, watermark, commercial, prompt`);
+      }
+      if (sourcing.generated?.allowed !== true) errors.push(`${id}: generated material not allowed in sourcing.json (set "generated": {"allowed": true})`);
+      else if (sourcing.generated.monetized === true && g.commercial !== 'yes') errors.push(`${id}: commercial use ${g.commercial} not allowed in a monetized film`);
+      if (g.watermark === true) watermarked.push(id);
+    }
 
     if (['license', 'cc0', 'public-domain'].includes(r.basis) && !LICENSES.includes(r.license)) errors.push(`${id}: license ${r.license} not allowed`);
     const credit = (r.credit || '').trim();
@@ -269,7 +281,7 @@ export function checkAssets(dir, opts = {}) {
 
   const fairUseSeconds = Number(limitedSeconds.toFixed(3));
   return {ok: errors.length === 0, errors,
-    report: {perBasis, fairUseSeconds, filmSeconds, share: filmSeconds ? fairUseSeconds / filmSeconds : 0, bySearchStep}};
+    report: {perBasis, fairUseSeconds, filmSeconds, share: filmSeconds ? fairUseSeconds / filmSeconds : 0, bySearchStep, watermarked}};
 }
 
 export function reportText(result) {
@@ -287,7 +299,8 @@ export function reportText(result) {
     '## Human checks', '',
     '- The narration actually comments on every fair-use or capture excerpt (the gate only measures overlap).',
     '- Every source tag is legible at full size in the review sheets.',
-    '- Each excerpt takes no more than the line needs.', '',
+    '- Each excerpt takes no more than the line needs.',
+    ...((r.watermarked || []).length ? [`- Watermarks stay visible, uncropped and uncovered: ${r.watermarked.join(', ')}.`] : []), '',
     '## Content ID', '',
     'Stock footage and sound effects are sometimes claimed by Content ID in error. The ledger and rights evidence are',
     'supporting evidence for a dispute, not proof.', '',

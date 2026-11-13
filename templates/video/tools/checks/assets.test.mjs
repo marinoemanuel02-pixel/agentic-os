@@ -12,7 +12,7 @@ import {spawnSync} from 'node:child_process';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const VALID = join(HERE, 'fixtures', 'assets', 'valid');
 const GATE = join(HERE, 'assets.mjs');
-const {checkAssets} = await import(new URL('./assets.mjs', import.meta.url));
+const {checkAssets, reportText} = await import(new URL('./assets.mjs', import.meta.url));
 
 function copy() { const d = join(mkdtempSync(join(tmpdir(), 'assets-gate-')), 'film one'); cpSync(VALID, d, {recursive: true}); return d; }
 const read = (d, f) => JSON.parse(readFileSync(join(d, f), 'utf8'));
@@ -94,6 +94,37 @@ test('a Lottie file with external images is refused', () => { const d = copy(); 
 test('an unknown basis is refused', () => refused(mutate(l => { row(l, 'a04').basis = 'probably-fine'; }), /^a04: unknown basis probably-fine/));
 test('a duplicate id is refused', () => refused(mutate(l => { l.rows.push({...row(l, 'a04')}); }), /^a04: duplicate id/));
 test('a fair-use row when the film disallows fair use is refused', () => { const d = copy(); const s = read(d, 'sourcing.json'); s.fairUse = false; write(d, 'sourcing.json', s); refused(d, /^a05: fair use disabled in sourcing\.json/); });
+// Generated material (R59): fixture row a01 becomes a generated take; it keeps its derivatives, uses and evidence.
+function gen(extra = {}, sourcingGenerated = {allowed: true, monetized: false}) {
+  const d = mutate(l => {
+    const r = row(l, 'a01');
+    Object.assign(r, {basis: 'generated', license: null, platform: 'flow', acquisition: 'platform-feature', credit: '',
+      generated: {termsRead: '2026-11-12', watermark: false, commercial: 'unknown', prompt: 'p', ...extra}});
+  });
+  const s = read(d, 'sourcing.json');
+  if (sourcingGenerated === null) delete s.generated; else s.generated = sourcingGenerated;
+  write(d, 'sourcing.json', s);
+  return d;
+}
+test('a generated row passes when the film allows it', () => {
+  const r = checkAssets(gen());
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.report.perBasis.generated, 1);
+});
+test('a generated row is refused when sourcing.json has no generated block', () => refused(gen({}, null), /^a01: generated material not allowed in sourcing\.json \(set "generated": \{"allowed": true\}\)/));
+test('a generated row without its fields is refused', () => {
+  const d = gen(); const l = read(d, 'assets.json'); delete row(l, 'a01').generated.prompt; write(d, 'assets.json', l);
+  refused(d, /^a01: generated row needs platform, licenseUrl and generated\.termsRead, watermark, commercial, prompt/);
+});
+test('a monetized film refuses generated rows not cleared for commercial use', () => {
+  refused(gen({}, {allowed: true, monetized: true}), /^a01: commercial use unknown not allowed in a monetized film/);
+  assert.deepEqual(checkAssets(gen({commercial: 'yes'}, {allowed: true, monetized: true})).errors, []);
+});
+test('watermarked generated rows are listed for a human check', () => {
+  assert.match(reportText(checkAssets(gen({watermark: true}))), /Watermarks stay visible, uncropped and uncovered: a01/);
+  assert.doesNotMatch(reportText(checkAssets(copy())), /Watermarks stay visible/);
+});
+
 test('report file is written', () => {
   const d = copy(); const rep = join(d, 'qa', 'assets.md');
   const out = spawnSync(process.execPath, [GATE, d, '--report', rep], {encoding: 'utf8'});
