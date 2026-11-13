@@ -27,7 +27,9 @@ Flow now lives at flow.google.com (it was labs.google/fx on 2026-11-12).
   2 + 2 takes, two were discarded: a mist that read as a mushroom cloud with stray side arcs, and a dial needle that
   swept four times and vanished in between (an AI artifact in the centre of the frame).
 - **Credits:** two x2 generations (40 credits) left too few for a third; the page then showed "Non disponi di crediti
-  sufficienti" with an upgrade button (never click it).
+  sufficienti" with an upgrade button (never click it). A later x1 request (10 credits) was accepted by the bar but
+  refused on submit with the banner "Hai esaurito i crediti Google Flow" and no take: read the banner, not the bar.
+  Check which account the avatar holds (its aria-label names it) before assuming fresh credits.
 - **Watermark:** none visible.
 
 ## Terms
