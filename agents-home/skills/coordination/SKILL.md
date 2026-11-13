@@ -145,8 +145,9 @@ a blocker for work the lead can check. The tools shrink what native workers must
 
 ## Bounded free API candidates
 
-For small supplied-context work with a cheap objective check, consider the shared API pool
-before consuming a native worker slot: `python tools/stack.py swarm accounts` from the setup
+Not a default route (decision 2026-11-13: 12 of 288 tasks accepted, 169 failed for capacity). Use it
+only for public material, after a one-task live probe passes in the same session. For small
+supplied-context work with a cheap objective check: `python tools/stack.py swarm accounts` from the setup
 repo shows admitted accounts/capabilities. Use `swarm task --packet <json> --output <new-json>`
 for one task, or `submit`/`drain` for independent work. Keep trivial work inline and use native
 agents for repository edits and consequential reasoning. Read `docs/swarm.md` for packet fields.

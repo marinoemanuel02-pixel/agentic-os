@@ -3,6 +3,36 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-11-13 - Consolidation follow-through: one live line, measured gaps closed, swarm off the default path
+
+- **Evidence.** A read-only review on 2026-11-12 of 12 films, the kit and two weeks of orchestration ledgers (three
+  readers, spot-checked): the live checkout lagged finished work on unmerged branches, the films' best lessons sat in
+  film repos, three retros were empty, and the kit assumed one genre (illustrated explainers with sourced claims).
+- **Merged and live.** GitHub `main`, `claude/stack-upgrade-1031`, shot ids and `mix()`, engine shots, generated
+  sources and the two docs-only branches on one line; captions and the 16:9 / 9:16 format helper and the Toon cast
+  ported from the films into the template. Rules renumbered once so every id is unique (R59 generated, R60-R62 engines).
+- **Verdicts keep their day.** `aos video verdict --at <date>` stores the day a verdict was given beside the time it
+  was recorded, so releases the ledger missed can be backfilled without misdating them. Raw verdicts stay audit-only.
+- **Capacity.** `aos capacity` showed Claude "28 % left" twelve days after the report; a report whose reset has passed
+  now shows "? % left" and how to record a fresh one. Claude's usage has no local source (no file; the status line is
+  third-party), so a Claude lead records its usage card. Rejected: wrapping the status line, which would rewrite the
+  operator's Claude settings for a display.
+- **Reviews leave receipts.** The contract sent Claude's second opinions through raw `codex exec`: 14 reviews from
+  10-30 to 11-12 left no tokens or outcome on record. `aos delegate codex` (read-only, receipt) is now first, raw exec
+  the fallback; a delegated read review measured 146 K input tokens (107 K cached) in 145 s on 11-12.
+- **Swarm and pool.** The free API swarm accepted 12 of 288 tasks (186 failed, 169 of them `no_capacity` from one
+  burst; 86 candidates never verified); the pool was called 6 times, last on 10-28, 3 outputs accepted. Decision:
+  the swarm is not a default route; use it only for public material after a live probe passes, and renew the account
+  attestation first. The pool stays, with its weak local model as the known limit; revisit both once the workstation
+  runs the larger local model. Rejected: deleting the swarm (working code, free, and its failures were capacity, not
+  correctness).
+- **Rules.** Genre-specific rules are scoped to their kind of film without changing ids (R02, R19, R42 and rubric 6;
+  R43's costs are one machine's measurements). Measured against today's gates, no released film has a delivery
+  defect; the type-size gate (R58) flags small source sizes in all six films it postdates, which needs frame review
+  before any is called visible.
+- **Open.** Genre profiles in the brief (format, which gates apply, voice and music source, reference pack) wait on
+  the operator's choice of the next kinds of video.
+
 ## 2026-11-12 - Generated video is a case-by-case material source
 
 - **Why.** Free tiers of hosted video generators make fluid, organic motion that code makes poorly. Spikes on Flow and
