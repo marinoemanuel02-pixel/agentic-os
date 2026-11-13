@@ -56,3 +56,10 @@ Exact keyframes (metacognition-explainer, 2026-11-13): draw the boundary frames 
 code (one function of a state, which the shots also draw every frame), pass that markup into the page (6-10 KB per
 key; send only the part that differs from a key already there), draw it on a 1280x720 canvas, `toBlob` a PNG, wrap it
 in a `File` and drop it. The page draws the same markup Remotion renders, so the keyframes match the film exactly.
+
+Raster keyframes (3D renders, metacognition-3d, 2026-11-13): a real Ctrl+V into the page fires no paste event, the
+page may not read the clipboard, and an https page cannot fetch a localhost server even with CORS and
+Private-Network-Access headers. What worked: WebP (about 9-28 KB at 1280x720, q72), deflated with zlib, base64, split
+into 1500-character chunks, each sent with a page-side 32-bit hash that is compared with the local one before the next
+batch; the page joins them, inflates with `DecompressionStream('deflate')`, draws the image on a canvas and drops the
+PNG. Without the deflate step, copying the base64 of a dark flat frame failed on its repeated runs.
