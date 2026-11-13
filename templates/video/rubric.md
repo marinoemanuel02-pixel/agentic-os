@@ -8,7 +8,8 @@ Score each check 0-2 per shot on the contact sheet and once for the whole cut. A
    `qa/motion.md`); holds breathe; nothing static over 1 s except deliberate holds.
 4. **A type system.** Fixed families and scale; inside title-safe; >= 36 px at 1080p.
 5. **One world.** One palette and one set of rules across all shots.
-6. **Cut and sound in sync.** Cuts on the beat grid; every major motion has a sound.
+6. **Cut and sound in sync.** Cuts on the beat grid (a word-cut short cuts on words, R44); every major motion has a
+   sound.
 7. **True and traceable.** Every number and quote matches `script.md` and `sources.md`.
 8. **Upload-clean.** `tools/qa.sh` passes.
 9. **Easy to follow.** One idea per line in everyday words; the picture shows the idea before the words name it.
