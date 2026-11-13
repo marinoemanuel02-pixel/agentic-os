@@ -25,7 +25,13 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
 - Review sheet of chosen frames (the director's main loop): `bash tools/frames.sh <sheet> S01:20 S02:140 ...`
 - Stills: `bash tools/still.sh <frame> <CompositionId>...`; verify a checkout: `node --no-warnings tools/verify.mjs S01 S02 ...`
   (bundles, renders first/middle/last frame per shot, writes a contact sheet)
-- People in 2D films: `src/lib/cast/` (`Person`, `POSES`, `walk`, `talk`, `handPos`; colours in `palette.ts`). Review
+- People in 2D films, the Toon cast: `src/lib/toon/` (`Toon`, `ToonPerson`'s `Person`/`specFor`/`poseFor`/`handPos`,
+  `hands.ts`) is the frontier's characters best (pauseai-it final-v20, in Rational Animations' sober register); it
+  takes the `PersonPose` of `src/lib/cast/` and an optional chest `badge`. Review sheet:
+  `node tools/toon-sheet.mjs tools/sheets/toon-cast.tsx <out.png>` (write it outside the repo; needs `magick`); rig
+  tests `node --no-warnings --test tools/checks/toon-rig.test.mjs` (esbuild/react from `TOON_NODE_MODULES` or
+  `~/.aos/scratch/video-agi-race/node_modules`, skips without them)
+- People in 2D films, the earlier kit: `src/lib/cast/` (`Person`, `POSES`, `walk`, `talk`, `handPos`; colours in `palette.ts`). Review
   the cast before it goes into shots and after any kit change: `bash tools/still.sh 0 CastSheet CastTrio CastFaces
   CastHands`; geometry tests `node --no-warnings --test tools/checks/cast.test.mts`
 - Formats: one source renders 16:9 and native 9:16; wrap a composition in `<FormatProvider format={TALL}>` and stage
