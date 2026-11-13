@@ -1,13 +1,27 @@
 ---
 name: generate-video
-description: Make a generated transition, asset or clip for a film on a free video generator (Flow, Kling) driven in the built-in browser, and take it into the film with its rights. Use for a shot marked generated in shots.md.
+description: Make a generated transition, asset or clip for a film on a free video generator (Flow, Kling, PixVerse, Vidu, Hailuo) driven in the built-in browser, and take it into the film with its rights. Use for a shot marked generated in shots.md.
 ---
 
 # Generate video
 
 Generated material is opt-in per shot (rule R59): the shot list says why code or real material will not do, and a
-take that reads as generic AI output is discarded. Platform recipes: `flow.md`, `kling.md` in this folder. Each holds
-only what was seen on the page, dated; a step that no longer matches the page stops the run and is reported.
+take that reads as generic AI output is discarded. Platform recipes in this folder: `flow.md`, `kling.md`,
+`pixverse.md`, `vidu.md`, `hailuo.md`. Each holds only what was seen on the page, dated; a step that no longer matches
+the page stops the run and is reported.
+
+## Providers (first frames-to-video test 2026-11-14, same keyframe pair; `measure-takes.sh` compares takes)
+
+| Provider | Free quota | Cost per 5 s take | Endpoint RMSE start/end | Motion | Watermark |
+|---|---|---|---|---|---|
+| Flow (Veo 3.1 Lite) | daily 50 | 10 (720p) | 1.1 / 1.7 % | to the end frame | none |
+| PixVerse (V6, Transition) | daily 30 | 40 (720p silent), ~25 (360p) | 0.7 / 1.1 % | to the end frame | none seen |
+| Vidu (Q2, start-end) | daily login, amount unconfirmed | 10 (1080p) | 2.3 / 2.5 % | done by mid-take, then held | "Vidu AI" |
+| Hailuo (H3, Start/End) | **flagged: likely one-time trial** | 35 (768p), 60 (2K) | 4.1 % (1344x768 frame) | 1.5 s burst, still ends | "MINIMAX / Hailuo AI" |
+| Kling | not measured yet | 30-50 | - | - | "KlingAI" |
+
+Only providers whose free quota refreshes daily belong in the default rotation; a provider whose quota turns out to be
+a one-time or monthly grant stays in this table, flagged, and is used only when the operator asks.
 
 ## The operator does
 
