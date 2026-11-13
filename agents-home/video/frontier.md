@@ -13,7 +13,7 @@ operator then rejected that cast in six verdicts (v8-v16) before accepting a dif
 - best: pauseai-it tag `final-v20` (accepted by the operator on the moving film, both formats, 2026-10-29): the drawn
   cast in `src/lib/Toon.tsx`, `ToonHead.tsx`, `hands.ts` and `ToonPerson.tsx` (Codex's design B from v15, in Rational
   Animations' sober register: muted palette from the scene, thin even line, about seven heads tall, profile-line
-  faces, two-segment limbs solved per joint; rig tests in `tools/checks/toon-rig.test.mjs`). Not yet in the template.
+  faces, two-segment limbs solved per joint; rig tests in `tools/checks/toon-rig.test.mjs`). In the template as `src/lib/toon/` (2026-11-13).
   Superseded: `Person.tsx` (2026-10-26), judged better than alignment-3's Pip from stills by both vendors, rejected
   by the operator on the film. `src/lib/Mind.tsx` (one-eyed creature with breathing lobes) was not part of that verdict.
   Superseded: the cast kit in `templates/video/src/lib/cast/` (PR #2) is the v9 redesign, which did not pass the

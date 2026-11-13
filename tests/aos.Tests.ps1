@@ -1195,6 +1195,7 @@ Describe 'Video input provenance' {
         @{ Check = 'render-shot media entry and kit key'; File = 'render-shot.test.mjs' },
         @{ Check = 'cast geometry (limb caps, head units, hand attachment, poses, faces)'; File = 'cast.test.mts' },
         @{ Check = 'easing helpers (mix for an eased progress)'; File = 'ease.test.mts' },
+        @{ Check = 'toon rig (joints, hands, heads)'; File = 'toon-rig.test.mjs' },
         @{ Check = 'caption timing (chunks, shared boxes, same-frame swaps, readable time)'; File = 'captions.test.mts' }
     ) {
         $testFile = Join-Path $PSScriptRoot "..\templates\video\tools\checks\$File"
