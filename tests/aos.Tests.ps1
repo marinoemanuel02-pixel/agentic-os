@@ -3699,6 +3699,18 @@ Describe 'Agent shell shims (aos on PATH)' {
         $sh | Should -Match ([regex]::Escape("'" + $entry.Replace('\', '/') + "' `"`$@`""))
     }
 
+    # Codex review 2026-11-12: cmd expands %NAME% even inside double quotes, so a checkout path holding a percent
+    # sign sent aos.cmd to the wrong entry point.
+    It 'escapes a percent sign of the checkout path in aos.cmd' {
+        $cmd = InModuleScope aos {
+            $saved = $script:Root
+            $script:Root = 'C:\work\%USERNAME%\repo'
+            try { (Get-AosShimSpecs | Where-Object { $_.Name -eq 'aos.cmd' }).Text } finally { $script:Root = $saved }
+        }
+        $cmd | Should -Match ([regex]::Escape('-File "C:\work\%%USERNAME%%\repo\bin\aos.ps1" %*'))
+        $cmd | Should -Not -Match ([regex]::Escape('\%USERNAME%\'))
+    }
+
     It 'changes nothing on a second sync' {
         InModuleScope aos { Sync-AosShims }
         $before = Get-TestTreeState $bin
@@ -3935,6 +3947,22 @@ Describe 'Write guard' {
         $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson $J }
         $r.Exit | Should -Be 2
         $r.Stderr | Should -Match 'is held by codex \(other\)'
+    }
+    # Codex review 2026-11-12: when git cannot answer, any item named .git passed as a work tree, so a scratch folder
+    # holding an empty .git folder or a stray .git file was auto-claimed and blocked other sessions.
+    It 'does not claim a folder whose .git is not a work tree marker (<Case>)' -TestCases @(
+        @{ Case = 'empty .git folder'; Kind = 'dir' },
+        @{ Case = '.git file without gitdir'; Kind = 'file' }
+    ) {
+        $store = New-TestFolder (Join-Path $caseRoot ('scratch ' + $Kind))
+        if ($Kind -eq 'dir') { New-TestFolder (Join-Path $store '.git') | Out-Null } else { Write-TestFile (Join-Path $store '.git') 'not a pointer' }
+        Mock Invoke-AosGit -ModuleName aos { [pscustomobject]@{ Code = 1; Out = ''; Err = 'not a repository' } }
+        foreach ($s in 's1', 's2') {
+            $j = @{ cwd=$store; session_id=$s; tool_name='Write'; tool_input=@{ file_path=(Join-Path $store 'note.md') } } | ConvertTo-Json -Compress
+            $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson $J }
+            $r.Exit | Should -Be 0
+        }
+        @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 0
     }
     It 'still honours an explicit claim on a folder outside git' {
         $store = New-TestFolder (Join-Path $caseRoot 'plan')

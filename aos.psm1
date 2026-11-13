@@ -822,7 +822,8 @@ function Get-AosShimSpecs {
     # The extensionless sh script serves Git Bash, using pwsh or falling back to Windows PowerShell.
     $entry = Join-Path $script:Root 'bin\aos.ps1'
     $mark = 'Written by aos sync from agentic-os; run aos sync again after moving the checkout.'
-    $run = "-NoProfile -ExecutionPolicy Bypass -File `"$entry`" %*"
+    # cmd expands %NAME% even inside double quotes: a literal percent sign in the path is written as %%.
+    $run = "-NoProfile -ExecutionPolicy Bypass -File `"$($entry.Replace('%', '%%'))`" %*"
     # goto, not an if (...) block: an argument with a ")" would end the block early.
     $cmd = (@('@echo off', "rem $mark", 'rem cmd cannot carry metacharacters intact; use aos.ps1 from pwsh or aos from Git Bash.', 'where pwsh >nul 2>nul || goto ps51', "pwsh $run", 'exit /b %errorlevel%',
               ':ps51', "powershell $run", 'exit /b %errorlevel%') -join "`r`n") + "`r`n"
@@ -2623,6 +2624,19 @@ function Get-AosDirKey([string]$Path) {
     return $full.TrimEnd('\')
 }
 
+function Test-AosGitMarker([string]$Dir) {
+    # A work tree's .git: a folder holding HEAD, or a file pointing at one ("gitdir: ..." in worktrees and
+    # submodules). An empty .git folder or a stray .git file is not one (Codex review 2026-11-12).
+    $g = Join-Path $Dir '.git'
+    if (Test-Path -LiteralPath $g -PathType Container) { return (Test-Path -LiteralPath (Join-Path $g 'HEAD') -PathType Leaf) }
+    if (Test-Path -LiteralPath $g -PathType Leaf) {
+        $first = ''
+        try { $first = [string](Get-Content -LiteralPath $g -TotalCount 1 -ErrorAction Stop) } catch { }
+        return $first.StartsWith('gitdir:')
+    }
+    return $false
+}
+
 function Get-AosCheckout([string]$Path) {
     # The git top level holding $Path (a file or folder, existing or about to be created); without git,
     # the nearest existing folder.
@@ -2816,9 +2830,9 @@ function Invoke-AosGuard([string]$Agent, [string]$Event, [string]$InputJson) {
                 foreach ($p in (Get-AosGuardPaths $in)) {
                     $co = Get-AosCheckout $p
                     # When git cannot answer (an OneDrive timeout) the nearest folder comes back: the work tree is
-                    # still the nearest folder up the tree holding .git (a folder, or a file in worktrees and submodules).
+                    # still the nearest folder up the tree holding a real .git (Test-AosGitMarker).
                     $top = $co
-                    while ($top -and -not (Test-Path -LiteralPath (Join-Path $top '.git'))) { $top = Split-Path -Parent $top }
+                    while ($top -and -not (Test-AosGitMarker $top)) { $top = Split-Path -Parent $top }
                     if ($top) { $co = Get-AosDirKey $top }
                     if ($done.ContainsKey($co.ToLowerInvariant())) { continue }
                     $done[$co.ToLowerInvariant()] = $true
