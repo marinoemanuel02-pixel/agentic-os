@@ -165,6 +165,14 @@ class WireTests(unittest.TestCase):
             '{"text":"hello","segments":[{"start":0,"end":1,"text":"hello"}]}'}]}}]}
         self.assertEqual(parse_result(a, p, wire)['segments'][0]['end'], 1)
 
+    def test_malformed_transcript_segments_are_provider_errors(self):
+        # A non-object segment once raised AttributeError past the pool's handlers, stranding the reservation.
+        a = dict(provider='groq', routes={'transcribe': {'model': 'fixture'}})
+        p = dict(capability='transcribe', audio_base64='ZmFrZQ==', audio_seconds=2)
+        for rows in [[None], ['x'], [[0, 1]]]:
+            with self.assertRaises(ProviderError):
+                parse_result(a, p, {'text': 'hello', 'segments': rows})
+
     def test_catalog_selection_prefers_current_alias_and_stable_embeddings(self):
         from swarm_accounts import pick_models
         rows = [{'name': 'models/family-1-flash-lite', 'supportedGenerationMethods': ['generateContent']},
@@ -252,6 +260,52 @@ class TaskTests(unittest.TestCase):
         self.pool.submit(packet()); self.pool.submit(packet('two'))
         self.pool.drain(workers=2)
         self.assertEqual([self.state.task(n)['status'] for n in ('one', 'two')], ['candidate', 'candidate'])
+
+    def test_local_ceiling_keeps_task_queued_instead_of_failing(self):
+        r = registry(); r['accounts'][0]['limits'].append({'unit': 'tokens', 'seconds': 60, 'amount': 3000})
+        self.pool.registry = validate_registry(r)
+        self.pool.submit(packet(max_tokens=2000)); self.pool.submit(packet('two', max_tokens=2000))
+        self.pool.drain(workers=1)
+        self.assertEqual(self.state.task('one')['status'], 'candidate')
+        self.assertEqual(self.state.task('two')['status'], 'queued')
+        self.assertEqual(self.calls, [('first', 'one')])
+
+    def test_single_task_run_fails_on_full_ceiling_instead_of_leaving_an_orphan(self):
+        r = registry(); r['accounts'][0]['limits'].append({'unit': 'tokens', 'seconds': 60, 'amount': 3000})
+        self.pool.registry = validate_registry(r)
+        self.pool.submit(packet(max_tokens=2000)); self.pool.drain(only='one')
+        self.pool.submit(packet('two', max_tokens=2000)); self.pool.drain(only='two')
+        row = self.state.task('two')
+        self.assertEqual((row['status'], row['error']), ('failed', 'no_capacity'))
+        with patch.object(self.state, 'reserve', side_effect=Unavailable('Local quota ceiling reached')):
+            self.pool.submit(packet('three')); self.pool.drain(only='three')
+        self.assertEqual(self.state.task('three')['status'], 'failed')
+        self.assertEqual(self.calls, [('first', 'one')])
+
+    def test_drain_stops_when_dispatch_keeps_refusing_a_claimed_task(self):
+        self.pool.submit(packet())
+        with patch.object(self.state, 'reserve', side_effect=Unavailable('Local quota ceiling reached')):
+            worker = threading.Thread(target=self.pool.drain, daemon=True); worker.start(); worker.join(5)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(self.state.task('one')['status'], 'queued')
+
+    def test_slot_taken_between_claim_and_dispatch_keeps_batch_task_queued(self):
+        self.pool.submit(packet())
+        with patch.object(self.state, 'eligible', return_value=[]):
+            self.pool.drain()
+        self.assertEqual(self.state.task('one')['status'], 'queued')
+        self.assertEqual(self.calls, [])
+
+    def test_capacity_refusal_after_claim_requeues_without_an_attempt(self):
+        self.pool.submit(packet())
+        claim = self.state.claim(registry=self.pool.registry)
+        with patch.object(self.state, 'reserve', side_effect=Unavailable('Local quota ceiling reached')):
+            self.pool.run_claimed(*claim)
+        row = self.state.task('one')
+        self.assertEqual((row['status'], row['run']), ('queued', None))
+        self.assertEqual(self.calls, [])
+        self.pool.drain()
+        self.assertEqual(self.state.task('one')['status'], 'candidate')
 
     def test_dependency_requires_host_verification_and_detects_drift(self):
         self.pool.submit(packet()); self.pool.submit(packet('two', depends_on=['one']))

@@ -94,7 +94,7 @@ test('a Lottie file with external images is refused', () => { const d = copy(); 
 test('an unknown basis is refused', () => refused(mutate(l => { row(l, 'a04').basis = 'probably-fine'; }), /^a04: unknown basis probably-fine/));
 test('a duplicate id is refused', () => refused(mutate(l => { l.rows.push({...row(l, 'a04')}); }), /^a04: duplicate id/));
 test('a fair-use row when the film disallows fair use is refused', () => { const d = copy(); const s = read(d, 'sourcing.json'); s.fairUse = false; write(d, 'sourcing.json', s); refused(d, /^a05: fair use disabled in sourcing\.json/); });
-// Generated material (R55): fixture row a01 becomes a generated take; it keeps its derivatives, uses and evidence.
+// Generated material (R59): fixture row a01 becomes a generated take; it keeps its derivatives, uses and evidence.
 function gen(extra = {}, sourcingGenerated = {allowed: true, monetized: false}) {
   const d = mutate(l => {
     const r = row(l, 'a01');

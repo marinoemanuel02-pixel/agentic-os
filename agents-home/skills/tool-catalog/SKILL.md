@@ -24,7 +24,7 @@ subscriptions (Claude and ChatGPT).
 | `penpot-local` | Penpot design work through its local MCP server, started only when needed |
 | `research` | cited web research with the agents' own free web search and fetch |
 | `video-references` | a reference pack for a film's niche: strong channels watched in the browser without downloading, notes per beat |
-| `generate-video` | a generated transition, asset or clip from a free video generator (Flow, Kling) in the built-in browser, taken into the film with its rights (R55) |
+| `generate-video` | a generated transition, asset or clip from a free video generator (Flow, Kling) in the built-in browser, taken into the film with its rights (R59) |
 | `caveman` | opt-in terse replies, only on an explicit `/caveman` (about a quarter fewer visible tokens in a 3-prompt Haiku test; total tokens did not fall); not for reports or prose |
 | `tool-catalog` | this list |
 
@@ -37,14 +37,15 @@ the `codex` plugin; Codex has the same superpowers set and the `$cc:*` commands.
 |---|---|---|
 | `context7` | Claude, Codex | current, version-specific library documentation |
 | `nar` | Claude, Codex | scoring options among known alternatives in one local pass; `nar_classify` (or `nar classify` on the command line, which scripts should prefer) labels up to 50 short texts per call, with `backend=embed` for fast multilingual zero-shot sorting by topic or type (needs `ollama pull bge-m3` once). Use it to triage before spending cloud tokens, check a sample against the truth, report outcomes with `nar_feedback` |
+| `aos-pool` | Claude, Codex | **the default first worker** for extraction (`pool_extract`), sorting (`pool_triage`), options (`pool_variants`), claim checks against supplied sources (`pool_crosscheck`) and gists (`pool_summarize`). Local model first, the free API pool second when `privacy: "public"`; every result carries its own checks and a `pass`/`review` verdict. Report use with `pool_feedback`. See `docs/pool.md` |
 
 Servers cost context on every request: add one only when a command line cannot do the job.
 
 ## Command lines (preferred over servers)
 
 `gh` (GitHub), `rg`/`fd`/`jq` (search), `git`, `uv`/`python`, `node`/`npm`, `pwsh`; the media tools above;
-`python ~/.video-intel/video_intel.py <reel-url>... [--limit N]` (public reels to local Whisper transcripts in `~/.video-intel/out/`; no cookies needed, profile pages are listed through the browser; Instagram media only, the `video-intel` skill drives it);
-`aos` itself: `status`, `sync`, `test`, `ready` (read-only gate before cross-vendor work: repo, claims, both vendors' capacity and actor slots, task paths, unpushed commits), `new`, `video new` (a video project from the template), `who` (claims), `note`, `delegate codex|claude` (hand a task to the other vendor; supports task tier, effort, parent and one native-worker allowance), `coord` (actor reservation, observation, finish, listing, reconciliation, addressed send/inbox/ack/wait and run status/cancellation), `secret` (keys; never print them), `place` (known folders), `install <layer>`.
+`python ~/.video-intel/video_intel.py <reel-url>... [--limit N]` (public reels to local Whisper transcripts in `~/.video-intel/out/`; no cookies needed, profile pages are listed through the browser; Instagram media only);
+`aos` itself (from any shell, Git Bash included, through the shims in `~\.local\bin`; no `Import-Module`): `status`, `sync`, `test`, `ready` (read-only gate before cross-vendor work: repo, claims, both vendors' capacity and actor slots, task paths, unpushed commits), `new`, `video new` (a video project from the template), `who` (claims), `note`, `delegate codex|claude` (hand a task to the other vendor; supports task tier, effort, parent and one native-worker allowance; `--max-input` caps its tokens), `coord` (actor reservation, observation, finish, listing, reconciliation, addressed send/inbox/ack/wait and run status/cancellation), `secret` (keys; never print them), `place` (known folders), `install <layer>`, `asset search|fetch|capture|proxy|registry|credits|budget` (real clips, photos, captures and models for a film, with a rights ledger; rule R35).
 
 Coordination tuning: optional `delegate --contract` and Codex `--transport app-server`; `coord task`
 for checked dependencies and compact packets, `report`/`annotate` for routing evidence,
@@ -53,7 +54,7 @@ for checked dependencies and compact packets, `report`/`annotate` for routing ev
 a cold quota handoff to the other existing vendor without replaying work. The six-case
 `tools/coordination-eval.ps1` defaults to model-free preparation. See `docs/coordination-tuning.md`.
 
-Engine shots for video films: Godot 4.7 (`~/.local/bin/godot/`, Movie Maker), Manim CE (venv `~/.aos/venvs/manim`) with TinyTeX (`~/.aos/tinytex`, never on the user PATH); driven only through a film's `tools/render-shot.py` (see the template's `engines/README.md`, rules R56-R58). Unreal, Unity, Autograph and Cavalry need accounts the user creates; their adapters are written but not yet run.
+Engine shots for video films: Godot 4.7 (`~/.local/bin/godot/`, Movie Maker), Manim CE (venv `~/.aos/venvs/manim`) with TinyTeX (`~/.aos/tinytex`, never on the user PATH); driven only through a film's `tools/render-shot.py` (see the template's `engines/README.md`, rules R60-R62). Unreal, Unity, Autograph and Cavalry need accounts the user creates; their adapters are written but not yet run.
 
 Existing-footage editing: `tools/footage/footage.py` in the setup repo, reached through the `aos`
 module's directory. Offline inventory/transcription, timestamp search, draft cuts and checked FFmpeg
@@ -119,10 +120,6 @@ Use `verify --output <new-home-folder> --live` for repeatable checks of all four
 products; keep VoiceStudio open for speech. Live mode permits Composio discovery and one free
 OmniRoute request. Skips, blockers and failures remain explicit. See
 `docs/research/2026-10-21-stack-integration.md` for current integration evidence.
-`aos` itself: `status`, `sync`, `test`, `new`, `video new` (a video project from the template), `who` (claims), `note`, `delegate codex|claude` (hand a task to the other
-vendor, `--max-input` caps its tokens), `secret` (keys; never print them), `place` (known folders), `install <layer>`,
-`asset search|fetch|capture|proxy|registry|credits|budget` (real clips, photos, captures and models for a film, with a
-rights ledger; rule R35).
 
 ## Other agents
 

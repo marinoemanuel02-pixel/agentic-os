@@ -21,6 +21,12 @@ if node "$P/tools/checks/assets.mjs" "$P" --timeline "$H/qa/timeline.json" --pub
 else bad "asset policy checks failed: $(head -3 "$H/qa/assets.log" | tr '
 ' ' ')"; cat "$R"; exit 1; fi
 node "$P/tools/checks/screen-text.mjs" || { bad "screen-text ledger coverage incomplete"; cat "$R"; exit 1; }
+# rubric 4 (R58): no type under 36 px in src/lib or src/shots; sizes it cannot evaluate are listed for frame review
+if node "$P/tools/checks/type-size.mjs" > "$H/qa/type-size.log" 2>&1; then ok "$(tail -1 "$H/qa/type-size.log") (list: media root qa/type-size.log)"
+else bad "type under 36 px (rubric 4, R58):"; grep " px is under " "$H/qa/type-size.log" | sed 's/^/  /' >> "$R"; cat "$R"; exit 1; fi
+# R55: a human voice was scale-checked against a healthy take at ingest and is still the voice that was checked
+if node "$P/tools/checks/voice-scale.mjs" --receipt "$P/src/data/voice-scale.json" --voice "$P/src/data/words.sha256.json" > "$H/qa/voice-scale.log" 2>&1; then ok "$(cat "$H/qa/voice-scale.log")"
+else bad "$(cat "$H/qa/voice-scale.log")"; cat "$R"; exit 1; fi
 node --no-warnings "$P/tools/checks/joins.mts" || { bad "camera joins invalid"; cat "$R"; exit 1; }
 
 # Refuse mixed-input evidence before decoding or rendering any proxy.

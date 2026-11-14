@@ -24,3 +24,7 @@ export const cubicBezier = (x1: number, y1: number, x2: number, y2: number) => {
 };
 
 export const softEase = cubicBezier(...SOFT_POINTS);
+
+/** Linear blend for a progress k in 0..1 that is already eased (a move()). Use it instead of tween(k, 0, 1, a, b):
+ * tween takes a frame, so it stretches k over MIN_MOVE_FRAMES and the value barely moves. */
+export const mix = (k: number, from: number, to: number) => from + (to - from) * k;

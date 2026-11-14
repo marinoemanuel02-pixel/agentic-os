@@ -286,7 +286,7 @@ def frame_md5s(frames: list) -> list:
 
 
 def repeat(root: Path, engine: str, spec: dict, work: Path, k: int, preroll: int, size, fps: int) -> dict:
-    """Render the first k frames twice; pixel-identical means every decoded frame matched (R58). Encoded bytes are
+    """Render the first k frames twice; pixel-identical means every decoded frame matched (R62). Encoded bytes are
     not compared: the clip is encoded once from the frames."""
     if k < 1:
         raise RenderError(f"--repeat needs a positive frame count, got {k}")

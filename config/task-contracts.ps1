@@ -79,7 +79,7 @@ function Get-AosArtifactHashes([string]$Path) {
     $sha=[Security.Cryptography.SHA256]::Create()
     try {
         $hashes=[ordered]@{sha256=([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','')}
-        if ([Array]::IndexOf($bytes,[byte]0,0,[Math]::Min(8000,$bytes.Length)) -lt 0) {
+        if ([Array]::IndexOf($bytes,[byte]0) -lt 0) {
             # Hash byte ranges without CR in CRLF pairs; preserve every other byte.
             $sha.Initialize()
             $start=0;$scan=0
@@ -134,6 +134,8 @@ function Register-AosTaskContract([string]$Path,[string]$Repo) {
     if ($c -isnot [Collections.IDictionary] -or $c['version'] -ne 1 -or -not $c['objective'] -or
         $c['task_class'] -notin @('mechanical','implementation','sequential','diagnosis','research','consequential') -or
         @($c.Keys | Where-Object { $_ -notin $fields }).Count) { throw 'invalid task contract or unknown field' }
+    # Checked before anything is recorded: a stored contract is immutable, so a late refusal would block its correction.
+    if (-not ([string]$c['verify']).Trim()) { throw 'contract requires a host verification command' }
     Assert-AosCoordId ([string]$c['id'])
     $repoPath=Get-AosCheckout $Repo
     foreach ($name in @('depends_on','allow','artifacts','context')) {

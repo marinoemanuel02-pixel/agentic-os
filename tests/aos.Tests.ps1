@@ -1,4 +1,4 @@
-Describe 'aos isolated suite' {
+﻿Describe 'aos isolated suite' {
 # Run with tests/Run-Tests.ps1 (Pester 5.5+); all filesystem fixtures are disposable.
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot '..\aos.psm1') -Force -DisableNameChecking
@@ -216,6 +216,24 @@ Describe 'Set-AosManagedBlock' {
         }
         [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($path)) | Should -BeExactly $before
         (Get-Item -LiteralPath $path).LastWriteTimeUtc | Should -Be $written
+    }
+
+    It 'backs up an existing file before changing it and writes nothing when the backup fails' {
+        $path = Join-Path $caseRoot 'backed.txt'
+        Write-TestFile $path 'mine'
+        Mock Backup-AosFile -ModuleName aos { 'saved' }
+        InModuleScope aos -Parameters @{ Path = $path } {
+            param($Path)
+            Set-AosManagedBlock -Path $Path -Start '# start' -End '# end' -Body 'body'
+        }
+        Should -Invoke Backup-AosFile -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Path -like '*backed.txt' }
+        Mock Backup-AosFile -ModuleName aos { throw 'backup failed' }
+        { InModuleScope aos -Parameters @{ Path = $path } {
+            param($Path)
+            Set-AosManagedBlock -Path $Path -Start '# start' -End '# end' -Body 'other'
+        } } | Should -Throw
+        [System.IO.File]::ReadAllText($path) | Should -Match 'body'
+        [System.IO.File]::ReadAllText($path) | Should -Not -Match 'other'
     }
 
     It 'writes UTF-8 without a BOM by default and with a BOM when requested' {
@@ -1127,7 +1145,7 @@ Describe 'Voice tool sherpa path' {
 }
 
 Describe 'Video input provenance' {
-    It 'runs reviewed export evidence guards (<Check>) in TestDrive fixtures' -ForEach @(
+    It 'runs reviewed export evidence guards (<Check>) in TestDrive fixtures' -Tag 'Language' -ForEach @(
         @{ Check = 'fact coverage and entry-point refusal'; File = 'currency-hardening.test.mjs' },
         @{ Check = 'actual export day'; File = 'currency-export-day.test.mjs' },
         @{ Check = 'dated evidence identity'; File = 'input-manifest-evidence.test.mjs' },
@@ -1144,13 +1162,18 @@ Describe 'Video input provenance' {
         }
     }
 
-    It 'runs reusable video <Check> regressions in isolated fixtures' -ForEach @(
+    It 'runs reusable video <Check> regressions in isolated fixtures' -Tag 'Language' -ForEach @(
         @{ Check = 'joins'; File = 'joins.test.mts' },
         @{ Check = 'screen text'; File = 'screen-text.test.mjs' },
         @{ Check = 'pipeline'; File = 'pipeline.test.mjs' },
         @{ Check = 'review sheets'; File = 'review-sheets.test.mts' },
         @{ Check = 'grade (no fringes, no SAO halos)'; File = 'grade.test.mjs' },
-        @{ Check = 'cast geometry (limb caps, head units, hand attachment, poses, faces)'; File = 'cast.test.mts' }
+        @{ Check = 'type size (rubric 4)'; File = 'type-size.test.mjs' },
+        @{ Check = 'voice scale (R55)'; File = 'voice-scale.test.mjs' },
+        @{ Check = 'render-shot media entry and kit key'; File = 'render-shot.test.mjs' },
+        @{ Check = 'cast geometry (limb caps, head units, hand attachment, poses, faces)'; File = 'cast.test.mts' },
+        @{ Check = 'easing helpers (mix for an eased progress)'; File = 'ease.test.mts' },
+        @{ Check = 'caption timing (chunks, shared boxes, same-frame swaps, readable time)'; File = 'captions.test.mts' }
     ) {
         $testFile = Join-Path $PSScriptRoot "..\templates\video\tools\checks\$File"
         $savedScratch = $env:AOS_VIDEO_TEST_ROOT
@@ -1163,7 +1186,7 @@ Describe 'Video input provenance' {
         }
     }
 
-    It 'pipeline regressions pass inside a film checkout (its own plan, lines, shots and poses do not leak into fixtures)' {
+    It 'pipeline regressions pass inside a film checkout (its own plan, lines, shots and poses do not leak into fixtures)' -Tag 'Language' {
         $film = Join-Path $TestDrive 'film copy'
         Copy-Item -Recurse (Join-Path $PSScriptRoot '..\templates\video') $film
         $pose = 'export const poses = {start: {pos: [0, 2, 8], target: [0, 1, 0], fov: 32}, end: {pos: [0, 2, 8], target: [0, 1, 0], fov: 32}};'
@@ -1201,7 +1224,7 @@ Describe 'Video input provenance' {
         foreach ($relative in $filmFiles) { Test-Path -LiteralPath (Join-Path $snapshot $relative) | Should -BeTrue -Because "$relative must be in the fixture snapshot" }
     }
 
-    It 'runs the currency gate and export-day reverify tests (no network: a local fixture server)' -ForEach @(
+    It 'runs the currency gate and export-day reverify tests (no network: a local fixture server)' -Tag 'Language' -ForEach @(
         @{ Name = 'currency'; File = 'checks\currency.test.mjs' },
         @{ Name = 'reverify'; File = 'reverify.test.mjs' }
     ) {
@@ -1210,7 +1233,7 @@ Describe 'Video input provenance' {
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
 
-    It 'runs the pacing report and render cache tests when ffmpeg is installed (<Name>)' -ForEach @(
+    It 'runs the pacing report and render cache tests when ffmpeg is installed (<Name>)' -Tag 'Language' -ForEach @(
         @{ Name = 'pacing'; File = 'checks\pacing.test.mjs' },
         @{ Name = 'render cache'; File = 'cache\cache.test.mjs' }
     ) {
@@ -1220,7 +1243,7 @@ Describe 'Video input provenance' {
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
 
-    It 'renders engine shots frame-complete through render-shot, and ships engines/look.json in step with look.ts (python unittest, node)' {
+    It 'renders engine shots frame-complete through render-shot, and ships engines/look.json in step with look.ts (python unittest, node)' -Tag 'Language' {
         if (-not (Get-Command python -ErrorAction SilentlyContinue)) { Set-ItResult -Skipped -Because 'python is not on PATH'; return }
         $result = & python (Join-Path $PSScriptRoot '..\templates\video\tools\checks\engines_test.py') 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $result
@@ -1228,28 +1251,28 @@ Describe 'Video input provenance' {
         $LASTEXITCODE | Should -Be 0 -Because $look
     }
 
-    It 'ingests a non-English voiceover: takes heard in AOS_VO_LANG, accented words kept, phone crackle removed (python unittest)' {
+    It 'ingests a non-English voiceover: takes heard in AOS_VO_LANG, accented words kept, phone crackle removed (python unittest)' -Tag 'Language' {
         if (-not (Get-Command python -ErrorAction SilentlyContinue)) { Set-ItResult -Skipped -Because 'python is not on PATH'; return }
         $result = & python (Join-Path $PSScriptRoot '..\templates\video\tools\checks\ingest_voice_test.py') 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
 
-    It 'resolves the media root from the film folder (worktrees too) and refuses the template (node --test)' {
+    It 'resolves the media root from the film folder (worktrees too) and refuses the template (node --test)' -Tag 'Language' {
         $result = & node --no-warnings --test (Join-Path $PSScriptRoot '..\templates\video\tools\checks\media-root.test.mjs') 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
 
-    It 'keeps the stage documents asking for imported material and the reference-pack skill present (node --test)' {
+    It 'keeps the stage documents asking for imported material and the reference-pack skill present (node --test)' -Tag 'Language' {
         $result = & node --no-warnings --test (Join-Path $PSScriptRoot '..\templates\video\tools\checks\template-text.test.mjs') 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
 
-    It 'refuses imported material without rights, credits, evidence or within fair-use limits (asset gate, node --test)' {
+    It 'refuses imported material without rights, credits, evidence or within fair-use limits (asset gate, node --test)' -Tag 'Language' {
         $result = & node --no-warnings --test (Join-Path $PSScriptRoot '..\templates\video\tools\checks\assets.test.mjs') 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
 
-    It 'rejects changed render inputs and mismatched exports in an isolated fixture' {
+    It 'rejects changed render inputs and mismatched exports in an isolated fixture' -Tag 'Language' {
         $testFile = Join-Path $PSScriptRoot '..\templates\video\tools\checks\input-manifest.test.mjs'
         $savedScratch = $env:AOS_MANIFEST_TEST_ROOT
         try {
@@ -1300,7 +1323,7 @@ Describe 'aos asset' {
         $shown | Should -Match 'a warning'
         $global:LASTEXITCODE | Should -Be 3
     }
-    It 'runs the shared asset tool tests (node --test: core, capture, adapters, registry)' {
+    It 'runs the shared asset tool tests (node --test: core, capture, adapters, registry)' -Tag 'Language' {
         $tests = Join-Path $PSScriptRoot '..\agents-home\video\assets\test\*.test.mjs'
         $result = & node --no-warnings --test $tests 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $result
@@ -2418,6 +2441,38 @@ Describe 'MCP placeholders and nar registration' {
         InModuleScope aos {
             Expand-AosPlaceholders '{{projects}}\x' | Should -BeExactly (Join-Path $env:AOS_PROJECTS 'x')
             Expand-AosPlaceholders '{{home}}\.aos' | Should -BeExactly ($HOME + '\.aos')
+            Expand-AosPlaceholders '{{repo}}\tools\pool_mcp.py' | Should -BeExactly ($script:Root + '\tools\pool_mcp.py')
+        }
+    }
+
+    It 'registers the pool server from this checkout and its script exists' {
+        $manifest = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\config\mcp.json')) | ConvertFrom-Json
+        $pool = $manifest.servers.'aos-pool'
+        $pool.transport | Should -Be 'stdio'
+        @($pool.args)[0] | Should -BeExactly '{{repo}}\tools\pool_mcp.py'
+        Test-Path -LiteralPath (Join-Path $PSScriptRoot '..\tools\pool_mcp.py') | Should -BeTrue
+    }
+
+    It 'approves aos-pool tools for delegated Codex runs only when the server is registered' {
+        InModuleScope aos {
+            Mock Get-AosCodexConfigText { "[mcp_servers.nar]`ncommand = 'x'`n[mcp_servers.aos-pool]`ncommand = 'python'`n" }
+            $on = @(Get-AosCodexPoolArgs)
+            $on.Count | Should -Be 2
+            $on[1] | Should -BeExactly 'mcp_servers.aos-pool.default_tools_approval_mode="approve"'
+            Mock Get-AosCodexConfigText { "[mcp_servers.nar]`ncommand = 'x'`n" }
+            @(Get-AosCodexPoolArgs).Count | Should -Be 0
+        }
+    }
+
+    It 'runs the free-resource pool checks and MCP protocol without a real model or network' -Tag 'Language' {
+        & python -m unittest discover -s $PSScriptRoot -p 'test_pool*.py' -v
+        $LASTEXITCODE | Should -Be 0
+    }
+
+    It 'omits optional pool approvals when registration cannot be read' {
+        InModuleScope aos {
+            Mock Get-AosCodexConfigText { throw (New-Object IO.IOException('registration unavailable')) }
+            @(Get-AosCodexPoolArgs).Count | Should -Be 0
         }
     }
 
@@ -2807,7 +2862,7 @@ Describe 'Pi on the local model' {
         Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -ParameterFilter { $Text -match 'models.json' }
     }
 
-    It 'the permission gate blocks on Deny, on a dismissed dialog and without a UI (node --test)' {
+    It 'the permission gate blocks on Deny, on a dismissed dialog and without a UI (node --test)' -Tag 'Language' {
         # Enforcement, not just installation: Pi runs a tool only when every tool_call handler allows it.
         $ErrorActionPreference = 'Continue'
         $test = Join-Path $PSScriptRoot '..\config\pi\extensions\aos-permission-gate.test.ts'
@@ -2815,7 +2870,7 @@ Describe 'Pi on the local model' {
         $LASTEXITCODE | Should -Be 0 -Because (($out | Out-String).Trim())
     }
 
-    It 'the web search extension returns sources using a controlled fixture (node --test)' {
+    It 'the web search extension returns sources using a controlled fixture (node --test)' -Tag 'Language' {
         $ErrorActionPreference = 'Continue'
         $test = Join-Path $PSScriptRoot '..\config\pi\extensions\aos-web-search.test.ts'
         $out = & node --no-warnings --experimental-strip-types --test $test 2>&1
@@ -3273,6 +3328,18 @@ Describe 'Vendor capacity (R34)' {
         $cap['codex'].source | Should -Be 'delegate'
         $cap['codex'].resets | Should -Not -BeNullOrEmpty
     }
+    It 'recognizes the observed Claude weekly limit and records exhausted capacity without guessing a date' {
+        InModuleScope aos {
+            $message = "You've hit your weekly limit " + [char]0x00b7 + ' resets 5am (Europe/Rome)'
+            (Get-AosErrorCategory $message) | Should -Be quota
+            Add-AosCapacityFromError -Vendor claude -Message $message
+            $capacity = Get-AosCapacity -Now ([datetime]::UtcNow)
+            $capacity['claude'].remaining | Should -Be 0
+            $capacity['claude'].state | Should -Be limited
+            $capacity['claude'].resets | Should -BeNullOrEmpty
+            (Get-AosCapacityWarning claude) | Should -Match 'reset.*unknown'
+        }
+    }
     It 'sets and shows capacity through the CLI and rejects a bad vendor or percent' {
         aos capacity set codex 23 --note 'app usage card' | Out-Null
         $out = aos capacity *>&1 | Out-String
@@ -3526,6 +3593,72 @@ Describe 'Delegation preflight' {
         $r.Ok | Should -BeFalse
         ($r.Reasons -join ' ') | Should -Match 'missing-tool'
     }
+    Context 'verify executable given as a path' {
+        BeforeEach {
+            Mock Test-AosCommand -ModuleName aos { $true }
+            Mock Resolve-AosDelegateModel -ModuleName aos { @{ Ok=$true; Model='fixture-model' } }
+            $pyExe = Join-Path $caseRoot 'py dir\python.exe'
+            Write-TestFile $pyExe ''
+        }
+        It 'starts an existing absolute path in the sandbox instead of asking where.exe' {
+            # where.exe rejects a path ("Invalid pattern ... path:pattern"); the program itself starts fine.
+            Mock Invoke-AosProcess -ModuleName aos {
+                if ($Arguments -contains 'where.exe') { return @{ Code=2; TimedOut=$false; KillFailed=$false } }
+                Write-TestFile $StdoutFile 'Python 3.13.0'
+                @{ Code=0; TimedOut=$false; KillFailed=$false }
+            }
+            $r = InModuleScope aos -Parameters @{ W=$caseRoot; V=('"' + $pyExe + '" -I tools/x.py') } { param($W, $V) Test-AosDelegatePreflight -Vendor 'codex' -Model '' -Needs @() -Verify $V -WorkDir $W -Write }
+            $r.Reasons | Should -BeNullOrEmpty
+            $r.Ok | Should -BeTrue
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Arguments -contains $pyExe -and $Arguments -contains 'sandbox_mode="workspace-write"' }
+        }
+        It 'resolves a relative path against the work folder' {
+            Mock Invoke-AosProcess -ModuleName aos {
+                if ($Arguments -contains 'where.exe') { return @{ Code=2; TimedOut=$false; KillFailed=$false } }
+                @{ Code=0; TimedOut=$false; KillFailed=$false }
+            }
+            $r = InModuleScope aos -Parameters @{ W=$caseRoot } { param($W) Test-AosDelegatePreflight -Vendor 'codex' -Model '' -Needs @() -Verify '"py dir\python.exe" -V' -WorkDir $W }
+            $r.Ok | Should -BeTrue
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Arguments -contains $pyExe }
+        }
+        It 'says the sandbox denies a path that exists' {
+            Mock Invoke-AosProcess -ModuleName aos {
+                if ($Arguments -contains 'where.exe') { return @{ Code=2; TimedOut=$false; KillFailed=$false } }
+                Write-TestFile $StderrFile 'windows sandbox failed: runner failed during SpawnChild: CreateProcessAsUserW failed: 5 (Access is denied.) | cwd=C:\w | cmd=python.exe --version (Windows error 5)'
+                @{ Code=1; TimedOut=$false; KillFailed=$false }
+            }
+            $r = InModuleScope aos -Parameters @{ W=$caseRoot; V=('"' + $pyExe + '" -V') } { param($W, $V) Test-AosDelegatePreflight -Vendor 'codex' -Model '' -Needs @() -Verify $V -WorkDir $W }
+            $r.Ok | Should -BeFalse
+            ($r.Reasons -join ' ') | Should -Match 'exists'
+            ($r.Reasons -join ' ') | Should -Match 'Access is denied'
+            ($r.Reasons -join ' ') | Should -Not -Match 'cannot find'
+        }
+        It 'says the sandbox denies a launcher whose child is denied' {
+            # A uv venv python.exe starts, then cannot start the real interpreter under AppData.
+            Mock Invoke-AosProcess -ModuleName aos {
+                if ($Arguments -contains 'where.exe') { return @{ Code=2; TimedOut=$false; KillFailed=$false } }
+                Write-TestFile $StderrFile "Unable to create process using 'python.exe --version': Access is denied."
+                @{ Code=101; TimedOut=$false; KillFailed=$false }
+            }
+            $r = InModuleScope aos -Parameters @{ W=$caseRoot; V=('"' + $pyExe + '" -V') } { param($W, $V) Test-AosDelegatePreflight -Vendor 'codex' -Model '' -Needs @() -Verify $V -WorkDir $W }
+            $r.Ok | Should -BeFalse
+            ($r.Reasons -join ' ') | Should -Match 'Access is denied'
+        }
+        It 'says a missing path does not exist, without starting the sandbox' {
+            Mock Invoke-AosProcess -ModuleName aos { @{ Code=2; TimedOut=$false; KillFailed=$false } }
+            $missing = Join-Path $caseRoot 'nowhere\tool.exe'
+            $r = InModuleScope aos -Parameters @{ W=$caseRoot; V=($missing + ' --check') } { param($W, $V) Test-AosDelegatePreflight -Vendor 'codex' -Model '' -Needs @() -Verify $V -WorkDir $W }
+            $r.Ok | Should -BeFalse
+            ($r.Reasons -join ' ') | Should -Match 'does not exist'
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 0 -Exactly
+        }
+        It 'keeps where.exe for a bare command name' {
+            Mock Invoke-AosProcess -ModuleName aos { @{ Code=0; TimedOut=$false; KillFailed=$false } }
+            $r = InModuleScope aos -Parameters @{ W=$caseRoot } { param($W) Test-AosDelegatePreflight -Vendor 'codex' -Model '' -Needs @() -Verify 'python -V' -WorkDir $W }
+            $r.Ok | Should -BeTrue
+            Should -Invoke Invoke-AosProcess -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Arguments -contains 'where.exe' -and $Arguments -contains 'python' }
+        }
+    }
     It 'reports a failing needs command and accepts passing commands' {
         Mock Test-AosCommand -ModuleName aos { $true }
         if (InModuleScope aos { Get-Command Resolve-AosDelegateModel -ErrorAction SilentlyContinue }) { Mock Resolve-AosDelegateModel -ModuleName aos { @{ Ok=$true; Model='fixture-model' } } }
@@ -3535,6 +3668,190 @@ Describe 'Delegation preflight' {
         ($bad.Reasons -join ' ') | Should -Match 'tool --check'
         if (InModuleScope aos { Get-Command Invoke-AosProcess -ErrorAction SilentlyContinue }) { Mock Invoke-AosProcess -ModuleName aos { @{ Code=0; TimedOut=$false; KillFailed=$false } } }
         (InModuleScope aos -Parameters @{ W=$caseRoot } { param($W) Test-AosDelegatePreflight -Vendor 'codex' -Model '' -Needs @('tool --check') -Verify '' -WorkDir $W }).Ok | Should -BeTrue
+    }
+}
+
+Describe 'Agent shell shims (aos on PATH)' {
+    # Agents run Git Bash, pwsh -NoProfile and Windows PowerShell 5.1, where the profile function does not exist:
+    # 19 sessions failed on "aos not found" and 451 calls imported aos.psm1 by hand (AUDIT.md row 1, 2026-10-08).
+    # Built then on audit/no-brainers but never merged; the 2026-10-31 session audit still found 17 such errors.
+    BeforeEach {
+        $savedBin = $env:AOS_BIN
+        $bin = Join-Path $caseRoot 'local bin'
+        $env:AOS_BIN = $bin
+        $entry = InModuleScope aos { Join-Path $script:Root 'bin\aos.ps1' }
+    }
+    AfterEach { $env:AOS_BIN = $savedBin }
+
+    It 'writes three shims that run bin\aos.ps1 from this checkout' {
+        InModuleScope aos { Sync-AosShims }
+        Test-Path -LiteralPath $entry | Should -BeTrue
+        $ps = [IO.File]::ReadAllText((Join-Path $bin 'aos.ps1'))
+        $ps | Should -Match ([regex]::Escape("& '" + $entry.Replace("'", "''") + "' @args"))
+        $ps | Should -Match 'exit \$LASTEXITCODE'
+        $cmd = [IO.File]::ReadAllText((Join-Path $bin 'aos.cmd'))
+        $cmd | Should -Match 'aos sync'
+        $cmd | Should -Match ([regex]::Escape("-File `"$entry`" %*"))
+        $cmd | Should -Match "`r`n"
+        $sh = [IO.File]::ReadAllText((Join-Path $bin 'aos'))
+        $sh.StartsWith("#!/bin/sh`n") | Should -BeTrue
+        $sh | Should -Not -Match "`r"
+        $sh | Should -Match 'aos sync'
+        $sh | Should -Match ([regex]::Escape("'" + $entry.Replace('\', '/') + "' `"`$@`""))
+    }
+
+    # Codex review 2026-11-12: cmd expands %NAME% even inside double quotes, so a checkout path holding a percent
+    # sign sent aos.cmd to the wrong entry point.
+    It 'escapes a percent sign of the checkout path in aos.cmd' {
+        $cmd = InModuleScope aos {
+            $saved = $script:Root
+            $script:Root = 'C:\work\%USERNAME%\repo'
+            try { (Get-AosShimSpecs | Where-Object { $_.Name -eq 'aos.cmd' }).Text } finally { $script:Root = $saved }
+        }
+        $cmd | Should -Match ([regex]::Escape('-File "C:\work\%%USERNAME%%\repo\bin\aos.ps1" %*'))
+        $cmd | Should -Not -Match ([regex]::Escape('\%USERNAME%\'))
+    }
+
+    It 'changes nothing on a second sync' {
+        InModuleScope aos { Sync-AosShims }
+        $before = Get-TestTreeState $bin
+        Start-Sleep -Milliseconds 50
+        InModuleScope aos { Sync-AosShims }
+        Get-TestTreeState $bin | Should -BeExactly $before
+    }
+
+    It 'writes nothing in DryRun' {
+        InModuleScope aos { Sync-AosShims -DryRun }
+        Test-Path -LiteralPath $bin | Should -BeFalse
+    }
+
+    It 'leaves a file it did not write alone and warns' {
+        Write-TestFile (Join-Path $bin 'aos') 'someone else'
+        Mock Write-AosWarn -ModuleName aos { }
+        InModuleScope aos { Sync-AosShims }
+        [IO.File]::ReadAllText((Join-Path $bin 'aos')) | Should -BeExactly 'someone else'
+        Should -Invoke Write-AosWarn -ModuleName aos -ParameterFilter { $Text -match 'not written by aos' }
+        Test-Path -LiteralPath (Join-Path $bin 'aos.cmd') | Should -BeTrue
+    }
+
+    It 'replaces its own stale shim and keeps a backup' {
+        Write-TestFile (Join-Path $bin 'aos.cmd') "@echo off`r`nrem Written by aos sync from agentic-os; run aos sync again after moving the checkout.`r`necho old checkout`r`n"
+        InModuleScope aos { Sync-AosShims }
+        [IO.File]::ReadAllText((Join-Path $bin 'aos.cmd')) | Should -Match ([regex]::Escape($entry))
+        @(Get-ChildItem -LiteralPath $env:AOS_BACKUPS -Recurse -Filter 'aos.cmd').Count | Should -BeGreaterThan 0
+    }
+
+    It 'reports missing, stale and current shims' {
+        (InModuleScope aos { Test-AosShims }).Ok | Should -BeFalse
+        InModuleScope aos { Sync-AosShims }
+        (InModuleScope aos { Test-AosShims }).Ok | Should -BeTrue
+        Write-TestFile (Join-Path $bin 'aos') "#!/bin/sh`n# Written by aos sync`nexit 0`n"
+        (InModuleScope aos { Test-AosShims }).Ok | Should -BeFalse
+    }
+
+    It 'leaves a file containing the ownership phrase elsewhere alone' {
+        $text = "#!/bin/sh`n# personal shim`n# keep me`n# Written by aos sync from agentic-os; run aos sync again after moving the checkout.`necho Written by aos sync`n"
+        Write-TestFile (Join-Path $bin 'aos') $text
+        Mock Write-AosWarn -ModuleName aos { }
+        InModuleScope aos { Sync-AosShims }
+        [IO.File]::ReadAllText((Join-Path $bin 'aos')) | Should -BeExactly $text
+        Should -Invoke Write-AosWarn -ModuleName aos -Times 1 -Exactly -ParameterFilter { $Text -match 'not written by aos' }
+    }
+
+    It 'returns one on module import failure with one stderr line' {
+        $alone = Join-Path $caseRoot 'bin\aos.ps1'
+        Write-TestFile $alone ([IO.File]::ReadAllText($entry))
+        # Read raw stderr: PS 5.1 turns native stderr into terminating errors under Pester.
+        $info = New-Object System.Diagnostics.ProcessStartInfo
+        $info.FileName = (Get-Process -Id $PID).Path
+        $info.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $alone + '" help'
+        $info.UseShellExecute = $false
+        $info.CreateNoWindow = $true
+        $info.RedirectStandardError = $true
+        $info.RedirectStandardOutput = $true
+        $process = [Diagnostics.Process]::Start($info)
+        try {
+            $stderr = $process.StandardError.ReadToEnd()
+            $stdout = $process.StandardOutput.ReadToEnd()
+            $process.WaitForExit()
+            $process.ExitCode | Should -Be 1
+            $stdout | Should -BeNullOrEmpty
+            @($stderr.TrimEnd("`r", "`n") -split '\r?\n').Count | Should -Be 1
+            $stderr | Should -Match '^aos: module import failed:'
+        } finally { $process.Dispose() }
+    }
+
+    It 'round trips note metacharacters through the PowerShell shim' {
+        InModuleScope aos { Sync-AosShims }
+        $savedCoord = $env:AOS_COORD
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        try {
+            $call = Join-Path $caseRoot 'call-aos.ps1'
+            Write-TestFile $call ("& '" + (Join-Path $bin 'aos.ps1').Replace("'", "''") + "' note 'p|q' 'say `"hi`" & bye' --as claude")
+            & (Get-Process -Id $PID).Path -NoProfile -ExecutionPolicy Bypass -File $call
+            $LASTEXITCODE | Should -Be 0
+            $event = Get-Content (Join-Path $env:AOS_COORD 'ledger.jsonl') | ConvertFrom-Json
+            $event.text | Should -BeExactly 'p|q say "hi" & bye'
+            $event.agent | Should -BeExactly 'claude'
+        } finally { $env:AOS_COORD = $savedCoord }
+    }
+
+    It 'runs from brain sync and passes DryRun through' {
+        foreach ($f in 'Set-AosJunction', 'Sync-AosClaudeSkills', 'Set-AosManagedBlock', 'Sync-AosCodexAgents', 'Repair-AosCcHooks',
+                       'Sync-AosCodexHooks', 'Sync-AosClaudeSettings', 'Sync-AosCodexProfiles', 'Sync-AosNativeRoles', 'Sync-AosLocalState',
+                       'Sync-AosPlaces', 'Sync-AosAgentModel', 'Sync-AosPi', 'Sync-AosMcp', 'Sync-AosProfile', 'Sync-AosShims') { Mock $f -ModuleName aos { } }
+        InModuleScope aos { Sync-AosBrain -DryRun }
+        Should -Invoke Sync-AosShims -ModuleName aos -Times 1 -Exactly -ParameterFilter { $DryRun }
+    }
+
+    It 'bin\aos.ps1 runs the command and returns its exit code' {
+        $shell = (Get-Process -Id $PID).Path
+        & $shell -NoProfile -ExecutionPolicy Bypass -File $entry delegate show no-such-id *> $null
+        $LASTEXITCODE | Should -Be 1
+        & $shell -NoProfile -ExecutionPolicy Bypass -File $entry help *> $null
+        $LASTEXITCODE | Should -Be 0
+    }
+
+    It 'resolves and runs from cmd through aos.cmd' {
+        InModuleScope aos { Sync-AosShims }
+        $bat = Join-Path $caseRoot 'call aos.cmd'
+        [IO.File]::WriteAllText($bat, "@echo off`r`nset `"PATH=$bin;%PATH%`"`r`ncall aos delegate show no-such-id >nul 2>&1`r`nexit /b %errorlevel%`r`n")
+        & cmd.exe /d /c "`"$bat`""
+        $LASTEXITCODE | Should -Be 1
+    }
+
+    It 'resolves and runs from Git Bash through the sh shim' {
+        $git = Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        $bash = $null
+        # git.exe sits in Git\cmd, or in Git\mingw64\bin when PATH comes from Git Bash; bash.exe is in Git\bin.
+        if ($git) {
+            $dir = Split-Path -Parent $git.Source
+            foreach ($i in 1..3) {
+                if (Test-Path -LiteralPath (Join-Path $dir 'bin\bash.exe')) { $bash = Join-Path $dir 'bin\bash.exe'; break }
+                $dir = Split-Path -Parent $dir
+            }
+        }
+        if (-not $bash) { Set-ItResult -Skipped -Because 'Git Bash not found'; return }
+        InModuleScope aos { Sync-AosShims }
+        # A script file, not bash -c: Windows PowerShell 5.1 drops embedded double quotes from native arguments.
+        $script = Join-Path $caseRoot 'call-aos.sh'
+        [IO.File]::WriteAllText($script, ('export PATH="$(cygpath -u ''' + $bin + '''):$PATH"' + "`n" +
+            'command -v aos >/dev/null || echo missing' + "`n" + 'aos delegate show no-such-id >/dev/null 2>&1' + "`n" + 'echo "rc=$?"' + "`n"))
+        $out = & $bash $script
+        ($out -join "`n") | Should -Not -Match 'missing'
+        ($out -join "`n") | Should -Match 'rc=1'
+
+        $savedCoord = $env:AOS_COORD
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        try {
+            Write-TestFile $script ('export PATH="$(cygpath -u ''' + $bin + '''):$PATH"' + "`n" +
+                'aos note ''p|q'' ''say "hi" & bye'' --as claude' + "`n")
+            & $bash $script
+            $LASTEXITCODE | Should -Be 0
+            $event = Get-Content (Join-Path $env:AOS_COORD 'ledger.jsonl') | ConvertFrom-Json
+            $event.text | Should -BeExactly 'p|q say "hi" & bye'
+            $event.agent | Should -BeExactly 'claude'
+        } finally { $env:AOS_COORD = $savedCoord }
     }
 }
 
@@ -3601,6 +3918,61 @@ Describe 'Write guard' {
         InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'session-end' -InputJson $J } | Out-Null
         @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 1
     }
+    # Session audit 2026-10-31: outside git the guard claimed the nearest folder, so the shared Claude memory
+    # folder was claimed 81 times and refused other sessions' memory writes 10 times; no other non-git claim was
+    # ever contended. A checkout is a git work tree; folders outside one are not auto-claimed.
+    It 'does not claim a folder outside git, so a second session can write there too' {
+        $store = New-TestFolder (Join-Path $caseRoot 'memory')
+        foreach ($s in 's1', 's2') {
+            $j = @{ cwd=$store; session_id=$s; tool_name='Write'; tool_input=@{ file_path=(Join-Path $store 'note.md') } } | ConvertTo-Json -Compress
+            $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson $J }
+            $r.Exit | Should -Be 0
+            $r.Stderr | Should -BeNullOrEmpty
+        }
+        @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 0
+    }
+    # Codex re-review: trimming the separator off a drive root ("C:\" -> "C:") makes it drive-relative, so a later
+    # lookup can resolve to whatever folder that drive's current directory is.
+    It 'keeps the separator of a drive root as the checkout identity' {
+        $root = [IO.Path]::GetPathRoot($TestDrive)
+        Mock Invoke-AosGit -ModuleName aos { [pscustomobject]@{ Code = 1; Out = ''; Err = 'not a repository' } }
+        InModuleScope aos -Parameters @{ P=$root } { param($P) Get-AosCheckout $P } | Should -BeExactly $root
+    }
+    # Codex review of the change above: when git cannot answer (an OneDrive timeout), Get-AosCheckout returns the
+    # nearest folder; a subfolder of a claimed work tree must not pass as "outside git".
+    It 'still blocks a claimed work tree when git discovery fails inside a subfolder' {
+        $src = New-TestFolder (Join-Path $repo 'src')
+        InModuleScope aos -Parameters @{ P=$repo } { param($P) Invoke-AosClaim -Path $P -Agent 'codex' -Session 'other' -Note 'working' } | Out-Null
+        Mock Invoke-AosGit -ModuleName aos { [pscustomobject]@{ Code = 1; Out = ''; Err = 'timed out' } }
+        $j = @{ cwd=$src; session_id='s1'; tool_name='Edit'; tool_input=@{ file_path=(Join-Path $src 'a.txt') } } | ConvertTo-Json -Compress
+        $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson $J }
+        $r.Exit | Should -Be 2
+        $r.Stderr | Should -Match 'is held by codex \(other\)'
+    }
+    # Codex review 2026-11-12: when git cannot answer, any item named .git passed as a work tree, so a scratch folder
+    # holding an empty .git folder or a stray .git file was auto-claimed and blocked other sessions.
+    It 'does not claim a folder whose .git is not a work tree marker (<Case>)' -TestCases @(
+        @{ Case = 'empty .git folder'; Kind = 'dir' },
+        @{ Case = '.git file without gitdir'; Kind = 'file' }
+    ) {
+        $store = New-TestFolder (Join-Path $caseRoot ('scratch ' + $Kind))
+        if ($Kind -eq 'dir') { New-TestFolder (Join-Path $store '.git') | Out-Null } else { Write-TestFile (Join-Path $store '.git') 'not a pointer' }
+        Mock Invoke-AosGit -ModuleName aos { [pscustomobject]@{ Code = 1; Out = ''; Err = 'not a repository' } }
+        foreach ($s in 's1', 's2') {
+            $j = @{ cwd=$store; session_id=$s; tool_name='Write'; tool_input=@{ file_path=(Join-Path $store 'note.md') } } | ConvertTo-Json -Compress
+            $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson $J }
+            $r.Exit | Should -Be 0
+        }
+        @(InModuleScope aos { Get-AosClaims }).Count | Should -Be 0
+    }
+    It 'still honours an explicit claim on a folder outside git' {
+        $store = New-TestFolder (Join-Path $caseRoot 'plan')
+        InModuleScope aos -Parameters @{ P=$store } { param($P) Invoke-AosClaim -Path $P -Agent 'codex' -Session 'other' -Note 'planning' } | Out-Null
+        $j = @{ cwd=$store; session_id='s1'; tool_name='Edit'; tool_input=@{ file_path=(Join-Path $store 'a.md') } } | ConvertTo-Json -Compress
+        $r = InModuleScope aos -Parameters @{ J=$j } { param($J) Invoke-AosGuard -Agent 'claude' -Event 'pre-edit' -InputJson $J }
+        $r.Exit | Should -Be 2
+        $r.Stderr | Should -Match 'is held by codex \(other\)'
+    }
     It 'claims both checkouts named by Codex apply_patch including an accented folder' {
         $other = New-TestFolder (Join-Path $caseRoot ([char]0x00e9 + 'cole repo'))
         & git -C $other init -q
@@ -3664,7 +4036,7 @@ Describe 'Presence hooks sync' {
         Test-Path -LiteralPath $script | Should -BeTrue
         (@((Get-Content $target -Raw | ConvertFrom-Json).hooks.PostToolUse)[0].hooks[0].command) | Should -BeExactly ('node "' + $script + '" codex')
     }
-    It 'runs the notes hook tests (node --test, temp AOS_COORD)' {
+    It 'runs the notes hook tests (node --test, temp AOS_COORD)' -Tag 'Language' {
         $result = & node --no-warnings --test (Join-Path $PSScriptRoot '..\config\hooks\aos-notes.test.mjs') 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $result
     }
@@ -4499,6 +4871,57 @@ Describe 'Pass A review fixes' {
     }
 }
 
+Describe 'coordination identity regressions' {
+    BeforeEach {
+        $env:AOS_COORD = Join-Path $caseRoot 'coord'
+        InModuleScope aos {
+            Reserve-AosActor -Id identity -Vendor codex -Task identity -Workers 1 | Out-Null
+            Set-AosActorState -Id identity-native-1 -State running -Handle actual-child -Evidence launch | Out-Null
+        }
+    }
+    It 'rejects replacement handles without changing a running native actor' {
+        InModuleScope aos {
+            $before = Get-AosActors | Where-Object id -eq identity-native-1 | ConvertTo-Json -Compress
+            { Set-AosActorState -Id identity-native-1 -State running -Handle other-child -Evidence other-launch } | Should -Throw
+            $after = Get-AosActors | Where-Object id -eq identity-native-1 | ConvertTo-Json -Compress
+            $after | Should -BeExactly $before
+        }
+    }
+    It 'rejects unrelated completion handles without releasing a native allowance' {
+        InModuleScope aos {
+            { Set-AosActorState -Id identity-native-1 -State done -Handle other-child -Evidence other-completion } | Should -Throw
+            $child = Get-AosActors | Where-Object id -eq identity-native-1
+            $child.state | Should -Be running
+            $child.handle | Should -Be actual-child
+            { Set-AosActorState -Id identity -State done } | Should -Throw
+        }
+    }
+    It 'accepts completion for the observed native handle and then its parent' {
+        InModuleScope aos {
+            $child = Set-AosActorState -Id identity-native-1 -State done -Handle actual-child -Evidence matching-completion
+            $child.state | Should -Be done
+            (Set-AosActorState -Id identity -State done).state | Should -Be done
+        }
+    }
+    It 'refuses terminal runs returning to active states and preserves the receipt state' {
+        InModuleScope aos {
+            Set-AosRunState -Id identity -State running | Out-Null
+            Set-AosRunState -Id identity -State accepted | Out-Null
+            $before = Get-AosRunState identity | ConvertTo-Json -Compress
+            foreach ($state in @('running','waiting-input','reserved','preparing','suspect','needs-inspection')) {
+                { Set-AosRunState -Id identity -State $state -Text stale-update } | Should -Throw
+                (Get-AosRunState identity | ConvertTo-Json -Compress) | Should -BeExactly $before
+            }
+        }
+    }
+    It 'allows host inspection to resolve to rejected' {
+        InModuleScope aos {
+            Set-AosRunState -Id identity -State needs-inspection | Out-Null
+            (Set-AosRunState -Id identity -State rejected).state | Should -Be rejected
+        }
+    }
+}
+
 Describe 'cooperative lifecycle' {
     BeforeEach {
         $env:AOS_COORD = Join-Path $caseRoot 'coord'
@@ -5014,6 +5437,12 @@ Describe 'coordination tuning safety' {
         $otherRepo = New-TuningRepo (Join-Path $caseRoot 'other repo')
         $file = Write-TuningContract (Join-Path $caseRoot 'contracts\ta-other.json') 'ta'
         { InModuleScope aos -Parameters @{ F = $file; R = $otherRepo } { param($F, $R) Register-AosTaskContract -Path $F -Repo $R } } | Should -Throw
+    }
+
+    It 'refuses a contract without a verify command before recording it, so the corrected one can register' {
+        { Add-TuningTask 'tnv' @{ verify = '' } } | Should -Throw
+        InModuleScope aos { Get-AosTaskRecord -Id 'tnv' } | Should -BeNullOrEmpty
+        { Add-TuningTask 'tnv' } | Should -Not -Throw
     }
 
     It 'rejects unsafe artifact or context paths and unknown fields' {
@@ -5610,50 +6039,52 @@ Describe 'selected stack additions' {
         $null=aos coord continuation check quota-handoff --repo $continuationRepo --from codex --to claude 6>&1
         $LASTEXITCODE | Should -Be 1
     }
-    It 'runs the read-only status summary regression controls' {
+    It 'runs the read-only status summary regression controls' -Tag 'Language' {
         $script=Join-Path $PSScriptRoot '..\plugins\aos-status\tests\summary.test.mjs'
         & node --test $script
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs the offline footage workflow controls in disposable folders' {
+    It 'runs the offline footage workflow controls in disposable folders' -Tag 'Language' {
         & python -m unittest discover -s (Join-Path $PSScriptRoot '..\tools\footage') -p 'test_*.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs the optional tool launcher controls without installed services' {
+    It 'runs the optional tool launcher controls without installed services' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_stack_launcher.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs capability registry discovery and promotion controls without network or installed candidates' {
+    It 'runs capability registry discovery and promotion controls without network or installed candidates' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_capability_watch.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs pinned capability setup controls without real downloads or installs' {
+    It 'runs pinned capability setup controls without real downloads or installs' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_capability_setup.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs optional stack repair controls without credentials or installed services' {
+    It 'runs optional stack repair controls without credentials or installed services' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_stack_repairs.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs repeatable optional stack verification controls in disposable folders' {
+    It 'runs repeatable optional stack verification controls in disposable folders' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_stack_verify.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs additional-worker policy and lifecycle controls without credentials or services' {
+    It 'runs additional-worker policy and lifecycle controls without credentials or services' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_omniroute_integration.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs the cached speech launcher controls without installed runtimes' {
+    It 'runs the cached speech launcher controls without installed runtimes' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_voicestudio_launcher.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs API swarm admission and capability controls without credentials or network' {
+    It 'runs API swarm admission and capability controls without credentials or network' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_swarm_pool.py' -v
         $LASTEXITCODE | Should -Be 0
     }
-    It 'runs API host contract acceptance and cancellation in disposable repositories' {
+    It 'runs API host contract acceptance and cancellation in disposable repositories' -Tag 'Language' {
         & python -m unittest discover -s $PSScriptRoot -p 'test_swarm_contract.py' -v
         $LASTEXITCODE | Should -Be 0
+    }
+    It 'keeps the swarm contract helper parseable and ASCII in this shell' {
         $helper = Join-Path $PSScriptRoot '..\tools\swarm_contract.ps1'
         $tokens = $null; $errors = $null
         [void][System.Management.Automation.Language.Parser]::ParseFile($helper,[ref]$tokens,[ref]$errors)

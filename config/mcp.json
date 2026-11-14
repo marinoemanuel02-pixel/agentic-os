@@ -18,6 +18,13 @@
       "args": [],
       "requires": "{{home}}\\.aos\\venvs\\nar-tools\\Scripts\\nar-mcp.exe",
       "why": "Local, calibrated single-pass (non-autoregressive) scoring of options; agents call it only when a choice among known alternatives benefits from it."
+    },
+    "aos-pool": {
+      "transport": "stdio",
+      "command": "python",
+      "args": ["{{repo}}\\tools\\pool_mcp.py"],
+      "requires": "{{repo}}\\tools\\pool_mcp.py",
+      "why": "Default free-resource layer: extraction, triage, variants, cross-checks and summaries on the local model first, the free API pool second, with built-in checks. Six tools, stdlib only."
     }
   }
 }

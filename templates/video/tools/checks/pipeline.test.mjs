@@ -136,7 +136,7 @@ test('every media writer honours AOS_VIDEO_MEDIA_ROOT and build gates precede au
     assert.match(fs.readFileSync(path.join(template, 'tools', f), 'utf8'), /AOS_VIDEO_MEDIA_ROOT|media-root\.(sh|mjs)|function media_?[rR]oot/, f);
   }
   const build = fs.readFileSync(path.join(template, 'tools/build.sh'), 'utf8');
-  for (const gate of ['checks/claims.mjs', 'checks/screen-text.mjs', 'check-plan.mts', 'checks/joins.mts']) {
+  for (const gate of ['checks/claims.mjs', 'checks/screen-text.mjs', 'checks/type-size.mjs', 'check-plan.mts', 'checks/joins.mts']) {
     assert.ok(build.indexOf(gate) >= 0 && build.indexOf(gate) < build.indexOf('tools/audio.mts'), gate);
   }
 });

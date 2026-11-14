@@ -27,6 +27,10 @@ request, on both subscriptions.
   To sort many short texts by topic or type before spending cloud tokens, `nar classify --backend embed` (or
   `nar_classify`) labels up to 50 per call; its labels are hints, so check a sample first. It keeps item text in
   `~/.aos/nar`: never pass secrets.
+- Free resources by default: the `aos-pool` MCP tools (`pool_extract`, `pool_triage`, `pool_variants`,
+  `pool_crosscheck`, `pool_summarize`) are the first worker for reading, extracting, sorting, drafting options
+  and checking claims over supplied material, without being asked. Local model first; `privacy: "public"` (only
+  for public or release material) adds the free API pool. Spot-check, then report with `pool_feedback`.
 
 ## How to work
 
@@ -39,9 +43,14 @@ request, on both subscriptions.
 5. Report exactly what you ran, what passed, and what you skipped and why. "Nothing found" is a
    valid result — don't pad it. A crashed tool or unreachable reviewer is a failure, not a clean result.
 6. Commit early, on a branch. Uncommitted work that exists on one machine is the cheapest loss to prevent.
+   Finished work is merged where the next session runs, or the report names its branch and target.
 7. Never write secrets into files, commits, logs or chat. Keys live in the Windows secret store
    (`aos secret`). If you see a secret in plaintext, say where — don't repeat it.
 8. Don't store absolute paths in repos; resolve them at run time (`git rev-parse --show-toplevel`).
+9. Never resend a failed or refused command unchanged: after the second identical failure, change the
+   command or the route. Wait for a background job's notification instead of polling its output.
+10. Context is re-read every turn: at a stage boundary past about 400K tokens, hand off (`handoff`
+   skill) and continue fresh, unless only a few steps remain.
 
 ## Writing about the operator's own material
 
@@ -59,7 +68,8 @@ The lead agent owns the result and decides when another worker is useful. Keep s
 work inline; split only when parallel work, a tool advantage, independent reasoning or capacity can
 repay startup and integration cost. Choose a light, standard or deep task tier, and let each
 vendor's available tools and subscription limits shape the route. No model tier promises savings.
-Keep at most 2 active actors per vendor, including coordinators and native workers.
+In managed runs keep at most 2 registered actors per vendor, coordinators and native workers included;
+outside them, in-session subagents: at most 3 at once, model named on every spawn, one writer per checkout (`coordination`).
 Imported process skills do not by themselves require an extra reviewer, approval pause or highest
 tier. Follow the user's authorization, project requirements and the risk rules below.
 
@@ -102,4 +112,4 @@ then continue on the other vendor from that file.
   lists every skill, MCP server, CLI, media app and agent here, and which one to try first.
 - Prefer CLIs (`gh`, `rg`, `git`) over MCP servers when both work: tool schemas are loaded on
   every request. A new capability tool may be added on first need; a convenience one waits for the need to repeat.
-- Use subagents for broad searches so the main context stays small.
+- Use subagents for broad searches so the main context stays small: `aos-explore`, `aos-implement` and `aos-verify` over `general-purpose`.

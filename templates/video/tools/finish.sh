@@ -37,4 +37,33 @@ subprocess.run(["magick", "montage", *files, "-tile", "10x", "-geometry", "+2+2"
 EOF
 ffprobe -v error -show_entries stream=codec_name,width,height,r_frame_rate -show_entries format=duration -of compact "$out"
 ffmpeg -nostdin -hide_banner -nostats -i "$out" -af ebur128=peak=true -f null - 2>&1 | grep -E "^\s+(I|Peak):" | tail -2
+# Enforced gates (the shorts counterpart of qa.sh sections 1-4 plus its static gates). The outputs above stay on failure.
+mkdir -p "$P/qa" "$H/qa"
+R="$P/qa/report.md"; fail=0
+ok() { echo "- PASS $*" >> "$R"; }; bad() { echo "- FAIL $*" >> "$R"; fail=1; }
+echo "# QA report: $(basename "$out") ($(date '+%Y-%m-%d %H:%M'))" > "$R"; echo >> "$R"
+# gate <label> <command...>: run it, keep its output in the media root, record PASS or FAIL (never aborts under set -e)
+gate() {
+  local label="$1" log rc=0; shift
+  log="$H/qa/finish-$(echo "$label" | tr -c 'A-Za-z0-9' '-').log"
+  "$@" > "$log" 2>&1 || rc=$?
+  if [ "$rc" = 0 ]; then ok "$label"; else bad "$label (exit $rc):"; head -20 "$log" | sed 's/^/  /' >> "$R"; fi
+}
+currency_mode="$( [ -f "$P/qa.env" ] && (unset CURRENCY; . "$P/qa.env"; echo "${CURRENCY:-}") || true )"
+if [ -f "$P/currency.json" ]; then gate "currency ledger current" node "$P/tools/checks/currency.mjs" "$P/currency.json" --claims "$P/claims.json" --export
+elif [ "$currency_mode" = none ]; then ok "no currency ledger: qa.env declares a timeless topic (CURRENCY=none)"
+else bad "currency.json missing: keep a ledger (R27) or declare CURRENCY=none in qa.env for a timeless topic"; fi
+gate "claims ledger complete" node "$P/tools/checks/claims.mjs"
+gate "screen-text ledger coverage" node "$P/tools/checks/screen-text.mjs"
+gate "type size (rubric 4, R58)" node "$P/tools/checks/type-size.mjs"
+gate "voice scale receipt (R55)" node "$P/tools/checks/voice-scale.mjs" --receipt "$P/src/data/voice-scale.json" --voice "$P/src/data/words.sha256.json"
+# stream format, duration, loudness, black/frozen frames and captions of the export itself (QA_SIZE/QA_MIN_S/QA_MAX_S from qa.env)
+dlog="$H/qa/finish-delivery.log"; drc=0
+node "$P/tools/checks/delivery.mjs" "$out" "$P/exports/$name.srt" > "$dlog" 2>&1 || drc=$?
+cat "$dlog" >> "$R"
+[ "$drc" = 0 ] || fail=1
+echo >> "$R"; if [ "$fail" = 0 ]; then echo "**All technical checks pass.**" >> "$R"; else echo "**Technical checks FAILED.**" >> "$R"; fi
+cat "$R"
 echo "$out"
+echo "report: $R"
+exit "$fail"

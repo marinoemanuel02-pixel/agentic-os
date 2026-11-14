@@ -45,6 +45,8 @@ $env:CODEX_HOME = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-test-codex-'
 $env:AOS_CLAUDE_HOME = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-test-claude-' + [guid]::NewGuid().ToString('N'))
 # Same for Pi's agent directory: a test that reaches Sync-AosPi unmocked must never touch ~/.pi/agent.
 $env:PI_CODING_AGENT_DIR = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-test-pi-' + [guid]::NewGuid().ToString('N'))
+# And the aos shims: a brain sync under test must never write ~\.local\bin, which is on the real PATH.
+$env:AOS_BIN = Join-Path ([System.IO.Path]::GetTempPath()) ('aos-test-bin-' + [guid]::NewGuid().ToString('N'))
 
 $config = New-PesterConfiguration
 $config.Run.Path = $PSScriptRoot
@@ -54,6 +56,8 @@ $config.TestRegistry.Enabled = $false
 $config.Output.Verbosity = 'Detailed'
 # Opt-in: AOS_TEST_FILTER (a wildcard on the full test name) runs only the matching tests.
 if ($env:AOS_TEST_FILTER) { $config.Filter.FullName = $env:AOS_TEST_FILTER }
+# Opt-in: AOS_TEST_EXCLUDE_TAG (comma list) skips tagged tests; aos test uses it to run 'Language' suites in one shell only.
+if ($env:AOS_TEST_EXCLUDE_TAG) { $config.Filter.ExcludeTag = @($env:AOS_TEST_EXCLUDE_TAG -split ',') }
 $result = Invoke-Pester -Configuration $config
 
 if ($result.TotalCount -eq 0) { Write-Host 'No tests were discovered.'; exit 3 }

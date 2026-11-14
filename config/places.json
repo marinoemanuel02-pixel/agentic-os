@@ -65,6 +65,36 @@
       "name": "pauseai-it",
       "kind": "repo",
       "path": "{{projects}}\\videos\\pauseai-it"
+    },
+    {
+      "name": "pauseai-it-allineamento",
+      "kind": "repo",
+      "path": "{{projects}}\\videos\\pauseai-it-allineamento"
+    },
+    {
+      "name": "huggingface-it",
+      "kind": "repo",
+      "path": "{{projects}}\\videos\\huggingface-it"
+    },
+    {
+      "name": "pauseai-it-spina",
+      "kind": "repo",
+      "path": "{{projects}}\\videos\\pauseai-it-spina"
+    },
+    {
+      "name": "trx50-procurement",
+      "kind": "repo",
+      "path": "{{projects}}\\trx50-procurement"
+    },
+    {
+      "name": "metacognition-explainer",
+      "kind": "repo",
+      "path": "{{projects}}\\videos\\metacognition-explainer"
+    },
+    {
+      "name": "metacognition-3d",
+      "kind": "repo",
+      "path": "{{projects}}\\videos\\metacognition-3d"
     }
   ]
 }

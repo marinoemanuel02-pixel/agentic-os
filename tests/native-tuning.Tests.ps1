@@ -102,7 +102,7 @@ Describe 'native tuning isolated suite' {
             $role.limitations.Count | Should -BeGreaterThan 0
             { Get-AosNativeRole -Vendor codex -Role explore -MaxTurns 101 -Capabilities $caps } | Should -Throw
             (Get-AosNativeRole -Vendor claude -Role implement -Capabilities $caps).max_turns | Should -Be 24
-            (Get-AosNativeRole -Vendor claude -Role verify -Capabilities $caps).max_turns | Should -Be 16
+            (Get-AosNativeRole -Vendor claude -Role verify -Capabilities $caps).max_turns | Should -Be 24
         }
     }
     It 'renders managed roles from local mapping and leaves unrelated config plus second-run bytes and times intact' {
@@ -129,6 +129,18 @@ Describe 'native tuning isolated suite' {
             $profile.capabilities.version | Should -Be '0.157.1'
             $profile.capabilities.evidence | Should -Not -BeNullOrEmpty
             $profile.roles.explore.observed_model | Should -BeNullOrEmpty
+        }
+    }
+    It 'gives Claude roles an enforced budget with a report deadline before the cut-off' {
+        InModuleScope aos -Parameters @{ Case = $caseRoot } {
+            . (Join-Path $script:Root 'config\native-coordination.ps1')
+            $codex = Join-Path $Case 'codex-budget'; $claude = Join-Path $Case 'claude-budget'
+            $caps = Get-AosNativeCapabilities -ClaudeVersion '2.1.296' -CodexVersion '0.157.1'
+            $null = Sync-AosNativeRoles -CodexHome $codex -ClaudeHome $claude -Capabilities $caps
+            $verify = [IO.File]::ReadAllText((Join-Path $claude 'agents\aos-verify.md'))
+            $verify | Should -Match 'maxTurns: 24'
+            $verify | Should -Match 'by turn 16'
+            [IO.File]::ReadAllText((Join-Path $claude 'agents\aos-explore.md')) | Should -Match 'by turn 8'
         }
     }
     It 'dry-run creates nothing and skips unowned role collisions while backing up changed managed roles' {

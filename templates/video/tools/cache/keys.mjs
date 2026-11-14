@@ -48,7 +48,7 @@ export function shotModules(root) {
   for (const name of fs.readdirSync(dir)) {
     if (!/\.(tsx?|mts)$/.test(name)) continue;
     const text = fs.readFileSync(path.join(dir, name), 'utf8');
-    for (const m of text.matchAll(/export const (S\d\d)[A-Za-z0-9_]*\s*[:=]/g)) map[m[1]] = `src/shots/${name}`;
+    for (const m of text.matchAll(/export const ([A-Z]\d\d)[A-Za-z0-9_]*\s*[:=]/g)) map[m[1]] = `src/shots/${name}`;
   }
   return map;
 }

@@ -1,4 +1,4 @@
-"""Shared setup for the film's Manim shots (R57): the look from engines/look.json (written from src/lib/look.ts by
+"""Shared setup for the film's Manim shots (R61): the look from engines/look.json (written from src/lib/look.ts by
 tools/export-look.mts), the template's calm in-out curve as a rate function, and finish(), which holds the last frame
 until the shot has every frame tools/render-shot.py asked for. Manim owns mathematical notation; titles, labels and
 captions stay in Remotion.

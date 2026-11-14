@@ -45,7 +45,7 @@ const extOf = url => {
 // partial transfers too), then the rights evidence (its page is charged as well) and the ledger row. Every URL that
 // is stored or printed is sanitized; the cache key is an opaque hash of the full request. Uses are added by the
 // director afterwards (they need the shot plan).
-// A generated take (rule R55) records the platform's terms page, when they were read, its watermark, whether its plan
+// A generated take (rule R59) records the platform's terms page, when they were read, its watermark, whether its plan
 // allows commercial use, and the prompt. Checked before any transfer.
 export function generatedFields(opts) {
   if (opts.basis !== 'generated') return null;

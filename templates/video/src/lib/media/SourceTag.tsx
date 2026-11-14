@@ -12,7 +12,7 @@ export const SourceTag: React.FC<{ text: string; ink?: string }> = ({ text, ink 
       padding: "8px 14px",
       background: "rgba(8, 8, 9, 0.62)",
       color: ink,
-      font: `500 26px ${SANS}`,
+      font: `500 36px ${SANS}`, // rubric 4: >= 36 px at 1080p (tools/checks/type-size.mjs)
       letterSpacing: 0.3,
       borderRadius: 4,
     }}

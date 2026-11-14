@@ -17,7 +17,7 @@ import time
 import wave
 
 from swarm_config import CAPABILITIES, identifier, load_registry, root, secret, validate_registry
-from swarm_state import State, Unavailable, canonical, digest
+from swarm_state import State, Unavailable, canonical, digest, packet_units
 import swarm_providers as providers
 
 
@@ -118,16 +118,14 @@ class Pool:
             if cancelled: self.state.cancel(packet['id']); return True
         return False
 
-    def run_claimed(self, packet, run, first_account=None):
+    def run_claimed(self, packet, run, first_account=None, wait=True):
         providers.DEADLINE.set(time.monotonic() + (packet.get('contract', {}).get('timeout_seconds', 300)))
         errors = []; count = 0
-        text = canonical({k: v for k, v in packet.items() if k not in ('image_base64', 'audio_base64')})
-        units = {'requests': 1, 'tokens': len(text.encode()) + packet.get('max_tokens', 1024)}
-        if packet['capability'] == 'vision': units['tokens'] += 8192
-        if packet['capability'] == 'transcribe':
-            units.update(audio_seconds=packet['audio_seconds'], tokens=packet['audio_seconds'] * 32 + 1024)
+        units = packet_units(packet)
         accounts = self.state.eligible(self.registry, packet['capability'])
         accounts.sort(key=lambda a: a['id'] != first_account)
+        # Claim chose an account with a route, so none eligible now means another worker took the slot.
+        if first_account and not accounts: errors.append('no_capacity')
         for a in accounts:
             if packet.get('account') and packet['account'] != a['id']: continue
             if count >= packet.get('max_attempts', 2) or self._cancelled(packet): break
@@ -157,6 +155,9 @@ class Pool:
             except (ValueError, OSError, subprocess.SubprocessError):
                 if attempt: self.state.finish(attempt, 'local_failure', retry_after=30)
                 errors.append('local_failure')
+        # Nothing was sent: in a batch a full local ceiling means wait in the queue, not fail.
+        if wait and count == 0 and errors and set(errors) == {'no_capacity'} and not self.state.cancelled(packet['id']):
+            self.state.requeue(packet['id'], run); return 'requeued'
         self.state.complete(packet['id'], run, error=','.join(errors) or 'no_admitted_route')
 
     def drain(self, *, only=None, workers=None):
@@ -165,9 +166,12 @@ class Pool:
         def work():
             while True:
                 claim = self.state.claim(only, self.registry)
-                if claim is None: return
-                self.run_claimed(*claim)
-                if only: return
+                if claim is None:
+                    # A single-task caller needs an answer now; a queued leftover would run in someone else's drain.
+                    if only: self.state.expire_waiting(only, 'no_capacity')
+                    return
+                # Claim can pass while dispatch refuses (credential ceilings); stop rather than spin on it.
+                if self.run_claimed(*claim, wait=not only) == 'requeued' or only: return
         with ThreadPoolExecutor(max_workers=n) as executor:
             list(executor.map(lambda _: work(), range(n)))
 

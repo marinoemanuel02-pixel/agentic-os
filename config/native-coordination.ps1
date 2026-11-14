@@ -132,7 +132,9 @@ function Sync-AosNativeRoles {
                 foreach ($key in $role.settings.Keys) {
                     $lines += $key + ': ' + (ConvertTo-Json -InputObject $role.settings[$key] -Compress)
                 }
-                $lines += @('---', '', $role.instructions, '', 'Report partial work when the turn budget is reached. Requested settings are not observations.')
+                # Claude enforces maxTurns and a child cut off at the limit returns nothing, so set an earlier report point.
+                $deadline = [int][Math]::Floor($role.max_turns * 2 / 3)
+                $lines += @('---', '', $role.instructions, '', ('Your budget is ' + $role.max_turns + ' turns and the harness stops you there; a run cut off at the limit returns nothing to the parent. Start writing your report by turn ' + $deadline + ', with partial results if needed. Requested settings are not observations.'))
             }
             else {
                 $lines = @($marker, ('name = "aos-' + $name + '"'), ('description = ' + (ConvertTo-Json $role.description -Compress)),

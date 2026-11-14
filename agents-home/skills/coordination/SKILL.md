@@ -34,8 +34,9 @@ supported model option; do not assume the CLI map configures a native child auto
 
 Dispatch the other vendor with `aos delegate codex|claude --task <file>`, adding `--tier light|standard|deep`,
 `--effort <supported-value>`, `--parent <actor-id>` and `--workers 0|1` when needed. `--workers` reserves
-the coordinator's one native-child allowance; it is not a recursive CLI delegation allowance. Each
-vendor has at most two active actors, including its lead/coordinator and native workers. A busy
+the coordinator's one native-child allowance; it is not a recursive CLI delegation allowance. In a
+managed run each vendor has at most two active registered actors, including its lead/coordinator and
+native workers. A busy
 reservation means wait for a state change, choose another eligible route, or continue inline; do not
 retry immediately.
 
@@ -46,7 +47,9 @@ cross-vendor work. A delegated CLI worker cannot launch another CLI delegate or 
 cross-vendor tree. Keep read-only workers read-only for project files; their assigned coordination
 commands may update their own status and messages.
 
-For a native worker, reserve its actor before launch, then use the harness's spawn/Agent tool with
+`reserve --workers 1` already creates `<coordinator-id>-native-1`. Reuse that actor for the native
+child; reserving a second id consumes another slot and is refused. Without an allowance, reserve
+one native actor under the coordinator before launch. Then use the harness's spawn/Agent tool with
 an explicit supported model from the local tier map or current account allowlist. A full-context
 fork normally inherits the parent's settings; use a fresh bounded brief when selecting a lighter
 worker. If the tool cannot override the model, report inheritance and choose another eligible route
@@ -56,6 +59,89 @@ Record the returned handle with `observe --handle <handle> --evidence <tool-call
 after the harness confirms termination, `finish --evidence <completion-ref>` frees that allowance.
 The coordinator must relay these observations to the host when its own metadata route is read-only.
 Do not finish a coordinator while a launched child remains unconfirmed.
+
+## In-session subagents (Claude Agent tool, Codex spawn)
+
+Most parallel work is the lead's own subagents, not cross-vendor runs. Claude transcripts from
+2026-09-27 to 10-31 show 11 of 156 sessions using them, 18 of 25 calls as `general-purpose`, and
+10 inheriting the lead's model. Route each child by its job:
+
+| Job | Child | Rule |
+|---|---|---|
+| Locate files, paths, evidence | `aos-explore` or the built-in `Explore` | read-only; up to three in parallel on disjoint questions |
+| Scoped edit with an acceptance check | `aos-implement` | one writer per checkout; a parallel writer needs its own worktree |
+| Review a diff, test a claim | `aos-verify` | hand it the diff or review package as a file; same vendor, so never a second opinion |
+| Design judgment, hard diagnosis | `general-purpose`, deep model named | rare; say why in the brief |
+
+- Name the model on every spawn (from `~/.aos/routing.json`); an omitted one inherits the lead's.
+- The child starts cold: the brief names the goal, files or area, what done looks like and the size
+  of the answer to return. Spawn for real breadth or isolation, not for a few tool calls.
+- Run children you don't need for the next step in the background and wait for the notification.
+- One job per child. Claude stops a child at its turn budget and a cut-off child returns nothing:
+  continue it with SendMessage rather than spawning a fresh one.
+- A child that works for more than a few minutes writes its results to a file named in the brief as it
+  goes. A child stopped by a plan limit or its turn budget returns nothing but may have saved work: read
+  that file before re-running it (the 2026-10-09 research run: five children ended at the limit; one had
+  written two ledger files over 278 calls).
+- Outside a managed run these children share the lead's subscription window and are not registered
+  actors: at most three at once, and one writer per checkout. Inside a managed run (an `aos delegate`
+  worker, or a coordinator holding a reserved allowance) children stay within the reserved native
+  allowance (`<id>-native-1`, one child): the signal import matches only that reservation, and an
+  extra child is flagged for inspection. The two-actor cap below counts registered actors in managed runs.
+
+With superpowers, map its dispatches onto these roles instead of `general-purpose`:
+`subagent-driven-development` implementer to `aos-implement`, task reviewer and re-review to
+`aos-verify`, fix rounds 4-5 one tier up; its final review is `aos-verify`, or the other vendor when the
+change is consequential (`codex exec --profile review` from a Claude lead, `$cc:review` from a Codex
+lead); only that one is independent. `dispatching-parallel-agents`
+investigations go to `aos-explore`; parallel fixes need separate worktrees. `requesting-code-review`
+uses `aos-verify` and reuses a review of the same revision. Plans under about an hour, or whose tasks
+share files, run inline with `executing-plans`.
+
+## Long work: context, checkpoints and partial results
+
+Measured 2026-09-27 to 10-31 (`docs/research/2026-10-31-session-audit.md`; 156 Claude sessions,
+178 Codex rollouts, 135 delegation receipts). Treat the figures as heuristics, not savings claims.
+
+- Context is re-read every turn: 35 Claude sessions passed 400K tokens and 19 passed 700K. At a stage
+  boundary past about 400K, write `HANDOFF.md` and continue in a fresh session unless only a few steps
+  remain; note the context size in the handoff so the next audit can compare like with like.
+- Codex write stages on the Riema site took 12-21 M input tokens each, about 97 % of it cached. Give a
+  substantial write one acceptance unit, an intermediate-results file and `--max-input`; larger work
+  becomes stages that each end in a commit.
+- A delegate or child stopped by a limit, a turn budget or a shutdown may still have written files: read
+  its worktree and output file before re-running. A partial result is evidence, never accepted work.
+- Many sessions end mid-work because the operator stopped them or the PC shut down. That is not a stack
+  failure; the defence is the same as for limits: commit and write outputs as you go.
+- Never resend a refused or failed command unchanged; after the second identical failure, change the
+  command or the route. Wait for a background job's notification rather than reading its output file
+  in a loop (47 such reads in 13 sessions).
+
+## Free resources first (`aos-pool` MCP tools)
+
+Use the local model and free API pool for suitable bounded work without waiting for the user to ask.
+Since the tools shipped (2026-10-26) to 10-29 they were called four times, all in one Codex audit and
+none from Claude: the rule only works with concrete triggers. In Claude they are deferred: load them
+with `ToolSearch` `select:mcp__aos-pool__pool_extract,mcp__aos-pool__pool_triage,mcp__aos-pool__pool_crosscheck,mcp__aos-pool__pool_summarize,mcp__aos-pool__pool_variants,mcp__aos-pool__pool_feedback`.
+
+| Trigger | Tool |
+|---|---|
+| Specific fields from supplied text over a few KB (logs, transcripts, exports, docs; under 40,000 characters per call) | `pool_extract` |
+| Ten or more short items to label | `pool_triage` (or `nar classify --backend embed` for up to 50) |
+| Claims to check against supplied sources | `pool_crosscheck` |
+| A long supplied text you need only the gist of | `pool_summarize` |
+| Options or wording drafts from a brief | `pool_variants` |
+
+Calls take seconds warm and about a minute when the GPU swaps models. Default `privacy` is `private`
+(local model only); pass `public` only when the entire supplied prompt is already public or meant for
+release, which also lets the free API pool vote.
+A `pass` verdict means the built-in checks held, not that the result is right: spot-check before relying
+on it, then call `pool_feedback` with accepted true/false so acceptance per tool is measured. Skip the pool
+only for trivial work, repository edits, live retrieval and consequential decisions, and say why in the
+report. Batch related inputs and reuse verified results; do not alternate embedding and text models
+for tiny steps on a GPU that must swap them. On a route failure, report it and continue with direct
+inspection or another eligible route; do not retry unchanged calls or treat an unavailable pool as
+a blocker for work the lead can check. The tools shrink what native workers must read.
 
 ## Bounded free API candidates
 
@@ -71,6 +157,9 @@ vendor or reserve an API account as a Claude/Codex actor. An account key is not 
 bucket unless the provider/account/project allocation establishes independence. The OmniRoute
 alias shares its upstream account's allowance. Never assume a free route from authentication.
 
+Write the verifier before you submit a batch: of 279 pool tasks up to 10-29, 86 candidates were
+never verified and only 12 accepted, so a batch without a check is spent quota. In a batch, tasks
+over a local ceiling stay queued; run `drain` again later rather than resubmitting.
 Candidates stay unaccepted until a lead-authored verifier runs. Dependent pool tasks require
 host acceptance and current hashes. For existing registered task contracts, use `swarm contract
 <id> --repo <checkout> --cloud-allowed --owner-session <claim-session>`: the host verifier reads
@@ -96,6 +185,10 @@ reserves actors. `aos coord observe <id>` records a state; `aos coord finish <id
 `aos coord actors` lists actors and `aos coord reconcile` reports reconcilable states. These commands
 return JSON. Use `aos coord status <id>` to read run state and `aos coord cancel <id>` to request
 cancellation; a request does not establish that a process has stopped.
+
+Before the final response, finish your confirmed children, then your lead. Preserve unresolved
+actor identities in the handoff; do not leave completed reservations consuming slots or release
+another session's actor based only on its age.
 
 Address messages within the same task tree. `aos coord send <from-id> --to <recipient-id> --text <text>`
 sends one message; add `--reply-to <message-id>` for a reply between the same actors. `aos coord inbox

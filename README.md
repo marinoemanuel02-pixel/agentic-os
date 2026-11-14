@@ -48,7 +48,8 @@ How the pieces connect:
 3. Do the one-time steps it prints: sign in to Claude Code (`claude auth login`), `gh auth login`,
    restart the Claude and Codex apps (they predate the new PATH), then `$cc:setup` in Codex.
    Use PowerShell 7 (`pwsh`): Windows PowerShell 5.1 blocks profile scripts by default, so `aos`
-   is only wired into `pwsh` unless you change that policy yourself.
+   is only wired into `pwsh` unless you change that policy yourself. Agent shells (Git Bash,
+   `pwsh -NoProfile`, cmd) reach it through the shims `aos sync` writes to `~\.local\bin`.
 4. Open a new `pwsh` window and run `aos status`. Every line should be `ok`.
 
 Everything is idempotent: re-running changes nothing unless something drifted. Your existing
@@ -69,9 +70,9 @@ settings are merged, never replaced, and backups go to `~/.aos-backups/`.
 | Update everything | `aos update` (weekly is plenty) |
 | Store an API key | `aos secret set <name>` (encrypted to your Windows login in `~\.aos\secrets`, never a plaintext file); scripts read it with `aos secret get <name>` |
 | Work from your phone | see [From your phone](#from-your-phone) |
-| Use the local model | agents call the `nar` tools on their own when a choice benefits; `aos nar choose "..." --option A --option B` by hand; `ollama run <tag>` to chat |
+| Use the local model | agents use the `aos-pool` tools by default for extraction, sorting, options, claim checks and summaries (local first, free API pool for public material; see [docs/pool.md](docs/pool.md)) and the `nar` tools when a choice benefits; `aos nar choose "..." --option A --option B` by hand; `ollama run <tag>` to chat |
 | Try a newer local model | `ollama pull <tag>`, `aos nar eval --models <tag>`, then `aos local adopt <tag>` (only if no worse) |
-| Check the setup's own code | `aos test` (parse, ASCII, Pester under PowerShell 5.1 and 7; CI runs it on every push) |
+| Check the setup's own code | `aos test` (parse, ASCII, Pester under PowerShell 5.1 and 7, Python/Node suites once under 7; CI runs it on every push) |
 
 Which agent to use for what, and how to stretch two entry plans: [docs/routing.md](docs/routing.md).
 
@@ -227,6 +228,7 @@ Candidates for later layers, each with the reason to wait:
 agentic-os/
   bootstrap.ps1          entry point (layers, -DryRun)
   aos.psm1               the aos command; all logic lives here
+  bin/aos.ps1            entry point; aos sync puts aos.ps1, aos.cmd and an sh shim in ~\.local\bin
   packages.json          winget / npm / VS Code extensions per layer
   agents-home/           becomes ~/.agents (junction)
     AGENTS.md            the global contract for both agents

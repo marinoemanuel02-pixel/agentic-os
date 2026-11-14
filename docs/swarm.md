@@ -22,7 +22,10 @@ and permits at most two separately admitted failover attempts. `max_attempts: 1`
 failover for that task. Explicit `account` pins a route. Four active API tasks, two per
 provider and one per shared account bucket are current local ceilings; a gateway has one
 worker. These are conservative local controls, not measured provider entitlements.
-An account that is occupied waits in the queue. A dispatched provider failure remains
+In `submit`/`drain`, a task whose estimated units do not fit any account's local ceiling
+right now stays `queued` with no attempt charged; run `drain` again after the window passes.
+A single `task` run (and the `aos-pool` cloud vote) fails at once with `no_capacity` instead,
+so no stray queued task runs later in someone else's drain. A dispatched provider failure remains
 failed with an attempt receipt; use a new task ID for a deliberate retry after diagnosis.
 
 ## Direct task and host verification

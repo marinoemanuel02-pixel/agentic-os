@@ -11,10 +11,94 @@ don't rewrite the old one: the record of what was rejected is the part that ages
 - **Decision.** Generated material is opt-in per shot and judged case by case (R04); it enters through
   `aos asset fetch --basis generated` with terms, watermark and commercial fields, the template gate admits it when the
   film's `sourcing.json` allows it, and films are treated as not monetized unless they say so. The skill
-  `generate-video` records each platform's procedure as observed, dated (rule R55).
+  `generate-video` records each platform's procedure as observed, dated (rule R59).
 - **Rejected.** Rotating accounts to stretch free quotas (it breaks every platform's terms and risks linked bans);
   a queue, quota ledger, trim and seam tools before more platforms are tested; a separate ingest command (fetch
   already does the budget, cache, evidence and row).
+
+## 2026-10-31 - Session audit: guard scope, aos for agent shells, shorts QA, long-work guidance
+
+- **Evidence.** Two independent passes over the same package: Claude measured 156 Claude sessions, 24 subagent
+  transcripts, 178 Codex rollouts (10-25..10-30), 135 delegation receipts and the ledger since 09-27; Codex
+  (read-only, 169K tokens) checked the metrics and the stack. Report: `docs/research/2026-10-31-session-audit.md`;
+  evidence in `~/.aos/research/session-audit-20261031`. Sessions that stop mid-work (58 of 156) were mostly the
+  operator's stops or PC shutdowns; they are not treated as stack failures.
+- **Guard.** Outside git the guard claimed the nearest folder: the shared Claude memory folder saw 42 auto-claims
+  and 29 expired-claim takeovers, and 10 memory writes by other sessions were refused; no other non-git claim was
+  ever contended. Auto-claims now cover git work trees only (the nearest folder holding `.git`, also when git
+  times out); an explicit `aos claim` on any folder is still honoured. Codex proposed file-level claims for
+  non-git paths instead. Not taken for now: both vendors' edit tools already refuse a write to a file changed
+  since it was read, which covers same-file races in a shared store, while a one-hour claim on `MEMORY.md`
+  would block every new memory for that hour (updates to existing notes would still pass). Revisit if a
+  same-file overwrite in a shared store is ever observed.
+- **aos for agent shells.** The shims built on 2026-10-08 (`audit/no-brainers`) were never merged, and the
+  "aos not recognized" errors continued. Ported with their 13 tests. A finished branch that never lands is the
+  pattern behind it: AGENTS.md and the handoff skill now require naming where finished work lands.
+- **Shorts QA.** `finish.sh` printed stream and loudness numbers and the template told agents to check by hand;
+  the last three films were shorts and two earlier ones never ran full QA (Codex's finding). `finish.sh` now runs
+  the static gates and `tools/checks/delivery.mjs` (qa.sh's limits at `QA_SIZE`) and exits 1 on failure.
+  qa.sh keeps its own copy of those limits for now; moving it onto delivery.mjs is a separate change.
+- **Guidance.** Hand off at a stage boundary past ~400K context (35 sessions passed it, 19 passed 700K); long
+  children and Codex write stages save intermediate results, read before any re-run; never resend a refused
+  command unchanged. The frontier's characters `best` moved from the stills-judged `Person.tsx` (rejected by
+  the operator in six verdicts) to the accepted `final-v20` Toon cast; moving dimensions need clip evidence.
+- **Rejected.** Raising actor caps, mandating more subagents, a smaller default model, another orchestration
+  layer (Codex agreed: no evidence of benefit); blanket fixes for operator-stopped sessions (checkpoints instead).
+
+## 2026-10-29 - aos test runs Python and Node suites once, under PowerShell 7
+
+- 35 Pester tests only launch `python -m unittest` or `node --test`; those suites pick their own shell
+  (test_swarm_contract runs pwsh, or 5.1 when it patches the lookup), so a second run proves nothing new.
+  They carry `-Tag 'Language'`; `aos test` sets `AOS_TEST_EXCLUDE_TAG=Language` for the 5.1 run only.
+  Measured: those tests took 240 s of the 5.1 run. Tests that also run PowerShell code stay untagged
+  (Pi file tools), and the swarm helper's parse/ASCII check became its own untagged test.
+- CI calls `aos test`, so it gets the same split. Running `tests/Run-Tests.ps1` directly still runs everything.
+- Rejected: dropping 5.1 entirely (aos.psm1 and bootstrap.ps1 must run there), and a separate language
+  runner outside Pester (two places to look for a failure).
+
+## 2026-10-29 - Route in-session subagents by role; the swarm queues instead of failing
+
+- **Evidence.** Claude transcripts 2026-10-15..29: 12 of 120 sessions used subagents; 32 of 40 calls were
+  `general-purpose` and 18 inherited the lead's model; the managed roles ran six times. `aos-pool` was
+  called four times since it shipped, all from one Codex audit. The free API pool held 279 tasks: 12
+  accepted, 86 candidates never verified, 178 failed, 169 of them `no_capacity` from one burst.
+- **Subagents.** The coordination skill maps jobs and superpowers dispatches onto `aos-explore`,
+  `aos-implement` and `aos-verify`, with the model named on every spawn. The two-actor cap is scoped to
+  registered actors in managed runs, which is how it was enforced in practice; in-session children
+  share the lead's window, so the rule there is at most three at once and one writer per checkout.
+  `aos-verify` gets 24 turns (16 cut reviews off with no report) and Claude role files state the budget
+  and ask for the report by two thirds of it.
+- **Pool.** Concrete triggers and the `ToolSearch` load line replace "suitable bounded work": in Claude
+  the tools are deferred, so a general rule never surfaced them.
+- **Swarm.** Claim checked one request while dispatch reserved the full token estimate, so a batch over
+  a per-minute ceiling failed permanently. Both now use one estimate; a batch task refused before any
+  attempt returns to the queue, and a single-task run fails at once with `no_capacity` so it cannot
+  linger as an orphan (three earlier `idro-*` vision tasks are such orphans and stay queued for the operator).
+- **Rejected.** Raising the two-actor cap for managed runs (no evidence it binds), a hook that rewrites
+  `general-purpose` spawns (silent model swaps were rejected on 2026-10-26), and a fixed in-session
+  limit enforced by code (the harness owns spawning; the rule stays cooperative).
+- **Also.** Merged `main` into this line (pool layer and audit were 43 commits behind). Pruned 27 worktree
+  registrations whose folders were gone; their empty metadata folders could not be deleted here.
+
+## 2026-10-28 - Repair coordination evidence and validate pool failure paths
+
+- **Scope.** Audit the previous coordination chat, current run receipts and source. Preserve the
+  existing native teams and shared API ledger. Fix observed lifecycle and validation defects;
+  do not introduce another orchestration service or infer savings from mixed task classes.
+- **Coordination.** Reuse the native actor already created by `--workers 1`. An observed native
+  handle cannot be replaced, and terminal runs cannot return to active states. Classify the
+  observed Claude weekly-limit message as quota exhaustion. Fresh zero capacity remains limited
+  even when its reset date is unknown; report that uncertainty instead of inventing a date.
+- **Pool.** Check complete prompts and cloud UTF-8 packet size, bypass proxies and redirects for
+  private local requests, validate chat/embedding shape, preserve usable local candidates when
+  cloud admission fails, and reject malformed variants, empty summaries and invalid feedback.
+  Batch local work to reduce model swaps; failed pool routes do not block direct host inspection.
+- **Evidence and limits.** Live private extraction was useful; a structurally passing variants
+  result missed the brief and was rejected in feedback. Live cloud attempts returned `not_free`;
+  static account admission is not working capacity. Claude's weekly quota blocked independent
+  test authorship/review. Codex wrote local regressions and used a separate native reviewer;
+  that is explicitly not a cross-vendor second opinion. No vendor-home/PATH configuration sync.
+  See [audit validation](validation/2026-10-28-orchestration-audit.md).
 
 ## 2026-10-27 - Engines join the video stack as shot renderers behind render-shot
 
@@ -24,12 +108,31 @@ don't rewrite the old one: the record of what was rejected is the part that ages
   Blender sets: frame-complete, seeded, frame-driven, one clip per shot, the same log, media row and exposure gate,
   plus a measured repeatability (`--repeat`). Unreal, Unity, Autograph (`cmd`) and Cavalry (`import`) have adapters
   that wait for a spike with accounts the operator creates. A re-rendered clip now re-renders only its own segment.
-  The look reaches every engine as `engines/look.json` generated from `look.ts`. Rules R56-R58.
+  The look reaches every engine as `engines/look.json` generated from `look.ts`. Rules R60-R62 (numbered R55-R57 on their branch, renumbered at the merge
+  because R55-R59 were taken by the voice, type-size and generated-material rules).
 - **Measured.** Demo shots at 1920x1080: Godot 186 frames at about 0.5 s/frame, Manim 426 frames at 0.14 s/frame,
   both pixel-identical over 30 rerun frames.
 - **Rejected.** Omniverse (needs an RTX GPU; this one is a GTX); TouchDesigner, Houdini Apprentice, vvvv and Notch
   (free tiers are non-commercial or trials); Rive (exports are paid since 2025-10); Cavalry's CLI renderer (not in
   2.7+); a second asset contract beside Blender's; MCP-driven finals (MCPs stay look-dev only).
+
+## 2026-10-26 - Make the local model and the free API pool a default worker (`aos-pool` MCP)
+
+- **Why.** The swarm and the local model existed but went unused: the swarm needs a packet and a lead-written
+  verifier per task, the local model was exposed only for scoring and sorting, and the contract said "consider".
+  The operator asked for them to be used by default, as tools the orchestration reaches for on its own.
+- **What.** One stdlib MCP server (`tools/pool_mcp.py`, core in `tools/pool_core.py`) with five task-shaped tools
+  and a feedback tool, registered for both agents. Local model first; the existing swarm second, only with
+  `privacy: "public"`. Each tool carries its own checks (schema, grounding in the source, quotes in the cited
+  source, numbers in summaries) and returns `pass`/`review`. A short rule in the shared contract and the
+  coordination skill makes it the first worker for reading, extraction, sorting, options and claim checks.
+  `config/mcp.json` gains a `{{repo}}` placeholder for servers whose code lives in this checkout.
+- **Rejected.** Hooks that reroute subagents or prompts to a cheaper model (llm-router style, PreToolUse on the
+  Agent tool): automatic, but they swap a strong model for a weak one with no check the user can see. A proxy
+  for the agents' own traffic (claude-code-router style): built for pay-per-token API use, not these
+  subscriptions, and free models handle tools poorly. A generic "ask a model" tool: nothing to verify against.
+- **Open.** Acceptance per tool is measured by `pool_feedback`, not assumed; revisit routing after about twenty
+  judged results per tool. The 6 GB GPU swaps models (about a minute cold).
 
 ## 2026-10-26 - 2D films start from a tested cast kit, judged on sheets before shots
 

@@ -28,18 +28,27 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
 - People in 2D films: `src/lib/cast/` (`Person`, `POSES`, `walk`, `talk`, `handPos`; colours in `palette.ts`). Review
   the cast before it goes into shots and after any kit change: `bash tools/still.sh 0 CastSheet CastTrio CastFaces
   CastHands`; geometry tests `node --no-warnings --test tools/checks/cast.test.mts`
+- Formats: one source renders 16:9 and native 9:16; wrap a composition in `<FormatProvider format={TALL}>` and stage
+  shots with `useFormat()` / `useLayout(wide, tall)`; keep type and faces inside `SAFE` in 9:16 (`src/lib/format.tsx`)
+- Captions drawn into the picture (feeds autoplay muted): `<Captions lines={...} shots={...} words={words} off={[...]} />`
+  from `src/lib/Captions.tsx`, timing in `src/lib/caption-timing.ts` (`readableShare()` reports readable time); tests
+  `node --no-warnings --test tools/checks/captions.test.mts`
 - Soundtrack stems: `node --no-warnings tools/audio.mts`; full build: `bash tools/build.sh v1`
 - QA: `bash tools/qa.sh exports/{{name}}.mp4 exports/{{name}}.srt` (length from `qa.env`; includes the motion
   check on a texture-free proxy, report `qa/motion.md`), then `node tools/screen.mjs` (on-screen text)
 - Currency gate (R27): `node tools/checks/currency.mjs currency.json --claims claims.json`; export day: `node tools/reverify.mjs currency.json --browser-ok <ids> --evidence research/reverify-<date> --write` (each source gets a proof file: URL, time, SHA-256 of the page, anchor excerpt; a browser row needs one saved from the browser), then rebuild and QA on that local day. Build and QA pass `--export`; the dated ledger is part of the input manifest.
-- Blender sets (R41-R43): look-dev live through the Blender MCP with `BLENDER_LIB = r"<this folder>/blender/lib.py"; SHOT = "<variant>"; exec(open(r"<this folder>/blender/s_<set>.py").read())`, one still per change; finals headless: `python tools/render-shot.py S02 S11 ...` (table in `blender/shots.json`: script, SHOT variant, offset, preroll) -> `app/public/clips/<id>.mp4` and `src/data/media.json`; seconds per frame in `renders/render-log.jsonl`
-- Engine shots (R56-R58, `engines/README.md`): Godot (`engines/godot`, shots extend `lib/aos_shot.gd`), Manim (`engines/manim`, scenes import `aos`), Unreal/Unity after their spike, `cmd` (Autograph) and `import` (Cavalry or any hand render) in `engines/shots.json`; `node --no-warnings tools/export-look.mts` after a look change; finals `python tools/render-shot.py S04 --repeat 30` (same clips, log, media.json and exposure gate as Blender); tests `python tools/checks/engines_test.py`
+- Blender sets (R41-R43): look-dev live through the Blender MCP with `BLENDER_LIB = r"<this folder>/blender/lib.py"; SHOT = "<variant>"; exec(open(r"<this folder>/blender/s_<set>.py").read())`, one still per change; finals headless: `python tools/render-shot.py S02 S11 ...` (table in `blender/shots.json`: script, SHOT variant, offset, preroll, `speed` to play a longer variant's keyframes faster) -> `app/public/clips/<id>.mp4` and `src/data/media.json` (a rendered clip replaces the shot's animatic `still`); a shot re-renders when its scene script or any kit file it names (lib.py, sf_*.py, ...) changes; seconds per frame in `renders/render-log.jsonl`
+- Engine shots (R60-R62, `engines/README.md`): Godot (`engines/godot`, shots extend `lib/aos_shot.gd`), Manim (`engines/manim`, scenes import `aos`), Unreal/Unity after their spike, `cmd` (Autograph) and `import` (Cavalry or any hand render) in `engines/shots.json`; `node --no-warnings tools/export-look.mts` after a look change; finals `python tools/render-shot.py S04 --repeat 30` (same clips, log, media.json and exposure gate as Blender); tests `python tools/checks/engines_test.py`
 - CC0 assets: `python tools/polyhaven.py model|hdri|tex <id> [1k|2k]` (budget `BUDGET_MB` in qa.env, ledger `research/assets.md`); `python tools/polyhaven.py budget`
-- Shorts edit (R44): `python tools/edit.py` cuts on the words named in `src/data/cuts.json` -> `src/data/edit.json`
-- Page captures (R45): `node tools/capture.mjs [name...]` from `research/capture-pages.json` -> `app/public/captures/`, ledger `research/captures.json`
+- Shorts edit (R44): `python tools/edit.py` cuts on the words named in `src/data/cuts.json` -> `src/data/edit.json`;
+  review sheets of a word-cut export: `python tools/edit-sheets.py <export.mp4> <out_dir>`; finish: `bash tools/finish.sh <version>`
+  (see "Word-cut shorts" below for the tools that still read the beat plan)
+- Page captures (R45): `node tools/capture.mjs [name...]` from `research/capture-pages.json` -> `app/public/captures/`, ledger `research/captures.json`;
+  an entry `{"url": ..., "anchor": "exact sentence"}` scrolls that sentence to mid-screen and records its line boxes for crops and marks
+- Type size (R58, rubric 4): `node tools/checks/type-size.mjs` (no size under 36 px in `src/lib` and `src/shots`; build and QA run it)
 - Real material (R42, R52): `python tools/commons.py search|info|fetch|ia-search|ia-fetch ...` (Wikimedia Commons / Internet Archive, licence and author into `research/assets.md`, counted against `BUDGET_MB`); real face detection on footage: `~/.aos/venvs/cv/Scripts/python.exe tools/detect.py <video> <start> <dur> <crop x> <shot id> [--pan x2]`
 - Review sheet of the assembled composition: `bash tools/stills.sh <name> S05:0.9 S11:0.5 ...` (one bundle, one still per shot)
-- Human voiceover (R53): `python tools/ingest-voice.py take1.m4a take2.m4a ... [--dry] [--verify] [--phone]` (`--phone` removes the crackle of phone or messaging-app takes) (takes in script order; needs `AOS_WHISPER_MODEL`, and `AOS_VO_LANG=it` or the narration's language when it is not English) -> `app/public/vo/<id>.wav`, `src/data/vo.json`, `words.json`, `words.sha256.json`; report in `<media>/voice/ingest-report.md`. A loop (R54) is set in `src/data/cuts.json`: `"head"`, `"gap"`, `"outro_frames"`.
+- Human voiceover (R53): `python tools/ingest-voice.py take1.wav take2.wav ... --ref=<healthy take> [--phone] [--match=L08,L09] [--dry] [--verify]` (takes in script order; needs `AOS_WHISPER_MODEL`, `AOS_VO_LANG=it` for Italian, or the narration's language when it is not English) -> `app/public/vo/<id>.wav`, `src/data/vo.json`, `words.json`, `words.sha256.json`, `voice-scale.json`; report in `<media>/voice/ingest-report.md`. `--ref` scale-checks every take against a take with a sane header first (R55; alone: `node tools/checks/voice-scale.mjs --ref <healthy.wav> --takes <wavs>`), `--phone` removes messaging-app crackle, `--match` gives every line the timbre and level of the lines the operator names (R56). WhatsApp `.aac` takes go through `python tools/fix-aac.py <out_dir> <takes>` first. A loop (R54) is set in `src/data/cuts.json`: `"head"`, `"gap"`, `"outro_frames"`.
 - Pacing report (R29): `node tools/checks/pacing.mjs <film.mp4> --shots src/data/shots.json --claims claims.json --lines src/data/lines.json --out qa/pacing`
 - Render cache (R32, default in build.sh): `bash tools/render-cached.sh`; `AOS_RENDER_CACHE=0` renders Main whole; tests `node --test tools/cache/cache.test.mjs`
 - Motion check alone: `node --no-warnings tools/checks/motion.mjs <proxy.mp4>`; its tests: `node --test tools/checks/`
@@ -66,7 +75,7 @@ decides how practices mix, and imported material appears in the hero next to a b
 - Shots use media only through `src/lib/media/` components and an asset id (`<Clip asset="a07" use="u1" look={look} />`,
   `Photo`, `Capture`, `Model`, `Environment`, `GlTransition`); never a path. Transitions: `src/lib/transitions`.
 - `aos asset budget --film .` shows the budget; `--approve <MB> --by-user` only after the user approved the amount.
-- Generated takes (opt-in per shot, R55) enter through `aos asset fetch --basis generated` with their terms, watermark
+- Generated takes (opt-in per shot, R59) enter through `aos asset fetch --basis generated` with their terms, watermark
   and commercial fields; the skill `generate-video` has the procedure and the platform recipes.
 - The gate (`tools/checks/assets.mjs`, run by build and QA) checks policy, not law; `qa/assets.md` lists the human
   checks: the narration comments on each excerpt, every source tag is legible, no excerpt takes more than it needs.
@@ -87,6 +96,29 @@ decides how practices mix, and imported material appears in the hero next to a b
   becomes a rule.
 - Look gate: the look lab renders the frontier's `best` frames next to the new ones on the same beats; a dimension
   passes when both vendors, blind, judge the new frame better.
+
+## Word-cut shorts (R44): tools that still read the beat plan
+
+A short cut on words keeps its shots and lines in `src/data/edit.json`; `src/data/plan.ts` stays the template's.
+`tools/verify.mjs`, `tools/edit-sheets.py`, `tools/srt.py`, `tools/finish.sh` and `tools/render-shot.py` read
+edit.json. These still read plan.ts, so on a short they describe the template's plan, not the cut:
+
+- `tools/build.sh` as a whole: `check-plan.mts`, `audio.mts`, the render cache (`cache/plan.mts` segments the plan's
+  shots, `cache/keys.mjs` hashes `timeline.ts`/`plan.ts`), `timeline-json.mts` and `package-outputs.mts`.
+- `tools/qa.sh`: its stream check wants 1920x1080 (a 1080x1920 short fails), it needs `exports/input-manifest.json`
+  and `renders/Main.src-hash`, which only build.sh writes, the contact sheet takes shot middles from plan.ts, and the
+  motion check (`checks/motion.mjs`) excludes the plan's cut windows, not the edit's.
+- `tools/audio.mts`: lines, shots and score on the plan's beat grid; a short's score is its own script.
+- `tools/review-sheets.mts`: samples the plan's shots; use `tools/edit-sheets.py`.
+- `tools/timeline-json.mts`: the asset gate's shots and line starts come from plan.ts.
+- `tools/package-outputs.mts`: SRT and chapters from the plan's slots; use `tools/srt.py`.
+- `tools/checks/joins.mts`: checks the poses of the plan's shots.
+
+Until they read edit.json, finish a short with `bash tools/finish.sh <version>`. It renders and writes the outputs, then
+runs the static gates (currency as in qa.sh, `claims.mjs`, `screen-text.mjs`, `type-size.mjs`, `voice-scale.mjs`) and
+`tools/checks/delivery.mjs` (stream format at `QA_SIZE` from qa.env, default 1080x1920; duration, loudness, true peak,
+black and frozen frames, captions inside the duration), writes `qa/report.md` and exits 1 on any failure, keeping the
+outputs. Fix the failure and finish again; do not pass a short on manual numbers. Review with edit-sheets.py.
 
 ## Done means
 
