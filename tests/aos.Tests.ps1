@@ -848,6 +848,23 @@ Describe 'aos video verdict and log' {
         $line | Should -Match '^- 2026-10-31 align-1: "va bene, finalizzala" \(recorded \d{4}-\d{2}-\d{2}\)$'
     }
 
+    It 'judges a backfill date against the local day, not UTC''s' {
+        # 00:30 in Rome on the 14th is still the 13th in UTC: the operator's today must be accepted, tomorrow refused.
+        Mock Get-AosToday -ModuleName aos { [datetime]'2026-11-14' }
+        Mock Write-AosWarn -ModuleName aos { }
+        aos video verdict align-1 --at 2026-11-15 'too early'
+        Test-Path -LiteralPath (Join-Path $env:AOS_COORD 'ledger.jsonl') | Should -BeFalse
+        aos video verdict align-1 --at 2026-11-14 'same day'
+        @(InModuleScope aos { Get-AosLedger -Last 0 })[0].given | Should -BeExactly '2026-11-14'
+    }
+
+    It 'keeps words that begin with --at when they are quoted as one string (PowerShell consumes a bare --)' {
+        aos video verdict align-1 '--at looks wrong'
+        $events = @(InModuleScope aos { Get-AosLedger -Last 0 })
+        $events[0].text | Should -BeExactly '--at looks wrong'
+        $events[0].Contains('given') | Should -BeFalse
+    }
+
     It 'refuses a backfill date that is <Case> and writes nothing' -ForEach @(
         @{ Case = 'not a date'; At = 'yesterday' },
         @{ Case = 'in the future'; At = ([datetime]::UtcNow.AddDays(2).ToString('yyyy-MM-dd')) },

@@ -12,7 +12,8 @@ Score each check 0-2 per shot on the contact sheet and once for the whole cut. A
    sound.
 7. **True and traceable.** Every number and quote matches `script.md` and `sources.md`.
 8. **Upload-clean.** `tools/qa.sh` passes.
-9. **Easy to follow.** One idea per line in everyday words; the picture shows the idea before the words name it.
+9. **Easy to follow.** In an explainer (R19): one idea per line in everyday words; the picture shows the idea before
+   the words name it. Other films are scored on the reading load their brief sets.
 10. **Beats the frontier.** Characters, scene and motion judged better than the best exemplars in
     `~/.agents/video/frontier.md` on the look-lab beats (blind, both vendors).
 11. **Imported material shows its line's specific idea.** A real clip, capture, photo or model earns its place by

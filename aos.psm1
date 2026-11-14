@@ -1791,7 +1791,10 @@ function Get-AosVideoFamily([string]$Name) {
     return ($Name.ToLowerInvariant() -replace '-v?\d+$', '')
 }
 
-$script:VideoVerdictUsage = 'usage: aos video verdict <name> [--at <yyyy-MM-dd>] <the user''s words, verbatim>'
+$script:VideoVerdictUsage = 'usage: aos video verdict <name> [--at <yyyy-MM-dd>] ''<the user''s words, verbatim, as one quoted string>'''
+
+# The operator's calendar day (local time): a verdict given today in Rome may still be tomorrow in UTC.
+function Get-AosToday { return [datetime]::Now.Date }
 
 function Add-AosVideoVerdict([string]$Name, [string]$Text, [string]$At = '') {
     if (-not (Test-AosVideoName $Name) -or -not $Text -or -not $Text.Trim()) {
@@ -1804,7 +1807,7 @@ function Add-AosVideoVerdict([string]$Name, [string]$Text, [string]$At = '') {
         $day = [datetime]::MinValue
         $parsed = [datetime]::TryParseExact($At, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture,
             [System.Globalization.DateTimeStyles]::None, [ref]$day)
-        if (-not $parsed -or $day.Date -gt [datetime]::UtcNow.Date) { Write-AosWarn $script:VideoVerdictUsage; return }
+        if (-not $parsed -or $day.Date -gt (Get-AosToday)) { Write-AosWarn $script:VideoVerdictUsage; return }
         $event['given'] = $day.ToString('yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)
     }
     Add-AosLedgerEvent $event
@@ -1927,8 +1930,7 @@ function Invoke-AosVideo([string[]]$Arguments) {
                 if ($a.Count -lt 4 -or -not $a[3]) { Write-AosWarn $script:VideoVerdictUsage; return }
                 $at = [string]$a[3]
                 $first = 4
-            }
-            if ($a.Count -gt $first) { $text = ($a[$first..($a.Count - 1)] -join ' ') }
+            }            if ($a.Count -gt $first) { $text = ($a[$first..($a.Count - 1)] -join ' ') }
             Add-AosVideoVerdict -Name $name -Text $text -At $at
         }
         'log' {
