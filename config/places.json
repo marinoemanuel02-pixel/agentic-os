@@ -85,6 +85,16 @@
       "name": "trx50-procurement",
       "kind": "repo",
       "path": "{{projects}}\\trx50-procurement"
+    },
+    {
+      "name": "metacognition-explainer",
+      "kind": "repo",
+      "path": "{{projects}}\\videos\\metacognition-explainer"
+    },
+    {
+      "name": "metacognition-3d",
+      "kind": "repo",
+      "path": "{{projects}}\\videos\\metacognition-3d"
     }
   ]
 }

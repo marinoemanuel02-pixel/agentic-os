@@ -1,31 +1,40 @@
 # Google Flow recipe
 
-Last verified 2026-11-12 (one spike, account UI in Italian; labels follow the account language).
+Last verified 2026-11-13 (metacognition-explainer, account UI in Italian; labels follow the account language).
+Flow now lives at flow.google.com (it was labs.google/fx on 2026-11-12).
 
 ## Observed
 
-- **Start:** the Flow home page, New project. An announcement dialog may open first; it only needs dismissing.
-- **Frames mode:** the prompt bar's mode chip: Video, then Frames. Start and End slots appear above the prompt.
-  Set 16:9 or 9:16 and the take count (x1-x4) in the same menu; it shows the credit cost before generating.
-- **Model:** pick the cheapest model in the list that supports frames; its cost was 10 credits per take
-  (x2 = 20 credits). Some models in the list carried an end-of-availability date.
-- **Upload:** a drop event with the image files on the project's media area (the "drag media here" area) worked;
-  the built-in browser could not use the file picker. The files were built in the page (canvas redraws of the
-  keyframes), not local PNGs: see SKILL.md, local files. The first upload opens an image-rights confirmation: the
-  operator's OK.
-- **Slots:** click Start, pick the uploaded image from the project's media list; same for End.
-- **Generate:** type the prompt, press the generate arrow. Two takes took about 1.5 minutes.
-- **File link:** open the take (its page is `/project/<id>/edit/<id>`); `document.querySelector('video').currentSrc`
-  is a signed link with an expiry in its query (lifetime not measured; fetch it soon). Pass it to
-  `aos asset fetch --url`.
-- **Output:** 1280x720, 24 fps, 7.9 s, with an audio track (drop it unless the shot needs it).
-- **Behaviour:** the end keyframe's geometry is matched exactly, slightly darker; the target faded in instead of
-  being reached by the motion, then held still about 2.5 s.
+- **Start:** the Flow home page, Nuovo progetto. A project opens with an assistant panel ("Agente") on the right and
+  the media grid on the left. Emulate a 1440x900 viewport: in the narrow pane the settings menus open off-screen.
+- **Direct mode:** the prompt bar's "Agente" chip toggles the assistant; with it off (aria-pressed false) the bar
+  shows a settings chip (aria-label "Trigger impostazioni"). In it: Video (not Immagine), then **Fotogrammi**
+  (frames), 16:9, the model (Veo 3.1 - Lite was the default) and the take count. It shows the cost: x2 = 20 credits.
+- **Upload:** a drop event (dragenter, dragover, drop with a DataTransfer of Files) on `.grid-area-wrapper`, the
+  "Inizia a creare o trascina contenuti multimediali" area. No image-rights dialog appeared on 2026-11-13 (it did on
+  2026-11-12).
+- **Slots:** the bar shows `button.empty-chip` "Inizio" and "Fine". Clicking one opens "Seleziona un'immagine del
+  frame": pick the image, then "Aggiungi al prompt". After a generation the slot did not reopen the picker on a
+  click; reloading the project page and calling `.click()` on the `button.empty-chip` from a script did.
+- **Generate:** click the prompt box, type, press the arrow. Two takes took about 1.5-2 minutes.
+- **File link:** open the take (`/project/<id>/edit/<id>`); the page has no `<video>` element any more. The signed
+  links are in `performance.getEntriesByType('resource')`: `https://flow-content.google/video/<id>?Expires=...`.
+  The "next" arrow on the take page loads the other take of the pair. Fetch them soon (the expiry was about 6 hours
+  after the page load).
+- **Output:** 1280x720, 24 fps, 7.93 s, with an audio track.
+- **Behaviour:** both keyframes matched in geometry (RMSE 1.1-1.7 % against the keyframe), the background slightly
+  darker. On 2026-11-13 the motion ran to the last frame (no still tail) and reached the end frame by motion. Of
+  2 + 2 takes, two were discarded: a mist that read as a mushroom cloud with stray side arcs, and a dial needle that
+  swept four times and vanished in between (an AI artifact in the centre of the frame).
+- **Credits:** two x2 generations (40 credits) left too few for a third; the page then showed "Non disponi di crediti
+  sufficienti" with an upgrade button (never click it). A later x1 request (10 credits) was accepted by the bar but
+  refused on submit with the banner "Hai esaurito i crediti Google Flow" and no take: read the banner, not the bar.
+  Check which account the avatar holds (its aria-label names it) before assuming fresh credits.
 - **Watermark:** none visible.
 
-## Secondhand, check first-hand
+## Terms
 
-- Free allowance: 50 credits a day, no rollover (Google's Flow help page, read through search, not on the page).
-- Ownership: Google says it does not claim ownership of generated content. No official statement found that
-  free-credit output may be used commercially: record `--commercial unknown` until the terms say otherwise.
-- Automated use: Google's general terms limit automated access; Flow's own terms not yet read.
+- Google Terms of Service (policies.google.com/terms, read 2026-11-13): automated access is barred only "in violation
+  of the machine-readable instructions on our web pages" (robots.txt); flow.google.com serves no robots.txt (the path
+  returns the app page) and labs.google's robots.txt disallows only /404. Google does not claim ownership of
+  generated content; no statement found on commercial use of free-credit output: record `--commercial unknown`.

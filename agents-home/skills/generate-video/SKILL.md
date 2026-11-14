@@ -1,13 +1,27 @@
 ---
 name: generate-video
-description: Make a generated transition, asset or clip for a film on a free video generator (Flow, Kling) driven in the built-in browser, and take it into the film with its rights. Use for a shot marked generated in shots.md.
+description: Make a generated transition, asset or clip for a film on a free video generator (Flow, Kling, PixVerse, Vidu, Hailuo) driven in the built-in browser, and take it into the film with its rights. Use for a shot marked generated in shots.md.
 ---
 
 # Generate video
 
 Generated material is opt-in per shot (rule R59): the shot list says why code or real material will not do, and a
-take that reads as generic AI output is discarded. Platform recipes: `flow.md`, `kling.md` in this folder. Each holds
-only what was seen on the page, dated; a step that no longer matches the page stops the run and is reported.
+take that reads as generic AI output is discarded. Platform recipes in this folder: `flow.md`, `kling.md`,
+`pixverse.md`, `vidu.md`, `hailuo.md`. Each holds only what was seen on the page, dated; a step that no longer matches
+the page stops the run and is reported.
+
+## Providers (first frames-to-video test 2026-11-14, same keyframe pair; `measure-takes.sh` compares takes)
+
+| Provider | Free quota | Cost per 5 s take | Endpoint RMSE start/end | Motion | Watermark |
+|---|---|---|---|---|---|
+| Flow (Veo 3.1 Lite) | daily 50 | 10 (720p) | 1.1 / 1.7 % | to the end frame | none |
+| PixVerse (V6, Transition) | daily 30 | 40 (720p silent), ~25 (360p) | 0.7 / 1.1 % | to the end frame | none seen |
+| Vidu (Q2, start-end) | daily login, amount unconfirmed | 10 (1080p) | 2.3 / 2.5 % | done by mid-take, then held | "Vidu AI" |
+| Hailuo (H3, Start/End) | **flagged: likely one-time trial** | 35 (768p), 60 (2K) | 4.1 % (1344x768 frame) | 1.5 s burst, still ends | "MINIMAX / Hailuo AI" |
+| Kling | not measured yet | 30-50 | - | - | "KlingAI" |
+
+Only providers whose free quota refreshes daily belong in the default rotation; a provider whose quota turns out to be
+a one-time or monthly grant stays in this table, flagged, and is used only when the operator asks.
 
 ## The operator does
 
@@ -18,9 +32,15 @@ page says they reset.
 
 ## Steps
 
+0. **Sign-ins first.** At the start of the run, open each platform the film will use in the built-in browser and
+   check that it shows the account, not a sign-in page; ask for every missing sign-in in one message before building
+   anything, so the operator is not interrupted mid-run. The built-in browser's profile persists across sessions, but
+   a sign-in belongs to the platform's domain: on 2026-11-13 both platforms had moved (labs.google/fx to
+   flow.google.com, app.klingai.com to kling.ai) and both showed sign-in pages again.
 1. **Terms first.** Before a platform's first use in a film, read its terms on automated use and on commercial use of
    free-plan output; note the URL and date. If they forbid automated access, do not drive it: write a prompt sheet
-   (keyframes, prompt, seconds, aspect) for the operator instead.
+   (keyframes, prompt, seconds, aspect) for the operator instead, unless the operator has decided otherwise for that
+   platform in its recipe (Kling: driven, operator's decision 2026-11-14).
 2. **Keyframes from the film's code.** Render the last frame of the shot before and the first frame of the shot after
    (`tools/still.sh <frame> <CompositionId>`, film resolution), then scale to the platforms' 1280x720 (720x1280
    vertical): `magick in.png -resize 1280x720 out.png`.
@@ -46,3 +66,15 @@ The built-in browser cannot hand a local file to a page (no file picker, no fetc
 paste). Try, with one real call each (R08): Claude in Chrome's `file_upload` tool on the platform signed in there;
 else pass the PNG's bytes into the page and build a `File` there. The 2026-11-12 spikes redrew simple keyframes on a
 canvas inside the page, which only matches the film exactly for simple geometry.
+
+Exact keyframes (metacognition-explainer, 2026-11-13): draw the boundary frames as a pure SVG string in the film's
+code (one function of a state, which the shots also draw every frame), pass that markup into the page (6-10 KB per
+key; send only the part that differs from a key already there), draw it on a 1280x720 canvas, `toBlob` a PNG, wrap it
+in a `File` and drop it. The page draws the same markup Remotion renders, so the keyframes match the film exactly.
+
+Raster keyframes (3D renders, metacognition-3d, 2026-11-13): a real Ctrl+V into the page fires no paste event, the
+page may not read the clipboard, and an https page cannot fetch a localhost server even with CORS and
+Private-Network-Access headers. What worked: WebP (about 9-28 KB at 1280x720, q72), deflated with zlib, base64, split
+into 1500-character chunks, each sent with a page-side 32-bit hash that is compared with the local one before the next
+batch; the page joins them, inflates with `DecompressionStream('deflate')`, draws the image on a canvas and drops the
+PNG. Without the deflate step, copying the base64 of a dark flat frame failed on its repeated runs.
