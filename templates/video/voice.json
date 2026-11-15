@@ -1,0 +1,12 @@
+{
+  "engine": "qwen3-tts-voicedesign",
+  "instruct": "A warm, calm young woman narrating a short animated explainer. Intimate and gentle, like telling a quiet story at night. Natural pauses between sentences, soft emphasis on key words, a curious, kind tone.",
+  "seed": 7,
+  "language": "English",
+  "whisper_lang": "en",
+  "audition": {
+    "A-warm-woman": "A warm, calm young woman narrating a short animated explainer. Intimate and gentle, like telling a quiet story at night. Natural pauses between sentences, soft emphasis on key words, a curious, kind tone.",
+    "B-thoughtful-man": "A thoughtful man in his thirties with a low, warm voice, narrating a calm explainer. Measured pace with clear pauses, understated wonder, never theatrical.",
+    "C-documentary-woman": "A soft-spoken woman in her twenties, introspective documentary narration. Unhurried, deliberate pacing with real breaths and pauses, a faint smile in the voice when the answer comes."
+  }
+}

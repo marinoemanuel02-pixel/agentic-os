@@ -8,7 +8,8 @@ every stage.
 ## What this is
 
 A video made as code: Remotion (React) for picture, three.js / react-three-fiber or SVG for the scenes, a Node
-synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the voice. Stages and files:
+synthesizer for music and effects (`tools/audio.mts`), local Qwen3-TTS VoiceDesign for the voice (Kokoro v1.0 on CPU
+as the fallback). Stages and files:
 `brief.md` + `rubric.md` (definition of good) -> `style.md` + `style/` (look) -> `script.md` + `shots.md` +
 `src/data/plan.ts` (structure) -> `src/shots/` (production) -> `qa/` -> `exports/` -> `retro.md`.
 
@@ -21,7 +22,12 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
 ## Commands (Git Bash, from this folder)
 
 - Plan check: `node --no-warnings tools/check-plan.mts`
-- Voice: `node tools/make-voice.cjs 3 1.0 [lineId]` (3 = af_heart; audition others with `VO_OUT=<dir>`)
+- Voice (default): describe the narrator in `voice.json`, audition with
+  `~/.aos/tts/qwen3/Scripts/python.exe tools/make-voice-qwen3.py --audition <dir>` (send the operator the takes: an
+  agent cannot hear), then `~/.aos/tts/qwen3/Scripts/python.exe tools/make-voice-qwen3.py` (one whole-script take, cut
+  per line at Whisper word times; setup and traps in the script's header). It reads slower and more naturally than
+  Kokoro: size the line slots from its vo.json, never speed it up. Fallback without a GPU: `node tools/make-voice.cjs
+  3 1.0 [lineId]` (Kokoro, 3 = af_heart; audition others with `VO_OUT=<dir>`)
 - Review sheet of chosen frames (the director's main loop): `bash tools/frames.sh <sheet> S01:20 S02:140 ...`
 - Stills: `bash tools/still.sh <frame> <CompositionId>...`; verify a checkout: `node --no-warnings tools/verify.mjs S01 S02 ...`
   (bundles, renders first/middle/last frame per shot, writes a contact sheet)
@@ -34,7 +40,10 @@ synthesizer for music and effects (`tools/audio.mts`), local Kokoro v1.0 for the
 - People in 2D films, the earlier kit: `src/lib/cast/` (`Person`, `POSES`, `walk`, `talk`, `handPos`; colours in `palette.ts`). Review
   the cast before it goes into shots and after any kit change: `bash tools/still.sh 0 CastSheet CastTrio CastFaces
   CastHands`; geometry tests `node --no-warnings --test tools/checks/cast.test.mts`
-- Formats: one source renders 16:9 and native 9:16; wrap a composition in `<FormatProvider format={TALL}>` and stage
+- Formats: one source renders 16:9 and native 9:16 (`MainTall`, captions drawn in): `bash tools/build.sh <label> tall`
+  and `FORMAT=tall bash tools/qa.sh exports/<name>-vertical.mp4 exports/<name>.srt`. A 3D shot re-frames for the tall
+  frame through its camera's `tall: { dolly, fov }` (src/lib/Stage.tsx); pass the same values on both sides of a cut.
+  Wrap a composition in `<FormatProvider format={TALL}>` and stage
   shots with `useFormat()` / `useLayout(wide, tall)`; keep type and faces inside `SAFE` in 9:16 (`src/lib/format.tsx`)
 - Captions drawn into the picture (feeds autoplay muted): `<Captions lines={...} shots={...} words={words} off={[...]} />`
   from `src/lib/Captions.tsx`, timing in `src/lib/caption-timing.ts` (`readableShare()` reports readable time); tests

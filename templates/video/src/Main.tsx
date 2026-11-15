@@ -8,6 +8,12 @@ import { SANS } from "./lib/look";
 import { SOFT } from "./lib/motion";
 import { useFonts } from "./lib/Type";
 import { SHOT_COMPONENTS } from "./shots/registry";
+import { Captions } from "./lib/Captions";
+import { FormatProvider, TALL } from "./lib/format";
+import { LINES } from "./data/timeline";
+import words from "./data/words.json";
+import lines from "./data/lines.json";
+import type { WordTuple } from "./lib/caption-timing";
 
 const Slate: React.FC<{ id: string }> = ({ id }) => (
   <AbsoluteFill style={{ backgroundColor: "#2a211c", justifyContent: "center", alignItems: "center", fontFamily: SANS, fontSize: 64, color: "#c9b79f" }}>
@@ -36,3 +42,21 @@ export const Main: React.FC = () => {
     </AbsoluteFill>
   );
 };
+
+// The captions show the script's own words (its `caption` text) on Whisper's timings: when a line has the same word
+// count in both, the n-th measured word gets the n-th script word (spelling and punctuation from the script).
+const CAPTION_WORDS: Record<string, WordTuple[]> = Object.fromEntries(
+  (lines as { id: string; caption?: string; text: string }[]).map((l) => {
+    const timed = (words as Record<string, WordTuple[]>)[l.id] ?? [];
+    const script = (l.caption ?? l.text).split(/\s+/).filter(Boolean);
+    return [l.id, timed.map(([w, a, b], i) => [script.length === timed.length ? script[i] : w, a, b] as WordTuple)];
+  }),
+);
+
+/** The native 9:16 film for TikTok, Reels and Shorts: every shot staged for the tall frame, captions drawn in. */
+export const MainTall: React.FC = () => (
+  <FormatProvider format={TALL}>
+    <Main />
+    <Captions lines={LINES} shots={SHOTS} words={CAPTION_WORDS} />
+  </FormatProvider>
+);

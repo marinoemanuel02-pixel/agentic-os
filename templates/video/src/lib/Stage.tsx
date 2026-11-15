@@ -14,10 +14,16 @@ import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLightUniformsLib.js";
 import { useCurrentFrame, useVideoConfig } from "remotion";
 import type { Look } from "./look";
+import { useFormat } from "./format";
 
 RectAreaLightUniformsLib.init();
 
-export type CameraPose = { pos: [number, number, number]; target: [number, number, number]; fov?: number; roll?: number };
+// `tall`: how the pose re-frames for the 9:16 frame, which sees only 56 % of the width at the same lens: the camera backs
+// away from its target by `dolly` and opens to `fov` (vertical degrees). Scenes on both sides of a cut pass the same
+// values, so joins still match in the tall film.
+export type TallFraming = { dolly: number; fov: number };
+export const TALL_DEFAULT: TallFraming = { dolly: 1.45, fov: 42 };
+export type CameraPose = { pos: [number, number, number]; target: [number, number, number]; fov?: number; roll?: number; tall?: TallFraming };
 
 const GradeShader = {
   uniforms: {
@@ -52,40 +58,54 @@ const Studio: React.FC<{ look: Look; camera: CameraPose; dof?: boolean }> = ({ l
   const frame = useCurrentFrame();
 
   // Renderer and scene setup happen during render (not in an effect) so the very first advanced frame has them.
+  // The environment map and the post chain are built once per canvas; the look's numbers (exposure, background, fog,
+  // environment strength, bloom, grain, vignette) are applied every render, so a shot may blend its look frame by
+  // frame without rebuilding (and leaking) GPU resources.
   useMemo(() => {
     gl.toneMapping = THREE.ACESFilmicToneMapping;
-    gl.toneMappingExposure = look.exposure;
     gl.shadowMap.enabled = true;
     gl.shadowMap.type = THREE.VSMShadowMap;
-    scene.background = new THREE.Color(look.bg);
-    scene.fog = new THREE.Fog(look.bg, look.fogNear, look.fogFar);
     const pm = new THREE.PMREMGenerator(gl);
     scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environmentIntensity = look.env;
     pm.dispose();
-  }, [gl, scene, look]);
+  }, [gl, scene]);
+  gl.toneMappingExposure = look.exposure;
+  if (!(scene.background instanceof THREE.Color)) scene.background = new THREE.Color();
+  (scene.background as THREE.Color).set(look.bg);
+  if (!(scene.fog instanceof THREE.Fog)) scene.fog = new THREE.Fog(look.bg, look.fogNear, look.fogFar);
+  const fog = scene.fog as THREE.Fog;
+  fog.color.set(look.bg);
+  fog.near = look.fogNear;
+  fog.far = look.fogFar;
+  scene.environmentIntensity = look.env;
 
-  const { composer, grade } = useMemo(() => {
+  const { composer, grade, bloom } = useMemo(() => {
     const rt = new THREE.WebGLRenderTarget(size.width, size.height, { type: THREE.HalfFloatType, samples: 4 });
     const c = new EffectComposer(gl, rt);
     c.setPixelRatio(1);
     c.setSize(size.width, size.height);
     c.addPass(new RenderPass(scene, cam));
-    c.addPass(new UnrealBloomPass(new THREE.Vector2(size.width, size.height), look.bloom.strength, look.bloom.radius, look.bloom.threshold));
+    const b = new UnrealBloomPass(new THREE.Vector2(size.width, size.height), 0, 0, 1);
+    c.addPass(b);
     c.addPass(new OutputPass());
     const g = new ShaderPass(GradeShader);
-    g.uniforms.uGrain.value = QA ? 0 : look.grain; // no per-frame grain in the QA proxy
-    g.uniforms.uVignette.value = look.vignette;
     g.uniforms.uRes.value.set(size.width, size.height);
     c.addPass(g);
-    return { composer: c, grade: g };
-  }, [gl, scene, cam, size.width, size.height, look]);
+    return { composer: c, grade: g, bloom: b };
+  }, [gl, scene, cam, size.width, size.height]);
   useEffect(() => () => composer.dispose(), [composer]);
+  bloom.strength = look.bloom.strength;
+  bloom.radius = look.bloom.radius;
+  bloom.threshold = look.bloom.threshold;
+  grade.uniforms.uGrain.value = QA ? 0 : look.grain; // no per-frame grain in the QA proxy
+  grade.uniforms.uVignette.value = look.vignette;
 
   // Camera pose for this frame.
   const pc = cam as THREE.PerspectiveCamera;
-  pc.position.set(...camera.pos);
-  pc.fov = camera.fov ?? 30;
+  const tall = useFormat().tall ? (camera.tall ?? TALL_DEFAULT) : null;
+  const pos = tall ? camera.pos.map((v, i) => camera.target[i] + (v - camera.target[i]) * tall.dolly) as [number, number, number] : camera.pos;
+  pc.position.set(...pos);
+  pc.fov = tall ? tall.fov : camera.fov ?? 30;
   pc.near = 0.1;
   pc.far = 120;
   pc.up.set(Math.sin(camera.roll ?? 0), Math.cos(camera.roll ?? 0), 0);

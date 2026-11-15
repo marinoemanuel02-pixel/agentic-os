@@ -3,6 +3,24 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-11-15 - Qwen3-TTS narrator by default; native 9:16 in the template; short-form caption style
+
+- **Voice.** The operator asked for free voices with more natural pronunciation, pauses and emotional reading, and
+  picked Qwen3-TTS 1.7B VoiceDesign (Apache-2.0, local on a 6 GB GTX 1660 Ti) over Kokoro `af_heart` in a blind-ish
+  audition (metacognition-3d v11). The template now narrates with `tools/make-voice-qwen3.py` (voice described in
+  `voice.json`, one whole-script take, cut per line at Whisper word times); Kokoro stays as the CPU fallback.
+  Rejected: the higher-ranked Breeze TTS 2 and Fish S2 Pro (non-commercial licences). Traps recorded in the script:
+  bfloat16 only (float16 gives a flat full-scale signal on Turing), `qwen-tts` swaps torch to the CPU build, uv must not
+  install Python under AppData. The voice reads about 50 % slower than Kokoro: films re-time around it.
+- **Vertical.** `build.sh <label> tall` and `FORMAT=tall qa.sh` render and check `MainTall` (ported from pauseai-it);
+  3D scenes re-frame through a camera's `tall: { dolly, fov }` in `Stage`, the same values on both sides of a cut.
+  `Stage` now applies a look's numbers in place instead of rebuilding its post chain per look object (a per-frame look
+  blend leaked GPU memory until QA renders timed out).
+- **Captions.** After what short-form explainers use: bold white sans with a dark outline and shadow instead of a box,
+  two short rows, the spoken word warming to an accent with a slight lift, a 0.12 s cross-fade between phrases (a
+  one-frame swap read as a snap), 70 px in 9:16 with the block above the apps' bottom UI band. Still SVG text: the
+  screen-text gate reads computed HTML text as unreviewed screen text.
+
 ## 2026-11-15 - Video generators become an extra resource; watermarked providers dropped
 
 - **Evidence.** metacognition-3d v6-v10 (2026-11-14/15): five generated transitions between code shots, from Flow,
