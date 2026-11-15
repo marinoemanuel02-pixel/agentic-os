@@ -17,10 +17,14 @@ Flow now lives at flow.google.com (it was labs.google/fx on 2026-11-12).
   frame": pick the image, then "Aggiungi al prompt". After a generation the slot did not reopen the picker on a
   click; reloading the project page and calling `.click()` on the `button.empty-chip` from a script did.
 - **Generate:** click the prompt box, type, press the arrow. Two takes took about 1.5-2 minutes.
-- **File link:** open the take (`/project/<id>/edit/<id>`); the page has no `<video>` element any more. The signed
-  links are in `performance.getEntriesByType('resource')`: `https://flow-content.google/video/<id>?Expires=...`.
-  The "next" arrow on the take page loads the other take of the pair. Fetch them soon (the expiry was about 6 hours
-  after the page load).
+- **File link:** open the take (`/project/<id>/edit/<id>`). Since 2026-11-14 the take page is a scene editor with no
+  `<video>` and no video in the resource list until a download starts. What worked (2026-11-14/15): wrap
+  `window.fetch` to log URLs containing `flow-content.google/video`, override `HTMLAnchorElement.prototype.click` so
+  the page's save does nothing, press "Scarica contenuti multimediali" > "720p"; the signed link appears in the log.
+  Fetch it soon (expiry about 6 hours). Each take of a pair has its own edit page.
+- **Mode (2026-11-15):** the bar may open in image mode (Nano Banana); its settings panel switches to Video >
+  Fotogrammi (frames), Veo 3.1 - Lite, x1/x2. The frame picker's "Carica contenuti multimediali" button calls
+  `input.click()`, so a patched click feeds the keyframe `File` (SKILL.md, local files).
 - **Output:** 1280x720, 24 fps, 7.93 s, with an audio track.
 - **Behaviour:** both keyframes matched in geometry (RMSE 1.1-1.7 % against the keyframe), the background slightly
   darker. On 2026-11-13 the motion ran to the last frame (no still tail) and reached the end frame by motion. Of

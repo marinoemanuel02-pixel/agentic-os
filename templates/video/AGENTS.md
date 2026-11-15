@@ -81,7 +81,7 @@ decides how practices mix, and imported material appears in the hero next to a b
 - Shots use media only through `src/lib/media/` components and an asset id (`<Clip asset="a07" use="u1" look={look} />`,
   `Photo`, `Capture`, `Model`, `Environment`, `GlTransition`); never a path. Transitions: `src/lib/transitions`.
 - `aos asset budget --film .` shows the budget; `--approve <MB> --by-user` only after the user approved the amount.
-- Generated takes (opt-in per shot, R59) enter through `aos asset fetch --basis generated` with their terms, watermark
+- Generated takes (code first: only for material the film's code cannot make, watermark-free providers, R59) enter through `aos asset fetch --basis generated` with their terms, watermark
   and commercial fields; the skill `generate-video` has the procedure and the platform recipes.
 - The gate (`tools/checks/assets.mjs`, run by build and QA) checks policy, not law; `qa/assets.md` lists the human
   checks: the narration comments on each excerpt, every source tag is legible, no excerpt takes more than it needs.

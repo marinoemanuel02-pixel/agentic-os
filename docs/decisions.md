@@ -3,6 +3,22 @@
 Why agentic-os is shaped the way it is. Newest first. When a decision changes, add an entry;
 don't rewrite the old one: the record of what was rejected is the part that ages best.
 
+## 2026-11-15 - Video generators become an extra resource; watermarked providers dropped
+
+- **Evidence.** metacognition-3d v6-v10 (2026-11-14/15): five generated transitions between code shots, from Flow,
+  Kling, PixVerse and Vidu, made from the film's own keyframes. Each cost credits, a sign-in after every browser reset,
+  a keyframe transfer and a visible softness the operator noticed ("worst from 5 to 8 s"); every pose fix forced a
+  remake. v10 drew all five in code (the reader's own mesh breaking into points that become the mind and back) and
+  every join matched to about 1 %. The operator: code can do most of the work better; keep generators as an
+  additional tool for sequences, transitions or material code cannot make, blended into the setup.
+- **Changed.** Rule R59 and the `generate-video` skill now say code first: a generated clip is opt-in per shot only for
+  material outside the film's code world (photoreal footage, fire/water/cloth/crowds, a foreign look), never for camera
+  moves, transitions or morphs between code scenes, and it gets the film's finish (upscale, grade, overlay).
+- **Dropped.** Kling, Vidu and Hailuo: their free output carries a logo, and Vidu's terms forbid removing, altering or
+  obscuring it, so the take cannot blend in. Rejected: cropping or covering the logo (the operator raised it; it
+  breaks Vidu's terms and the kit's own rule). Flow and PixVerse stay (no watermark). The removed recipes stay in git
+  history.
+
 ## 2026-11-13 - Consolidation follow-through: one live line, measured gaps closed, swarm off the default path
 
 - **Evidence.** A read-only review on 2026-11-12 of 12 films, the kit and two weeks of orchestration ledgers (three
